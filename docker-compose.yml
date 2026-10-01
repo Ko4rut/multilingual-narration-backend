@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-narration_db}
+      POSTGRES_USER: ${POSTGRES_USER:-narration_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-narration_dev_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  db-init:
+    build: .
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-narration_db}
+      POSTGRES_USER: ${POSTGRES_USER:-narration_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-narration_dev_password}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-narration_app}:${POSTGRES_PASSWORD:-narration_dev_password}@postgres:5432/${POSTGRES_DB:-narration_db}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

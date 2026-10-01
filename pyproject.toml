@@ -1,0 +1,17 @@
+[project]
+name = "multilingual-narration-backend"
+version = "0.1.0"
+description = "Database foundation for the Multilingual Automatic Narration System"
+requires-python = ">=3.12"
+dependencies = [
+  "SQLAlchemy>=2.0,<3.0",
+  "alembic>=1.13,<2.0",
+  "psycopg[binary]>=3.2,<4.0",
+  "python-dotenv>=1.0,<2.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0,<9.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
