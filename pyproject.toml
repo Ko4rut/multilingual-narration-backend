@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "Database foundation for the Multilingual Automatic Narration System"
 requires-python = ">=3.12"
 dependencies = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn>=0.30,<1.0",
+  "pydantic-settings>=2.0,<3.0",
+
   "SQLAlchemy>=2.0,<3.0",
   "alembic>=1.13,<2.0",
   "psycopg[binary]>=3.2,<4.0",
@@ -11,7 +15,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8.0,<9.0"]
+test = ["pytest>=8.0,<9.0", "httpx>=0.27,<1.0"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 pythonpath = ["."]

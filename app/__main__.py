@@ -1,5 +1,4 @@
-from .db import get_engine
-from .models import Base
+import uvicorn
 
 if __name__ == "__main__":
-    Base.metadata.create_all(get_engine())
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000)
