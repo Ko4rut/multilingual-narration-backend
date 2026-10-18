@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -16,9 +17,12 @@ class PoiRepositoryStub:
         return self.poi if poi_id == self.poi.id else None
 
     poi = SimpleNamespace(
-        id=1, region_id=1, poi_name="Museum", image_url=None, qr_code="museum",
-        poi_priority=1, latitude="10.000000", longitude="106.000000",
-        trigger_radius="50.00", poi_location="City", is_active=True,
+        id=1, region_id=1, poi_name="Museum", poi_image_url=None,
+        image_checksum_sha256=None, poi_qr_code="museum",
+        latitude="10.000000", longitude="106.000000",
+        trigger_radius_meter="50.00", poi_location="City", poi_status="active",
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        last_updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         created_by=123,
     )
 

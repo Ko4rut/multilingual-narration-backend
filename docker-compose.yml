@@ -1,3 +1,10 @@
+x-backend: &backend
+  image: mnr-backend:local
+  build:
+    context: .
+  environment:
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-narration_app}:${POSTGRES_PASSWORD:-narration_dev_password}@postgres:5432/${POSTGRES_DB:-narration_db}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -6,28 +13,54 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-narration_app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-narration_dev_password}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 5s
+    restart: unless-stopped
 
-  db-init:
-    build: .
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-narration_db}
-      POSTGRES_USER: ${POSTGRES_USER:-narration_app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-narration_dev_password}
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-narration_app}:${POSTGRES_PASSWORD:-narration_dev_password}@postgres:5432/${POSTGRES_DB:-narration_db}
+  migrate:
+    <<: *backend
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic upgrade head && alembic check && python -m scripts.seed",
+      ]
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *backend
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
 volumes:
   postgres-data:

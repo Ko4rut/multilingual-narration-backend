@@ -1,193 +1,183 @@
 # Multilingual Automatic Narration Backend
 
-Database foundation for the Multilingual Automatic Narration System. The supplied use cases cover GPS/geofence-driven multilingual narration, QR activation, content administration with TTS/pre-generated audio, POI management, and optional offline packages.
+FastAPI, SQLAlchemy, Alembic, and PostgreSQL backend for multilingual narration at points of interest.
 
 ## Stack
+
 - Python 3.12+
+- FastAPI
 - SQLAlchemy 2.x
 - Alembic
 - PostgreSQL 16
 - psycopg 3
 - Docker Compose
 
-## Coding agent instructions
+## Database schema
 
-[AGENTS.md](AGENTS.md) defines repository rules and directs agents doing backend
-work to [the MNR backend skill](skills/mnr-backend/SKILL.md). The skill describes
-domain ownership, implementation steps, migration handling and meaningful checks.
-It lives with this source and is loaded through AGENTS.md; it is not installed as
-a global skill or guaranteed to appear in a skill picker.
+The bootstrap migration implements the ERD using singular `snake_case` table names:
 
-Example request: "Read AGENTS.md and skills/mnr-backend/SKILL.md, then implement
-the POI update use case following the existing domain architecture."
+- Identity and RBAC: `action`, `management_function`, `permission`,
+  `role_permission`, `role`, `manager_user`, `user_session`
+- Content: `point_of_interest`, `poi_category`,
+  `poi_category_mapping`, `poi_content`, `content_audio`
+- Catalog and activity: `region`, `language`, `listening_history`
+- Offline and audit: `offline_package`, `offline_package_item`, `audit_log`
 
-Maintain these instructions when architecture conventions change. This layout uses
-the documented [AGENTS.md guidance pattern](https://developers.openai.com/cookbook/articles/codex_exec_plans)
-and [SKILL.md format](https://developers.openai.com/plugins/build/skills).
+The ERD label `content_vesion` is normalized to `content_version`, matching
+`offline_package_item.content_version`. Coordinates and radius use `NUMERIC`;
+timestamps are timezone-aware; audit snapshots use PostgreSQL `JSONB`.
 
-## Database architecture
-The ERD entities are implemented as `action`, `management_function`, `permission`, `role_permission`, `role`, `management_user`, `audit_log`, `point_of_interest`, `poi_content`, `content_audio`, `listening_history`, `poi_category`, `poi_category_mapping`, `region`, `language`, and `offline_package`.
+This repository is still in bootstrap phase. Revision `0001_initial_schema` was
+rewritten to match the ERD and is not an in-place upgrade for a database created
+from the older draft. If an old local development volume exists, remove it before
+starting the new schema. The following command permanently deletes that local
+Docker database:
 
-ERD names are mapped to snake_case identifiers. The column `checksum_sha25` is preserved exactly because it is the column name shown in the ERD.
-
-## Prerequisites
-- Docker and Docker Compose for the easiest setup.
-- Or Python 3.12+ and PostgreSQL 16 for local execution.
-
-## Environment
-```bash
-cp .env.example .env
-```
-Never commit `.env`. The example contains development-only credentials; production credentials must be supplied through the deployment environment.
-
-## Docker setup
-```bash
-cp .env.example .env
-docker compose up --build
-```
-PostgreSQL is health-checked before the `db-init` service runs `alembic upgrade head` and the idempotent seed script.
-
-Stop containers:
-```bash
-docker compose down
-```
-Reset the development database and volume:
 ```bash
 docker compose down -v
 ```
 
-## Local migrations
-Install dependencies:
+## Docker setup
+
+Copy the non-secret development defaults and start the complete stack:
+
 ```bash
-python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-# Linux/macOS: source .venv/bin/activate
-pip install -r requirements.txt
-```
-Configure `DATABASE_URL`, then:
-```bash
-alembic upgrade head
-python scripts/seed.py
-```
-Rollback and re-apply:
-```bash
-alembic downgrade base
-alembic upgrade head
+cp .env.example .env
+docker compose up --build -d
 ```
 
-## Seed data
-The seed is idempotent and covers all ERD tables. It includes Vietnamese (`vi`), English (`en`), and Japanese (`ja`) language records; multiple tourism regions; historical, museum, landmark, and cultural categories; four POIs; multilingual narration content; pre-generated and TTS-generated audio metadata; listening history; category mappings; offline packages; RBAC records; management users; and audit logs.
+Compose starts the services in dependency order:
 
-The dummy management-user password hashes are deliberately non-production placeholders. No plaintext password is stored and no real credential is included.
+1. `postgres` becomes healthy.
+2. `migrate` upgrades the schema, checks ORM/migration drift, and runs the
+   idempotent seed.
+3. `api` starts only after migration and seed succeed.
 
-## Verify seeded data
+Default endpoints:
+
+- API: http://localhost:8000
+- Swagger UI: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
+- PostgreSQL host port: `5433`
+
+Useful commands:
+
+```bash
+docker compose ps
+docker compose logs migrate
+docker compose logs api
+docker compose down
+```
+
+The application image runs as an unprivileged user. Its build context excludes
+local environments, Git data, caches, logs, and `.env`.
+
+## Local setup
+
+This checkout uses the existing `venv` directory:
+
+```powershell
+Copy-Item .env.example .env
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m alembic upgrade head
+.\venv\Scripts\python.exe -m scripts.seed
+.\venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+The default local `DATABASE_URL` uses PostgreSQL on host port `5433`. Inside
+Docker, services connect to `postgres:5432`.
+
+Schema changes are applied explicitly with Alembic and are never run at API startup.
+
+## Sample data
+
+The seed is deterministic and idempotent. It creates a deliberately varied dataset:
+
+- 7 actions, 5 management functions, 3 roles, and 21 permissions
+- 4 manager users and 3 sessions, including inactive and revoked examples
+- 5 languages, 6 regions, and 6 POI categories
+- 12 POIs spread across Hà Nội, Ninh Bình, Huế, Đà Nẵng, Hồ Chí Minh City,
+  and Cần Thơ
+- 37 narration records covering published and draft versions
+- 36 audio records split between pre-generated and TTS-generated sources
+- 36 listening records across GPS, QR-code, and manual triggers
+- 6 offline packages with package items and published/building states
+- 5 representative audit records
+
+Seed URLs use the reserved `example.local` domain and are metadata only. Password
+and refresh-token values are non-production hashes; authentication is not yet
+implemented.
+
+Run the seed again to verify idempotency:
+
+```powershell
+.\venv\Scripts\python.exe -m scripts.seed
+```
+
 Useful checks:
+
 ```sql
 SELECT COUNT(*) FROM point_of_interest;
 SELECT COUNT(*) FROM poi_content;
 SELECT COUNT(*) FROM content_audio;
 SELECT COUNT(*) FROM listening_history;
-SELECT COUNT(*) FROM offline_package;
-SELECT l.language_code, COUNT(pc.id)
-FROM language l LEFT JOIN poi_content pc ON pc.language_id = l.id
-GROUP BY l.language_code ORDER BY l.language_code;
+SELECT COUNT(*) FROM offline_package_item;
+
+SELECT r.region_code, COUNT(p.id) AS poi_count
+FROM region r
+LEFT JOIN point_of_interest p ON p.region_id = r.id
+GROUP BY r.region_code
+ORDER BY r.region_code;
+
+SELECT l.language_code, pc.content_status, COUNT(pc.id) AS content_count
+FROM language l
+LEFT JOIN poi_content pc ON pc.language_id = l.id
+GROUP BY l.language_code, pc.content_status
+ORDER BY l.language_code, pc.content_status;
 ```
 
-Run the seed a second time and repeat the counts; stable natural keys prevent duplicate master/content/package records. Listening-history records use a stable POI/start timestamp check as well.
-
-## Useful PostgreSQL commands
-```bash
-psql "$DATABASE_URL"
-```
-Inside `psql`:
-```sql
-\dt
-SELECT version_num FROM alembic_version;
-SELECT * FROM point_of_interest ORDER BY poi_priority;
-SELECT p.poi_name, l.language_code, pc.narration_title, ca.audio_source_type
-FROM point_of_interest p
-JOIN poi_content pc ON pc.poi_id = p.id
-JOIN language l ON l.id = pc.language_id
-JOIN content_audio ca ON ca.poi_content_id = pc.id
-ORDER BY p.id, l.language_code;
-```
-
-## API skeleton and domain architecture
-
-Run the API locally (PostgreSQL must already be running):
-```powershell
-.\venv\Scripts\python.exe -m pip install -r requirements.txt
-.\venv\Scripts\python.exe -m uvicorn app.main:app --reload
-```
-Swagger UI: http://127.0.0.1:8000/docs. `python -m app` also starts the API.
-Schema changes are applied explicitly with Alembic, never at API startup.
-Docker Compose currently runs PostgreSQL and the migration/seed job; run the API
-locally using the command above.
+## API and domain architecture
 
 ```text
 app/
   main.py                 FastAPI application factory and exception handlers
-  core/
-    config.py             Typed environment settings
-    database.py           SQLAlchemy Base, engine and session infrastructure
-    exceptions.py         Shared domain exceptions
-  route/
-    api.py                Assemble domain routers under /api/v1
-    dependencies.py       Request-scoped database session
+  core/                   Configuration, database infrastructure, exceptions
+  route/                  Versioned router composition and dependencies
   domains/
-    poi/                  POIs, categories and category mappings (UC01/02/05)
-    narration/            Multilingual content and audio/TTS (UC03/04)
+    identity/             Manager users, sessions, roles and permissions
     catalog/              Regions and languages
-    identity/             Management users, roles and permissions
+    poi/                  POIs, categories and category mappings
+    narration/            Multilingual content and audio
     listening/            Listening history
-    offline/              Optional offline packages (UC06)
+    offline/              Offline packages and package items
     audit/                Administrative audit log
-  models.py               Model registry and compatibility exports
-  db.py                   Compatibility exports for existing callers
+  models.py               ORM registry for Alembic
+  db.py                   Compatibility facade for migrations and seed
 ```
-Each domain contains `models.py`, `schemas.py`, `router.py`, `service.py`, and
-`repository.py`. The POI domain is the working reference implementation:
 
-- `router.py` is the HTTP controller: paths, validation, dependency injection,
-  response schemas. A separate pass-through controller layer is unnecessary.
-- `service.py` owns business rules and write transaction boundaries.
-- `repository.py` owns queries and accepts a SQLAlchemy Session; it does not commit.
-- `models.py` contains ORM entities; `schemas.py` contains public request/response DTOs.
-- `core` contains shared infrastructure, not business models.
+Implemented HTTP endpoints:
 
-Implemented: `GET /health` (liveness), `GET /api/v1/pois?offset=0&limit=20`,
-`GET /api/v1/pois/{poi_id}`. POI endpoints only return active records; missing or
-inactive POIs return 404. Pagination has a maximum of 100 records per request.
-Other domains have model definitions and extension files only, with no endpoints yet.
-Authentication/RBAC, admin CRUD, nearby search, QR activation, narration selection,
-TTS, listening events, and offline generation remain future business implementation.
+- `GET /health`
+- `GET /api/v1/pois?offset=0&limit=20`
+- `GET /api/v1/pois/{poi_id}`
 
-To add a use case, define schemas, implement repository queries and service rules,
-then add the domain router endpoint. Domain routers are already registered centrally.
-Use `with session.begin():` in write services to commit/rollback the whole use case;
-request session cleanup rolls back any uncommitted work. Services should raise domain
-exceptions and leave HTTP status mapping to the application.
+POI reads return only records with `poi_status = 'active'`. Authentication/RBAC,
+administrative writes, nearby search, QR activation, narration selection, TTS,
+listening ingestion, and offline package generation remain future use cases.
 
-The local `.env` uses port 5433 for Docker PostgreSQL. `DATABASE_URL` is the API and
-Alembic connection setting; keep its port consistent with `POSTGRES_PORT` for local
-execution. Inside Docker, PostgreSQL continues to listen on port 5432.
+## Verification
 
-Architecture reference: [FastAPI larger applications](https://fastapi.tiangolo.com/tutorial/bigger-applications/).
+```powershell
+.\venv\Scripts\python.exe -m pytest tests -q -p no:cacheprovider
+.\venv\Scripts\python.exe -m alembic check
+docker compose config --quiet
+```
 
-## Migration architecture
-`alembic/env.py` reads `DATABASE_URL` from the environment through `app.db`. The initial revision creates parent/reference tables before dependent tables and its downgrade reverses that dependency order. Foreign-key indexes are added for frequently queried relationship fields.
+`alembic check` requires the configured database to be upgraded to `head`.
+Integration checks that change schema or data must use an isolated test database,
+not a populated development database.
 
-## Schema assumptions
-- Integer surrogate primary keys are used where the ERD shows `id` without a more specific type.
-- `latitude`/`longitude` use `NUMERIC(9,6)` and `trigger_radius` uses `NUMERIC(8,2)`.
-- `audio_size`, `total_size`, and `duration_sec` use integers.
-- `old_values` and `new_values` use PostgreSQL `JSONB` because the ERD does not specify a type and these fields represent structured audit snapshots.
-- `created_at` and publication/expiry timestamps use timezone-aware timestamps.
-- Names/codes/emails/QR values that function as natural identifiers are unique to make the seed idempotent.
-- The ERD does not define authentication endpoints or token semantics; therefore this database implementation does not invent an application login/JWT flow.
+## Agent instructions
 
-## Troubleshooting
-- If `db-init` fails, inspect its logs: `docker compose logs db-init`.
-- If PostgreSQL is unhealthy, inspect: `docker compose logs postgres`.
-- If a migration fails, fix the database/configuration issue and rerun `docker compose up`.
-- To start from a clean development database: `docker compose down -v && docker compose up --build`.
+Repository conventions are documented in [AGENTS.md](AGENTS.md). Backend work must
+also follow [skills/mnr-backend/SKILL.md](skills/mnr-backend/SKILL.md).

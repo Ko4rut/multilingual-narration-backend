@@ -7,10 +7,19 @@ class PoiRepository:
         self.session = session
 
     def list_active(self, *, offset: int, limit: int) -> list[PointOfInterest]:
-        query = (select(PointOfInterest).where(PointOfInterest.is_active.is_(True))
-                 .order_by(PointOfInterest.id).offset(offset).limit(limit))
+        query = (
+            select(PointOfInterest)
+            .where(PointOfInterest.poi_status == "active")
+            .order_by(PointOfInterest.id)
+            .offset(offset)
+            .limit(limit)
+        )
         return list(self.session.scalars(query))
 
     def get_active(self, poi_id: int) -> PointOfInterest | None:
-        return self.session.scalar(select(PointOfInterest).where(
-            PointOfInterest.id == poi_id, PointOfInterest.is_active.is_(True)))
+        return self.session.scalar(
+            select(PointOfInterest).where(
+                PointOfInterest.id == poi_id,
+                PointOfInterest.poi_status == "active",
+            )
+        )
