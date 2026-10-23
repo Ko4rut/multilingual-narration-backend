@@ -1,1 +1,1 @@
-"""Identity domain."""
+# Init for identity domain

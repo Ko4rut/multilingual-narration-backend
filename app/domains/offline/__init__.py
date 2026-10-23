@@ -1,1 +1,1 @@
-"""Offline domain."""
+# Init for offline domain

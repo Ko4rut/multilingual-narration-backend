@@ -27,15 +27,12 @@ The ERD label `content_vesion` is normalized to `content_version`, matching
 `offline_package_item.content_version`. Coordinates and radius use `NUMERIC`;
 timestamps are timezone-aware; audit snapshots use PostgreSQL `JSONB`.
 
-This repository is still in bootstrap phase. Revision `0001_initial_schema` was
-rewritten to match the ERD and is not an in-place upgrade for a database created
-from the older draft. If an old local development volume exists, remove it before
-starting the new schema. The following command permanently deletes that local
-Docker database:
-
-```bash
-docker compose down -v
-```
+Revision `0002_align_identifier_types` upgrades existing databases in place:
+business identifiers and their foreign keys become `VARCHAR(50)`. Only audit-log
+primary keys and listening installation IDs remain PostgreSQL `UUID`. Existing
+numeric IDs are converted to the documented prefixes and date formats. Because
+new string/UUID identifiers cannot be mapped safely back to the old integer
+sequences, this revision intentionally has no destructive downgrade.
 
 ## Docker setup
 
@@ -145,8 +142,8 @@ app/
   route/                  Versioned router composition and dependencies
   domains/
     identity/             Manager users, sessions, roles and permissions
-    catalog/              Regions and languages
-    poi/                  POIs, categories and category mappings
+    catalog/              POI categories, regions and languages
+    poi/                  POIs and category mappings
     narration/            Multilingual content and audio
     listening/            Listening history
     offline/              Offline packages and package items
@@ -155,11 +152,18 @@ app/
   db.py                   Compatibility facade for migrations and seed
 ```
 
+Each domain keeps one shared router and service named after the domain, under
+`routers/<domain>.py` and `services/<domain>.py`. Its `models/`, `schemas/`, and
+`repositories/` packages contain one module per database table. Each domain also
+has an empty `utils/<domain>.py` placeholder; repository modules without an
+implemented use case remain placeholders.
+
 Implemented HTTP endpoints:
 
 - `GET /health`
 - `GET /api/v1/pois?offset=0&limit=20`
-- `GET /api/v1/pois/{poi_id}`
+- `GET /api/v1/pois/{poi_id}` where `poi_id` is a string such as
+  `poi-010926-951c03a1`
 
 POI reads return only records with `poi_status = 'active'`. Authentication/RBAC,
 administrative writes, nearby search, QR activation, narration selection, TTS,
