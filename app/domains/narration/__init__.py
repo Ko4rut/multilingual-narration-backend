@@ -1,1 +1,1 @@
-"""Narration domain."""
+# Init for narration domain

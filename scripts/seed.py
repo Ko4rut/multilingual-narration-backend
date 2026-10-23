@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from hashlib import sha256
 from typing import Any
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -36,9 +37,57 @@ DUMMY_PASSWORD_HASH = (
     "$2b$12$DEVELOPMENT_ONLY_DUMMY_HASH_REPLACE_BEFORE_REAL_AUTH"
 )
 
+STRING_ID_PREFIXES = {
+    Action: "acts",
+    Language: "lang",
+    ManagementFunction: "func",
+    Permission: "perm",
+    PoiCategory: "cat",
+    Region: "region",
+    Role: "role",
+}
+DATED_ID_PREFIXES = {
+    ContentAudio: "audio",
+    ListeningHistory: "listen",
+    ManagerUser: "user",
+    OfflinePackage: "pack",
+    OfflinePackageItem: "pack-item",
+    PoiContent: "cont",
+    PointOfInterest: "poi",
+    UserSession: "sess",
+}
+
 
 def digest(value: str) -> str:
     return sha256(value.encode("utf-8")).hexdigest()
+
+
+def stable_uuid(kind: str, *parts: object) -> UUID:
+    value = ":".join(str(part) for part in parts)
+    return uuid5(NAMESPACE_URL, f"mnr:{kind}:{value}")
+
+
+def stable_suffix(model: type[Any], lookup: dict[str, Any], length: int = 8) -> str:
+    natural_key = "|".join(
+        f"{key}={lookup[key]}" for key in sorted(lookup)
+    )
+    return digest(f"{model.__tablename__}:{natural_key}")[:length]
+
+
+def seed_id(
+    model: type[Any],
+    lookup: dict[str, Any],
+    values: dict[str, Any],
+) -> str:
+    suffix = stable_suffix(model, lookup)
+    if model in STRING_ID_PREFIXES:
+        return f"{STRING_ID_PREFIXES[model]}-{suffix}"
+
+    created_at = values.get("created_at", SEED_TIME)
+    date_part = created_at.strftime("%d%m%y")
+    if model in DATED_ID_PREFIXES:
+        return f"{DATED_ID_PREFIXES[model]}-{date_part}-{suffix}"
+    raise ValueError(f"No seed ID strategy for {model.__name__}")
 
 
 def get_or_create(
@@ -49,7 +98,10 @@ def get_or_create(
 ):
     instance = session.scalar(select(model).filter_by(**lookup))
     if instance is None:
-        instance = model(**lookup, **(values or {}))
+        create_values = dict(values or {})
+        if hasattr(model, "id") and "id" not in lookup and "id" not in create_values:
+            create_values["id"] = seed_id(model, lookup, create_values)
+        instance = model(**lookup, **create_values)
         session.add(instance)
         session.flush()
     return instance
@@ -608,7 +660,7 @@ def seed_listening_history(session: Session, pois, content_map):
         started_at = SEED_TIME + timedelta(days=30 + index // 6, minutes=index * 13)
         duration = 52 + (index * 11) % 130
         incomplete = index in {11, 29}
-        installation_id = f"install-{(index % 9) + 1:03d}"
+        installation_id = stable_uuid("installation", (index % 9) + 1)
         existing = session.scalar(
             select(ListeningHistory).where(
                 ListeningHistory.installation_id == installation_id,
@@ -616,8 +668,17 @@ def seed_listening_history(session: Session, pois, content_map):
             )
         )
         if existing is None:
+            listening_id = seed_id(
+                ListeningHistory,
+                {
+                    "installation_id": installation_id,
+                    "started_at": started_at,
+                },
+                {"created_at": started_at},
+            )
             session.add(
                 ListeningHistory(
+                    id=listening_id,
                     installation_id=installation_id,
                     poi_content_id=content.id,
                     poi_id=pois[poi_code].id,
@@ -819,6 +880,7 @@ def seed_audit_logs(session: Session, users, pois, content_map):
         if existing is None:
             session.add(
                 AuditLog(
+                    id=stable_uuid("audit-log", user_id, action, entity_type, entity_id),
                     user_id=user_id,
                     action=action,
                     entity_type=entity_type,

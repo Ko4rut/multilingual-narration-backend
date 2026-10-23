@@ -1,1 +1,1 @@
-"""Poi domain."""
+# Init for poi domain

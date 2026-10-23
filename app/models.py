@@ -2,7 +2,7 @@
 
 from app.core.database import Base
 from app.domains.audit.models import AuditLog
-from app.domains.catalog.models import Language, Region
+from app.domains.catalog.models import Language, PoiCategory, Region
 from app.domains.identity.models import (
     Action,
     ManagementFunction,
@@ -15,7 +15,7 @@ from app.domains.identity.models import (
 from app.domains.listening.models import ListeningHistory
 from app.domains.narration.models import ContentAudio, PoiContent
 from app.domains.offline.models import OfflinePackage, OfflinePackageItem
-from app.domains.poi.models import PoiCategory, PoiCategoryMapping, PointOfInterest
+from app.domains.poi.models import PoiCategoryMapping, PointOfInterest
 
 __all__ = [
     "Base",

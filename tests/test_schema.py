@@ -1,5 +1,6 @@
 import app.models  # noqa: F401
 from app.db import Base
+from sqlalchemy import String, Uuid
 
 
 EXPECTED_COLUMNS = {
@@ -168,3 +169,27 @@ def test_cross_domain_foreign_keys_are_registered():
         assert {foreign_key.target_fullname for foreign_key in foreign_keys} == {
             target
         }
+
+
+def test_identifier_types_match_database_design():
+    uuid_columns = {
+        ("listening_history", "installation_id"),
+        ("audit_log", "id"),
+    }
+    varchar_columns = {
+        (table.name, column.name)
+        for table in Base.metadata.tables.values()
+        for column in table.columns
+        if column.name == "id" or column.name.endswith("_id")
+    } - uuid_columns
+
+    for table_name, column_name in uuid_columns:
+        assert isinstance(
+            Base.metadata.tables[table_name].columns[column_name].type,
+            Uuid,
+        )
+    for table_name, column_name in varchar_columns:
+        assert isinstance(
+            Base.metadata.tables[table_name].columns[column_name].type,
+            String,
+        )
