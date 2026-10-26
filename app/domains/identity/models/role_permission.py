@@ -13,5 +13,7 @@ class RolePermission(Base):
         primary_key=True,
     )
     role_id: Mapped[str] = mapped_column(
-        String(50), ForeignKey("role.id", ondelete="CASCADE"), primary_key=True
+        String(50),
+        ForeignKey("role.id", ondelete="CASCADE"),
+        primary_key=True,
     )

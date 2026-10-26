@@ -52,7 +52,7 @@ Thông tin về từng phiên đăng nhập không được lưu trực tiếp t
 | full_name       | varchar   | No       | Họ và tên hoặc tên hiển thị của người dùng trong hệ thống.                                                                    |
 | user_status     | enum      | No       | Trạng thái hoạt động của tài khoản người dùng, gồm: `ACTIVE`/`DISABLED`.                                                      |
 | created_at      | timestamp | No       | Thời điểm tài khoản người dùng được tạo trong hệ thống.                                                                       |
-| last_updated_at | timestamp | Yes      | Thời điểm thông tin tài khoản được cập nhật gần nhất.                                                                         |
+| last_updated_at | timestamp | No       | Thời điểm thông tin tài khoản được cập nhật gần nhất.                                                                         |
 | last_login_at   | timestamp | Yes      | Thời điểm người dùng đăng nhập thành công gần nhất.                                                                           |
 
 **_[3] Ràng buộc (constraint):_**
@@ -133,15 +133,20 @@ Ví dụ một số vai trò:
 | --------------- | --------- | -------- | ------------------------------------------------------------------------------------------------- |
 | id              | varchar   | No       | Mã định danh duy nhất của vai trò trong hệ thống, định dạng: `role-xxxxxxxx`.                     |
 | name            | varchar   | No       | Tên hiển thị của vai trò, dùng để nhận biết và phân biệt các nhóm quyền khác nhau trong hệ thống. |
+| description     | text      | Yes      | Mô tả phạm vi và mục đích sử dụng của vai trò.                                                    |
+| created_by      | varchar   | Yes      | Người dùng quản trị đã tạo vai trò, liên kết đến bảng **Manager_Users**.                          |
+| last_updated_by | varchar   | Yes      | Người dùng quản trị cập nhật vai trò gần nhất, liên kết đến bảng **Manager_Users**.               |
 | created_at      | timestamp | No       | Thời điểm vai trò được tạo trong hệ thống.                                                        |
 | last_updated_at | timestamp | Yes      | Thời điểm thông tin vai trò được cập nhật gần nhất.                                               |
 
 **_[3] Ràng buộc (constraint):_**
 
-| Type       | Applicable to | Description                             |
-| ---------- | ------------- | --------------------------------------- |
-| **PK**     | `id`          | Khóa chính, định danh duy nhất vai trò. |
-| **UNIQUE** | `name`        | Mỗi tên vai trò chỉ xuất hiện một lần.  |
+| Type       | Applicable to   | Description                                      |
+| ---------- | --------------- | ------------------------------------------------ |
+| **PK**     | `id`            | Khóa chính, định danh duy nhất vai trò.          |
+| **FK**     | `created_by`    | Tham chiếu đến `Manager_Users(id)`.              |
+| **FK**     | `last_updated_by` | Tham chiếu đến `Manager_Users(id)`.            |
+| **UNIQUE** | `name`          | Mỗi tên vai trò chỉ xuất hiện một lần.           |
 
 ### 2.1.4 Role_Permissions (Phân quyền theo vai trò)
 
@@ -196,13 +201,13 @@ Ví dụ: Một số chi tiết quyền nhỏ trong hệ thống
 
 **_[3] Ràng buộc (constraint):_**
 
-| Type       | Applicable to                | Description                                                  |
-| ---------- | ---------------------------- | ------------------------------------------------------------ |
-| **PK**     | `id`                         | Khóa chính, định danh duy nhất quyền.                        |
-| **FK**     | `function_id`                | Tham chiếu đến `Management_Functions(id)`.                   |
-| **FK**     | `action_id`                  | Tham chiếu đến `Actions(id)`.                                |
-| **UNIQUE** | (`function_id`, `action_id`) | Mỗi cặp chức năng - hành động chỉ tạo ra một quyền duy nhất. |
-| **INDEX**  | `action_id`                  | Tăng tốc truy vấn quyền theo hành động.                      |
+| Type      | Applicable to | Description                                    |
+| --------- | ------------- | ---------------------------------------------- |
+| **PK**    | `id`          | Khóa chính, định danh duy nhất quyền.          |
+| **FK**    | `function_id` | Tham chiếu đến `Management_Functions(id)`.     |
+| **FK**    | `action_id`   | Tham chiếu đến `Actions(id)`.                  |
+| **INDEX** | `function_id` | Tăng tốc truy vấn quyền theo chức năng.        |
+| **INDEX** | `action_id`   | Tăng tốc truy vấn quyền theo hành động.        |
 
 ### 2.1.6 Management_Functions (Chức năng quản lý)
 
@@ -224,10 +229,11 @@ Ví dụ: một số chức năng của hệ thống.
 
 **_[2] Trường dữ liệu (Fields)_**
 
-| Field | Type    | Nullable | Meaning                                                                                                                                   |
-| ----- | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| id    | varchar | No       | Mã định danh duy nhất của chức năng trong hệ thống, định dạng: `func-xxxxxxxx`.                                                           |
-| name  | varchar | No       | Tên hiển thị của chức năng hoặc module nghiệp vụ, có thể được sử dụng để hiển thị trên giao diện như Sidebar hoặc màn hình quản lý quyền. |
+| Field       | Type    | Nullable | Meaning                                                                                                                                   |
+| ----------- | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| id          | varchar | No       | Mã định danh duy nhất của chức năng trong hệ thống, định dạng: `func-xxxxxxxx`.                                                           |
+| name        | varchar | No       | Tên hiển thị của chức năng hoặc module nghiệp vụ, có thể được sử dụng để hiển thị trên giao diện như Sidebar hoặc màn hình quản lý quyền. |
+| description | text    | Yes      | Mô tả mục đích và phạm vi nghiệp vụ của chức năng quản lý.                                                                                |
 
 **_[3] Ràng buộc (constraint):_**
 

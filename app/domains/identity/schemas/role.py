@@ -8,5 +8,8 @@ class RoleRead(BaseModel):
 
     id: str
     name: str
+    description: str | None
+    created_by: str | None
+    last_updated_by: str | None
     created_at: datetime
-    last_updated_at: datetime
+    last_updated_at: datetime | None

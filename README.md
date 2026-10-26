@@ -34,6 +34,11 @@ numeric IDs are converted to the documented prefixes and date formats. Because
 new string/UUID identifiers cannot be mapped safely back to the old integer
 sequences, this revision intentionally has no destructive downgrade.
 
+Revision `0003_update_identity_models` adds descriptions to roles and management
+functions, adds nullable role creator/updater references, allows a nullable role
+update timestamp, and removes the unique constraint on permission function/action
+pairs.
+
 ## Docker setup
 
 Copy the non-secret development defaults and start the complete stack:
