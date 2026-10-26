@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 
-class Permission(Base):
+class PermissionModel(Base):
     __tablename__ = "permission"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)

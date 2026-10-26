@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 
-class ManagementFunction(Base):
+class ManagementFunctionModel(Base):
     __tablename__ = "management_function"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)

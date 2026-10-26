@@ -23,6 +23,7 @@ def load_migration(filename: str):
 def test_migration_chain_tables_and_columns_match_orm(monkeypatch):
     initial_migration = load_migration("0001_initial_schema.py")
     identity_migration = load_migration("0003_update_identity_models.py")
+    constraint_migration = load_migration("0004_enforce_identity_constraints.py")
     migration_columns = {}
 
     def capture_table(table_name, *elements, **_kwargs):
@@ -60,6 +61,38 @@ def test_migration_chain_tables_and_columns_match_orm(monkeypatch):
     )
 
     identity_migration.upgrade()
+
+    monkeypatch.setattr(
+        constraint_migration.op,
+        "execute",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        constraint_migration.MANAGER_USER_STATUS,
+        "create",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        constraint_migration.op,
+        "get_bind",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        constraint_migration.op,
+        "alter_column",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        constraint_migration.op,
+        "create_check_constraint",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        constraint_migration.op,
+        "create_index",
+        lambda *_args, **_kwargs: None,
+    )
+    constraint_migration.upgrade()
 
     orm_columns = {
         table_name: set(table.columns.keys())

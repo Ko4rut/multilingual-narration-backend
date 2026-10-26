@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 
-class RolePermission(Base):
+class RolePermissionModel(Base):
     __tablename__ = "role_permission"
 
     permission_id: Mapped[str] = mapped_column(
@@ -16,4 +16,5 @@ class RolePermission(Base):
         String(50),
         ForeignKey("role.id", ondelete="CASCADE"),
         primary_key=True,
+        index=True,
     )

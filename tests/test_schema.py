@@ -1,6 +1,6 @@
 import app.models  # noqa: F401
 from app.db import Base
-from sqlalchemy import String, UniqueConstraint, Uuid
+from sqlalchemy import CheckConstraint, String, UniqueConstraint, Uuid
 
 
 EXPECTED_COLUMNS = {
@@ -219,3 +219,26 @@ def test_identity_model_nullability_and_permission_constraints():
         == {"function_id", "action_id"}
         for constraint in permission.constraints
     )
+
+
+def test_identity_status_session_constraints_and_indexes():
+    manager_user = Base.metadata.tables["manager_user"]
+    user_session = Base.metadata.tables["user_session"]
+    role_permission = Base.metadata.tables["role_permission"]
+
+    assert manager_user.c.user_status.type.name == "manager_user_status"
+    assert manager_user.c.user_status.type.enums == ["ACTIVE", "INACTIVE"]
+    assert {
+        constraint.name
+        for constraint in user_session.constraints
+        if isinstance(constraint, CheckConstraint)
+    } == {
+        "ck_user_session_expires_after_creation",
+        "ck_user_session_revoked_after_creation",
+    }
+    assert "ix_user_session_expires_at" in {
+        index.name for index in user_session.indexes
+    }
+    assert "ix_role_permission_role_id" in {
+        index.name for index in role_permission.indexes
+    }
