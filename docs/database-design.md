@@ -50,9 +50,9 @@ Thông tin về từng phiên đăng nhập không được lưu trực tiếp t
 | email           | varchar   | No       | Địa chỉ email của người dùng, được sử dụng làm thông tin nhận diện và phục vụ quá trình đăng nhập vào hệ thống, đổi mật khẩu. |
 | password_hash   | varchar   | No       | Mật khẩu của người dùng sau khi đã được mã hóa bằng thuật toán hash trước khi lưu vào cơ sở dữ liệu.                          |
 | full_name       | varchar   | No       | Họ và tên hoặc tên hiển thị của người dùng trong hệ thống.                                                                    |
-| user_status     | enum      | No       | Trạng thái hoạt động của tài khoản người dùng, gồm: `ACTIVE`/`DISABLED`.                                                      |
+| user_status     | enum      | No       | Trạng thái hoạt động của tài khoản người dùng, gồm: `ACTIVE`/`INACTIVE`.                                                      |
 | created_at      | timestamp | No       | Thời điểm tài khoản người dùng được tạo trong hệ thống.                                                                       |
-| last_updated_at | timestamp | Yes      | Thời điểm thông tin tài khoản được cập nhật gần nhất.                                                                         |
+| last_updated_at | timestamp | No       | Thời điểm thông tin tài khoản được cập nhật gần nhất.                                                                         |
 | last_login_at   | timestamp | Yes      | Thời điểm người dùng đăng nhập thành công gần nhất.                                                                           |
 
 **_[3] Ràng buộc (constraint):_**
@@ -62,8 +62,7 @@ Thông tin về từng phiên đăng nhập không được lưu trực tiếp t
 | **PK**     | `id`          | Khóa chính, định danh duy nhất người dùng.      |
 | **FK**     | `role_id`     | Tham chiếu đến `Roles(id)`.                     |
 | **UNIQUE** | `email`       | Mỗi email chỉ được dùng cho một tài khoản.      |
-| **CHECK**  | `user_status` | Thuộc tập giá trị `('ACTIVE', 'DISABLED')`.     |
-| **CHECK**  | `email`       | Định dạng email hợp lệ (khuyến nghị, tùy DBMS). |
+| **ENUM**   | `user_status` | Thuộc kiểu `manager_user_status`, gồm `ACTIVE` và `INACTIVE`. |
 | **INDEX**  | `role_id`     | Tăng tốc truy vấn người dùng theo vai trò.      |
 | **INDEX**  | `user_status` | Tăng tốc lọc tài khoản theo trạng thái.         |
 
@@ -74,8 +73,11 @@ Thông tin về từng phiên đăng nhập không được lưu trực tiếp t
 ```
 Các trạng thái hiện tại gồm:
     - ACTIVE: tài khoản đang hoạt động và có thể đăng nhập nếu thông tin xác thực hợp lệ.
-    - DISABLED: tài khoản bị vô hiệu hóa và không được phép tạo phiên đăng nhập mới.
+    - INACTIVE: tài khoản bị vô hiệu hóa và không được phép tạo phiên đăng nhập mới; các phiên còn hiệu lực phải bị thu hồi.
 ```
+
+Email được chuẩn hóa về chữ thường và kiểm tra định dạng ở tầng ứng dụng trước
+khi lưu; database bảo đảm tính duy nhất bằng ràng buộc `UNIQUE`.
 
 ### 2.1.2 User_Sessions (Phiên người dùng)
 
@@ -88,8 +90,8 @@ Lưu trữ các phiên đăng nhập của người dùng quản trị.
 | Field              | Type      | Nullable | Meaning                                                                                                     |
 | ------------------ | --------- | -------- | ----------------------------------------------------------------------------------------------------------- |
 | id                 | varchar   | No       | Mã định danh duy nhất của phiên đăng nhập, định dạng: `sess-ddmmyy-xxxxxxxx`.                               |
-| user_id            | varchar   | No       | Người dùng sở hữu phiên đăng nhập, liên kết đến bảng **Management_Users**.                                  |
-| refresh_token_hash | varchar   | No       | Refresh Token đã được hash, được sử dụng để cấp lại Access Token mà không yêu cầu người dùng đăng nhập lại. |
+| user_id            | varchar   | No       | Người dùng sở hữu phiên đăng nhập, liên kết đến bảng **Manager_Users**.                                     |
+| refresh_token_hash | varchar   | No       | SHA-256 của Refresh Token, được sử dụng để cấp lại Access Token mà không lưu token gốc.                     |
 | expires_at         | timestamp | No       | Thời điểm Refresh Token hiện tại hết hiệu lực.                                                              |
 | created_at         | timestamp | No       | Thời điểm phiên đăng nhập được tạo.                                                                         |
 | revoked_at         | timestamp | Yes      | Thời điểm phiên bị thu hồi hoặc đăng xuất. NULL nghĩa là phiên chưa bị thu hồi.                             |
@@ -99,7 +101,7 @@ Lưu trữ các phiên đăng nhập của người dùng quản trị.
 | Type       | Applicable to        | Description                                     |
 | ---------- | -------------------- | ----------------------------------------------- |
 | **PK**     | `id`                 | Khóa chính, định danh duy nhất phiên đăng nhập. |
-| **FK**     | `user_id`            | Tham chiếu đến `Management_Users(id)`.          |
+| **FK**     | `user_id`            | Tham chiếu đến `Manager_Users(id)`.             |
 | **UNIQUE** | `refresh_token_hash` | Mỗi refresh token hash chỉ xuất hiện một lần.   |
 | **CHECK**  | `revoked_at`         | Nếu có giá trị thì phải `>= created_at`.        |
 | **CHECK**  | `expires_at`         | Phải `> created_at`.                            |
@@ -108,9 +110,12 @@ Lưu trữ các phiên đăng nhập của người dùng quản trị.
 
 **_[4] Quy tắc nghiệp vụ (Business Rules)_**
 
-Phiên không được cấp Access Token mới nếu đã hết hạn `expires_at` hoặc đã bị thu hồi `revoked_at` IS `NOTNULL`.
+Phiên không được cấp Access Token mới nếu đã hết hạn (`expires_at <= thời điểm hiện tại`), đã bị thu hồi (`revoked_at IS NOT NULL`) hoặc tài khoản sở hữu phiên không ở trạng thái `ACTIVE`.
 
 Khi người dùng đăng xuất khỏi một thiết bị, chỉ phiên tương ứng cần được cập nhật `revoked_at`.
+
+Quy trình cấp Access Token, quản lý JWT/Refresh Token, hash mật khẩu và thu hồi
+phiên được mô tả tại [authentication-design.md](authentication-design.md).
 
 ### 2.1.3 Roles (Vai trò)
 
@@ -122,10 +127,9 @@ Vai trò được sử dụng để nhóm các quyền truy cập và gán chún
 
 Ví dụ một số vai trò:
 
-- Super Administrator
-- Content Administrator
 - System Administrator
-- Content Moderator
+- Content Editor
+- Content Reviewer
 
 **_[2] Trường dữ liệu (Fields)_**
 
@@ -133,15 +137,20 @@ Ví dụ một số vai trò:
 | --------------- | --------- | -------- | ------------------------------------------------------------------------------------------------- |
 | id              | varchar   | No       | Mã định danh duy nhất của vai trò trong hệ thống, định dạng: `role-xxxxxxxx`.                     |
 | name            | varchar   | No       | Tên hiển thị của vai trò, dùng để nhận biết và phân biệt các nhóm quyền khác nhau trong hệ thống. |
+| description     | text      | Yes      | Mô tả phạm vi và mục đích sử dụng của vai trò.                                                    |
+| created_by      | varchar   | Yes      | Người dùng quản trị đã tạo vai trò, liên kết đến bảng **Manager_Users**.                          |
+| last_updated_by | varchar   | Yes      | Người dùng quản trị cập nhật vai trò gần nhất, liên kết đến bảng **Manager_Users**.               |
 | created_at      | timestamp | No       | Thời điểm vai trò được tạo trong hệ thống.                                                        |
 | last_updated_at | timestamp | Yes      | Thời điểm thông tin vai trò được cập nhật gần nhất.                                               |
 
 **_[3] Ràng buộc (constraint):_**
 
-| Type       | Applicable to | Description                             |
-| ---------- | ------------- | --------------------------------------- |
-| **PK**     | `id`          | Khóa chính, định danh duy nhất vai trò. |
-| **UNIQUE** | `name`        | Mỗi tên vai trò chỉ xuất hiện một lần.  |
+| Type       | Applicable to   | Description                                      |
+| ---------- | --------------- | ------------------------------------------------ |
+| **PK**     | `id`            | Khóa chính, định danh duy nhất vai trò.          |
+| **FK**     | `created_by`    | Tham chiếu đến `Manager_Users(id)`.              |
+| **FK**     | `last_updated_by` | Tham chiếu đến `Manager_Users(id)`.            |
+| **UNIQUE** | `name`          | Mỗi tên vai trò chỉ xuất hiện một lần.           |
 
 ### 2.1.4 Role_Permissions (Phân quyền theo vai trò)
 
@@ -160,13 +169,12 @@ Bảng xác định mỗi vai trò được phép sở hữu những quyền nà
 
 **_[3] Ràng buộc (constraint):_**
 
-| Type       | Applicable to                | Description                                    |
-| ---------- | ---------------------------- | ---------------------------------------------- |
-| **PK**     | (`role_id`, `permission_id`) | Khóa chính phức hợp.                           |
-| **FK**     | `role_id`                    | Tham chiếu đến `Roles(id)`.                    |
-| **FK**     | `permission_id`              | Tham chiếu đến `Permissions(id)`.              |
-| **UNIQUE** | (`role_id`, `permission_id`) | Mỗi cặp vai trò - quyền chỉ xuất hiện một lần. |
-| **INDEX**  | `permission_id`              | Tăng tốc truy vấn vai trò theo quyền.          |
+| Type      | Applicable to                | Description                                                     |
+| --------- | ---------------------------- | --------------------------------------------------------------- |
+| **PK**    | (`permission_id`, `role_id`) | Khóa chính phức hợp, đồng thời bảo đảm mỗi cặp chỉ xuất hiện một lần. |
+| **FK**    | `role_id`                    | Tham chiếu đến `Roles(id)`.                                     |
+| **FK**    | `permission_id`              | Tham chiếu đến `Permissions(id)`.                               |
+| **INDEX** | `role_id`                    | Tăng tốc truy vấn danh sách quyền của một vai trò.              |
 
 ### 2.1.5 Permissions (Quyền truy cập)
 
@@ -178,13 +186,12 @@ Mỗi quyền được hình thành từ sự kết hợp giữa một chức n�
 
 Ví dụ: Một số chi tiết quyền nhỏ trong hệ thống
 
-- POI Management + Add
-- POI Management + Edit
-- POI Management + Delete
-- POI Management + View
-- Dashboard + View
-- User Management + Add
-- User Management + Edit
+- POI Management + create
+- POI Management + update
+- POI Management + delete
+- POI Management + read
+- User Management + create
+- User Management + update
 
 **_[2] Trường dữ liệu (Fields)_**
 
@@ -196,13 +203,13 @@ Ví dụ: Một số chi tiết quyền nhỏ trong hệ thống
 
 **_[3] Ràng buộc (constraint):_**
 
-| Type       | Applicable to                | Description                                                  |
-| ---------- | ---------------------------- | ------------------------------------------------------------ |
-| **PK**     | `id`                         | Khóa chính, định danh duy nhất quyền.                        |
-| **FK**     | `function_id`                | Tham chiếu đến `Management_Functions(id)`.                   |
-| **FK**     | `action_id`                  | Tham chiếu đến `Actions(id)`.                                |
-| **UNIQUE** | (`function_id`, `action_id`) | Mỗi cặp chức năng - hành động chỉ tạo ra một quyền duy nhất. |
-| **INDEX**  | `action_id`                  | Tăng tốc truy vấn quyền theo hành động.                      |
+| Type      | Applicable to | Description                                    |
+| --------- | ------------- | ---------------------------------------------- |
+| **PK**    | `id`          | Khóa chính, định danh duy nhất quyền.          |
+| **FK**    | `function_id` | Tham chiếu đến `Management_Functions(id)`.     |
+| **FK**    | `action_id`   | Tham chiếu đến `Actions(id)`.                  |
+| **INDEX** | `function_id` | Tăng tốc truy vấn quyền theo chức năng.        |
+| **INDEX** | `action_id`   | Tăng tốc truy vấn quyền theo hành động.        |
 
 ### 2.1.6 Management_Functions (Chức năng quản lý)
 
@@ -214,20 +221,19 @@ Các chức năng này được sử dụng làm đối tượng để xây dự
 
 Ví dụ: một số chức năng của hệ thống.
 
-- Dashboard
 - POI Management
-- POIs Content Management
-- Audio Management
+- Narration Content Management
 - User Management
-- Role-Based Access
-- Language Management
+- Offline Package Management
+- Listening Analytics
 
 **_[2] Trường dữ liệu (Fields)_**
 
-| Field | Type    | Nullable | Meaning                                                                                                                                   |
-| ----- | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| id    | varchar | No       | Mã định danh duy nhất của chức năng trong hệ thống, định dạng: `func-xxxxxxxx`.                                                           |
-| name  | varchar | No       | Tên hiển thị của chức năng hoặc module nghiệp vụ, có thể được sử dụng để hiển thị trên giao diện như Sidebar hoặc màn hình quản lý quyền. |
+| Field       | Type    | Nullable | Meaning                                                                                                                                   |
+| ----------- | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| id          | varchar | No       | Mã định danh duy nhất của chức năng trong hệ thống, định dạng: `func-xxxxxxxx`.                                                           |
+| name        | varchar | No       | Tên hiển thị của chức năng hoặc module nghiệp vụ, có thể được sử dụng để hiển thị trên giao diện như Sidebar hoặc màn hình quản lý quyền. |
+| description | text    | Yes      | Mô tả mục đích và phạm vi nghiệp vụ của chức năng quản lý.                                                                                |
 
 **_[3] Ràng buộc (constraint):_**
 
@@ -246,12 +252,13 @@ Các hành động được kết hợp với Management_Functions để tạo t
 
 Ví dụ một số hành động:
 
-- Add
-- Edit
-- Delete
-- View
-- Publish
-- Approve
+- create
+- read
+- update
+- delete
+- approve
+- publish
+- generate_audio
 
 **_[2] Trường dữ liệu (Fields)_**
 
@@ -309,8 +316,8 @@ Mỗi POI bao gồm thông tin vị trí địa lý, hình ảnh, mã QR, mức 
 | ---------- | ------------------------- | ----------------------------------------------------------------------- |
 | **PK**     | `id`                      | Khóa chính, định danh duy nhất POI.                                     |
 | **FK**     | `region_id`               | Tham chiếu đến `Regions(id)`.                                           |
-| **FK**     | `created_by`              | Tham chiếu đến `Management_Users(id)`.                                  |
-| **FK**     | `last_updated_by`         | Tham chiếu đến `Management_Users(id)`.                                  |
+| **FK**     | `created_by`              | Tham chiếu đến `Manager_Users(id)`.                                     |
+| **FK**     | `last_updated_by`         | Tham chiếu đến `Manager_Users(id)`.                                     |
 | **UNIQUE** | `poi_qr_code`             | Mỗi POI có một mã QR duy nhất.                                          |
 | **UNIQUE** | `poi_location`            | Mỗi POI có một địa chỉ duy nhất (một POI hiện tại là một địa điểm lớn). |
 | **CHECK**  | `latitude`                | Trong khoảng `[-90, 90]`.                                               |
@@ -447,9 +454,9 @@ Trong phạm vi hiện tại, mỗi phiên bản Poi_Content có tối đa một
 | narration_script | text      | No       | Nội dung văn bản dùng để thuyết minh dùng.                                                                                 |
 | content_version  | integer   | No       | Số phiên bản nội dung trong phạm vi một cặp `poi_id` - `language_id`.                                                      |
 | content_status   | enum      | No       | Trạng thái xử lý hoặc xuất bản của nội dung, gồm: `DRAFT`/`WAITING_APPROVAL`/`REJECTED`/`APPROVED`/`PUBLISHED`/`ARCHIVED`. |
-| created_by       | varchar   | No       | Người dùng tạo nội dung, liên kết đến bảng **Management_Users**.                                                           |
-| approved_by      | varchar   | Yes      | Người dùng phê duyệt nội dung, liên kết đến bảng **Management_Users**.                                                     |
-| published_by     | varchar   | Yes      | Người dùng phát hành nội dung, liên kết đến bảng **Management_Users**.                                                     |
+| created_by       | varchar   | No       | Người dùng tạo nội dung, liên kết đến bảng **Manager_Users**.                                                              |
+| approved_by      | varchar   | Yes      | Người dùng phê duyệt nội dung, liên kết đến bảng **Manager_Users**.                                                        |
+| published_by     | varchar   | Yes      | Người dùng phát hành nội dung, liên kết đến bảng **Manager_Users**.                                                        |
 | created_at       | timestamp | No       | Thời điểm nội dung được tạo, tức lưu bản DRAFT.                                                                            |
 | approved_at      | timestamp | Yes      | Thời điểm nội dung được phê duyệt.                                                                                         |
 | published_at     | timestamp | Yes      | Thời điểm nội dung được chính thức xuất bản.                                                                               |
@@ -461,9 +468,9 @@ Trong phạm vi hiện tại, mỗi phiên bản Poi_Content có tối đa một
 | **PK**     | `id`                                         | Khóa chính, định danh duy nhất nội dung POI.                                                        |
 | **FK**     | `poi_id`                                     | Tham chiếu đến `Point_Of_Interests(id)`.                                                            |
 | **FK**     | `language_id`                                | Tham chiếu đến `Languages(id)`.                                                                     |
-| **FK**     | `created_by`                                 | Tham chiếu đến `Management_Users(id)`.                                                              |
-| **FK**     | `approved_by`                                | Tham chiếu đến `Management_Users(id)`.                                                              |
-| **FK**     | `published_by`                               | Tham chiếu đến `Management_Users(id)`.                                                              |
+| **FK**     | `created_by`                                 | Tham chiếu đến `Manager_Users(id)`.                                                                 |
+| **FK**     | `approved_by`                                | Tham chiếu đến `Manager_Users(id)`.                                                                 |
+| **FK**     | `published_by`                               | Tham chiếu đến `Manager_Users(id)`.                                                                 |
 | **UNIQUE** | (`poi_id`, `language_id`, `content_version`) | Mỗi phiên bản nội dung trong một cặp POI - ngôn ngữ là duy nhất.                                    |
 | **CHECK**  | `content_version`                            | `>= 1`.                                                                                             |
 | **CHECK**  | `content_status`                             | Thuộc tập giá trị `('DRAFT', 'WAITING_APPROVAL', 'REJECTED', 'APPROVED', 'PUBLISHED', 'ARCHIVED')`. |
@@ -959,7 +966,7 @@ Nhóm chịu trách nhiệm ghi nhận dữ liệu tương tác của khách du 
 
 Các dữ liệu này có thể được sử dụng để thống kê số lượt nghe, thời lượng nghe, mức độ hoàn thành nội dung và mức độ quan tâm đến từng điểm tham quan.
 
-Khách du lịch không cần tài khoản để sử dụng ứng dụng, do đó dữ liệu trong nhóm này không phụ thuộc vào Management_Users.
+Khách du lịch không cần tài khoản để sử dụng ứng dụng, do đó dữ liệu trong nhóm này không phụ thuộc vào Manager_Users.
 
 Các bảng thuộc nhóm:
 
@@ -1160,7 +1167,7 @@ Bảng phục vụ audit, điều tra sự cố, đối soát thay đổi và h�
 | Field       | Type       | Nullable | Meaning                                                                                             |
 | ----------- | ---------- | -------- | --------------------------------------------------------------------------------------------------- |
 | id          | UUID PK    | No       | Mã định danh duy nhất của bản ghi nhật ký.                                                          |
-| user_id     | varchar FK | No       | Người dùng thực hiện hành động, liên kết đến bảng **Management_Users**.                             |
+| user_id     | varchar FK | No       | Người dùng thực hiện hành động, liên kết đến bảng **Manager_Users**.                                |
 | action      | varchar    | No       | Hành động được thực hiện, ví dụ: `CREATE`, `UPDATE`, `DELETE`, `PUBLISH`, `APPROVE`.                |
 | entity_type | varchar    | No       | Loại đối tượng hoặc bảng dữ liệu bị tác động, ví dụ: `POI`, `POI_CONTENT`, `CONTENT_AUDIO`, `ROLE`. |
 | entity_id   | varchar    | No       | Mã định danh của bản ghi dữ liệu bị tác động.                                                       |
@@ -1173,7 +1180,7 @@ Bảng phục vụ audit, điều tra sự cố, đối soát thay đổi và h�
 | Type      | Applicable to                | Description                                                                      |
 | --------- | ---------------------------- | -------------------------------------------------------------------------------- |
 | **PK**    | `id`                         | Khóa chính, định danh duy nhất bản ghi nhật ký.                                  |
-| **FK**    | `user_id`                    | Tham chiếu đến `Management_Users(id)`.                                           |
+| **FK**    | `user_id`                    | Tham chiếu đến `Manager_Users(id)`.                                              |
 | **CHECK** | `action`                     | Thuộc tập giá trị cho phép (`CREATE`, `UPDATE`, `DELETE`, `PUBLISH`, `APPROVE`). |
 | **CHECK** | `entity_type`                | Thuộc tập giá trị cho phép (`POI`, `POI_CONTENT`, `CONTENT_AUDIO`, `ROLE`, ...). |
 | **INDEX** | (`entity_type`, `entity_id`) | Tăng tốc truy vấn lịch sử của 1 entity.                                          |

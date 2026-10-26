@@ -1,1 +1,59 @@
-"""Repository placeholder for the Permission table."""
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.domains.identity.models.action import ActionModel
+from app.domains.identity.models.management_function import ManagementFunctionModel
+from app.domains.identity.models.permission import PermissionModel
+from app.domains.identity.models.role_permission import RolePermissionModel
+
+
+class PermissionRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def get_by_id(self, permission_id: str) -> PermissionModel | None:
+        return self.session.get(PermissionModel, permission_id)
+
+    def list_all(self) -> list[PermissionModel]:
+        return list(
+            self.session.scalars(select(PermissionModel).order_by(PermissionModel.id))
+        )
+
+    def list_by_role_id(self, role_id: str) -> list[PermissionModel]:
+        statement = (
+            select(PermissionModel)
+            .join(
+                RolePermissionModel,
+                RolePermissionModel.permission_id == PermissionModel.id,
+            )
+            .where(RolePermissionModel.role_id == role_id)
+            .order_by(PermissionModel.id)
+        )
+        return list(self.session.scalars(statement))
+
+    def role_has_permission(
+        self,
+        role_id: str,
+        *,
+        function_name: str,
+        action_name: str,
+    ) -> bool:
+        statement = (
+            select(PermissionModel.id)
+            .join(
+                RolePermissionModel,
+                RolePermissionModel.permission_id == PermissionModel.id,
+            )
+            .join(
+                ManagementFunctionModel,
+                ManagementFunctionModel.id == PermissionModel.function_id,
+            )
+            .join(ActionModel, ActionModel.id == PermissionModel.action_id)
+            .where(
+                RolePermissionModel.role_id == role_id,
+                ManagementFunctionModel.name == function_name,
+                ActionModel.name == action_name,
+            )
+            .limit(1)
+        )
+        return self.session.scalar(statement) is not None

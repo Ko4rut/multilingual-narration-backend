@@ -7,16 +7,12 @@ import app.models  # noqa: F401
 from app.db import Base
 
 
-MIGRATION_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "alembic"
-    / "versions"
-    / "0001_initial_schema.py"
-)
+MIGRATIONS_PATH = Path(__file__).resolve().parents[1] / "alembic" / "versions"
 
 
-def load_initial_migration():
-    spec = spec_from_file_location("initial_schema_migration", MIGRATION_PATH)
+def load_migration(filename: str):
+    path = MIGRATIONS_PATH / filename
+    spec = spec_from_file_location(path.stem, path)
     assert spec is not None
     assert spec.loader is not None
     module = module_from_spec(spec)
@@ -24,8 +20,10 @@ def load_initial_migration():
     return module
 
 
-def test_initial_migration_tables_and_columns_match_orm(monkeypatch):
-    migration = load_initial_migration()
+def test_migration_chain_tables_and_columns_match_orm(monkeypatch):
+    initial_migration = load_migration("0001_initial_schema.py")
+    identity_migration = load_migration("0003_update_identity_models.py")
+    constraint_migration = load_migration("0004_enforce_identity_constraints.py")
     migration_columns = {}
 
     def capture_table(table_name, *elements, **_kwargs):
@@ -33,10 +31,68 @@ def test_initial_migration_tables_and_columns_match_orm(monkeypatch):
             element.name for element in elements if isinstance(element, Column)
         }
 
-    monkeypatch.setattr(migration.op, "create_table", capture_table)
-    monkeypatch.setattr(migration.op, "create_index", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(initial_migration.op, "create_table", capture_table)
+    monkeypatch.setattr(
+        initial_migration.op,
+        "create_index",
+        lambda *_args, **_kwargs: None,
+    )
 
-    migration.upgrade()
+    initial_migration.upgrade()
+
+    def capture_column(table_name, column):
+        migration_columns[table_name].add(column.name)
+
+    monkeypatch.setattr(identity_migration.op, "add_column", capture_column)
+    monkeypatch.setattr(
+        identity_migration.op,
+        "alter_column",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        identity_migration.op,
+        "create_foreign_key",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        identity_migration.op,
+        "drop_constraint",
+        lambda *_args, **_kwargs: None,
+    )
+
+    identity_migration.upgrade()
+
+    monkeypatch.setattr(
+        constraint_migration.op,
+        "execute",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        constraint_migration.MANAGER_USER_STATUS,
+        "create",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        constraint_migration.op,
+        "get_bind",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        constraint_migration.op,
+        "alter_column",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        constraint_migration.op,
+        "create_check_constraint",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        constraint_migration.op,
+        "create_index",
+        lambda *_args, **_kwargs: None,
+    )
+    constraint_migration.upgrade()
 
     orm_columns = {
         table_name: set(table.columns.keys())

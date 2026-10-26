@@ -1,14 +1,22 @@
 import app.models  # noqa: F401
 from app.db import Base
-from sqlalchemy import String, Uuid
+from sqlalchemy import CheckConstraint, String, UniqueConstraint, Uuid
 
 
 EXPECTED_COLUMNS = {
     "action": {"id", "name"},
-    "management_function": {"id", "name"},
+    "management_function": {"id", "name", "description"},
     "permission": {"id", "function_id", "action_id"},
     "role_permission": {"permission_id", "role_id"},
-    "role": {"id", "name", "created_at", "last_updated_at"},
+    "role": {
+        "id",
+        "name",
+        "description",
+        "created_by",
+        "last_updated_by",
+        "created_at",
+        "last_updated_at",
+    },
     "manager_user": {
         "id",
         "role_id",
@@ -145,14 +153,14 @@ def test_composite_primary_keys():
     } == {"role_id", "permission_id"}
     assert {
         column.name
-        for column in Base.metadata.tables[
-            "poi_category_mapping"
-        ].primary_key.columns
+        for column in Base.metadata.tables["poi_category_mapping"].primary_key.columns
     } == {"poi_id", "poi_category_id"}
 
 
 def test_cross_domain_foreign_keys_are_registered():
     expected_targets = {
+        ("role", "created_by"): "manager_user.id",
+        ("role", "last_updated_by"): "manager_user.id",
         ("manager_user", "role_id"): "role.id",
         ("user_session", "user_id"): "manager_user.id",
         ("point_of_interest", "created_by"): "manager_user.id",
@@ -163,12 +171,10 @@ def test_cross_domain_foreign_keys_are_registered():
         ("offline_package_item", "audio_id"): "content_audio.id",
     }
     for (table_name, column_name), target in expected_targets.items():
-        foreign_keys = Base.metadata.tables[table_name].columns[
-            column_name
-        ].foreign_keys
-        assert {foreign_key.target_fullname for foreign_key in foreign_keys} == {
-            target
-        }
+        foreign_keys = (
+            Base.metadata.tables[table_name].columns[column_name].foreign_keys
+        )
+        assert {foreign_key.target_fullname for foreign_key in foreign_keys} == {target}
 
 
 def test_identifier_types_match_database_design():
@@ -193,3 +199,46 @@ def test_identifier_types_match_database_design():
             Base.metadata.tables[table_name].columns[column_name].type,
             String,
         )
+
+
+def test_identity_model_nullability_and_permission_constraints():
+    role = Base.metadata.tables["role"]
+    management_function = Base.metadata.tables["management_function"]
+    manager_user = Base.metadata.tables["manager_user"]
+    permission = Base.metadata.tables["permission"]
+
+    assert role.c.description.nullable
+    assert role.c.created_by.nullable
+    assert role.c.last_updated_by.nullable
+    assert role.c.last_updated_at.nullable
+    assert management_function.c.description.nullable
+    assert not manager_user.c.last_updated_at.nullable
+    assert not any(
+        isinstance(constraint, UniqueConstraint)
+        and {column.name for column in constraint.columns}
+        == {"function_id", "action_id"}
+        for constraint in permission.constraints
+    )
+
+
+def test_identity_status_session_constraints_and_indexes():
+    manager_user = Base.metadata.tables["manager_user"]
+    user_session = Base.metadata.tables["user_session"]
+    role_permission = Base.metadata.tables["role_permission"]
+
+    assert manager_user.c.user_status.type.name == "manager_user_status"
+    assert manager_user.c.user_status.type.enums == ["ACTIVE", "INACTIVE"]
+    assert {
+        constraint.name
+        for constraint in user_session.constraints
+        if isinstance(constraint, CheckConstraint)
+    } == {
+        "ck_user_session_expires_after_creation",
+        "ck_user_session_revoked_after_creation",
+    }
+    assert "ix_user_session_expires_at" in {
+        index.name for index in user_session.indexes
+    }
+    assert "ix_role_permission_role_id" in {
+        index.name for index in role_permission.indexes
+    }

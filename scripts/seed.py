@@ -120,29 +120,55 @@ def seed_identity(session: Session):
             "generate_audio",
         ]
     }
-    functions = {
-        name: get_or_create(session, ManagementFunction, {"name": name})
-        for name in [
-            "POI Management",
+    function_specs = [
+        ("POI Management", "Manage points of interest and their metadata."),
+        (
             "Narration Content Management",
-            "User Management",
+            "Manage multilingual narration content and generated audio.",
+        ),
+        ("User Management", "Manage administrator accounts and access."),
+        (
             "Offline Package Management",
-            "Listening Analytics",
-        ]
-    }
-    roles = {
-        name: get_or_create(
+            "Build and publish downloadable offline content packages.",
+        ),
+        ("Listening Analytics", "Review listening activity and analytics."),
+    ]
+    functions = {}
+    for name, description in function_specs:
+        function = get_or_create(
+            session,
+            ManagementFunction,
+            {"name": name},
+            {"description": description},
+        )
+        function.description = description
+        functions[name] = function
+
+    role_specs = [
+        (
+            "System Administrator",
+            "Full administrative access to the management system.",
+        ),
+        ("Content Editor", "Create and update POI and narration content."),
+        (
+            "Content Reviewer",
+            "Review, approve, and publish narration content.",
+        ),
+    ]
+    roles = {}
+    for name, description in role_specs:
+        role = get_or_create(
             session,
             Role,
             {"name": name},
-            {"created_at": SEED_TIME, "last_updated_at": SEED_TIME},
+            {
+                "description": description,
+                "created_at": SEED_TIME,
+                "last_updated_at": SEED_TIME,
+            },
         )
-        for name in [
-            "System Administrator",
-            "Content Editor",
-            "Content Reviewer",
-        ]
-    }
+        role.description = description
+        roles[name] = role
 
     permission_matrix = {
         "POI Management": ["create", "read", "update", "delete"],
@@ -209,28 +235,28 @@ def seed_identity(session: Session):
             "admin@mnr.local",
             "System Administrator",
             "Quản trị hệ thống",
-            "active",
+            "ACTIVE",
             SEED_TIME + timedelta(hours=1),
         ),
         (
             "editor@mnr.local",
             "Content Editor",
             "Biên tập viên nội dung",
-            "active",
+            "ACTIVE",
             SEED_TIME + timedelta(hours=2),
         ),
         (
             "reviewer@mnr.local",
             "Content Reviewer",
             "Kiểm duyệt viên nội dung",
-            "active",
+            "ACTIVE",
             SEED_TIME + timedelta(hours=3),
         ),
         (
             "archived@mnr.local",
             "Content Editor",
             "Tài khoản lưu trữ",
-            "inactive",
+            "INACTIVE",
             None,
         ),
     ]
@@ -250,6 +276,11 @@ def seed_identity(session: Session):
                 "last_login_at": last_login_at,
             },
         )
+
+    administrator_id = users["admin@mnr.local"].id
+    for role in roles.values():
+        role.created_by = administrator_id
+        role.last_updated_by = administrator_id
 
     session_specs = [
         (
@@ -849,8 +880,8 @@ def seed_audit_logs(session: Session, users, pois, content_map):
             "update",
             "manager_user",
             editor.id,
-            {"user_status": "pending"},
-            {"user_status": "active"},
+            {"user_status": "PENDING"},
+            {"user_status": "ACTIVE"},
         ),
         (
             reviewer.id,

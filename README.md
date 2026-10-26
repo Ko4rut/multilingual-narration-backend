@@ -34,6 +34,16 @@ numeric IDs are converted to the documented prefixes and date formats. Because
 new string/UUID identifiers cannot be mapped safely back to the old integer
 sequences, this revision intentionally has no destructive downgrade.
 
+Revision `0003_update_identity_models` adds descriptions to roles and management
+functions, adds nullable role creator/updater references, allows a nullable role
+update timestamp, and removes the unique constraint on permission function/action
+pairs.
+
+Revision `0004_enforce_identity_constraints` converts manager-user status to the
+PostgreSQL enum `manager_user_status` with `ACTIVE`/`INACTIVE` values, enforces
+session timestamp invariants, and adds indexes for session expiration and
+role-permission lookups.
+
 ## Docker setup
 
 Copy the non-secret development defaults and start the complete stack:
@@ -165,9 +175,18 @@ Implemented HTTP endpoints:
 - `GET /api/v1/pois/{poi_id}` where `poi_id` is a string such as
   `poi-010926-951c03a1`
 
-POI reads return only records with `poi_status = 'active'`. Authentication/RBAC,
-administrative writes, nearby search, QR activation, narration selection, TTS,
+POI reads return only records with `poi_status = 'active'`. The identity domain
+implements manager-user validation, persisted session lifecycle, and RBAC lookup
+services, but no authentication or administrative HTTP endpoints are exposed yet.
+Password hashing/verification and access-token issuance still require a configured
+security provider. Nearby search, QR activation, narration selection, TTS,
 listening ingestion, and offline package generation remain future use cases.
+
+The target login, JWT, refresh-token, password-hashing, key-management, and
+revocation contracts are documented in
+[docs/authentication-design.md](docs/authentication-design.md). The document
+clearly separates implemented Identity behavior from planned HTTP and security
+provider work.
 
 ## Verification
 
