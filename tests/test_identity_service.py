@@ -22,6 +22,11 @@ from app.domains.identity.repositories.manager_user import ManagerUserRepository
 from app.domains.identity.repositories.permission import PermissionRepository
 from app.domains.identity.repositories.role import RoleRepository
 from app.domains.identity.repositories.user_session import UserSessionRepository
+from app.domains.identity.security.jwt import (
+    AccessTokenClaims,
+    AccessTokenProvider,
+    IssuedAccessToken,
+)
 from app.domains.identity.security.password import (
     PasswordProvider,
     PasswordVerification,
@@ -84,12 +89,18 @@ def build_identity_service():
             )
         )
     )
+    access_token_provider = MagicMock(spec=AccessTokenProvider)
+    access_token_provider.issue_access_token.return_value = IssuedAccessToken(
+        token="signed-access-token",
+        expires_at=NOW + timedelta(minutes=15),
+    )
     service = IdentityService(
         session,
         user_repository,
         user_session_repository,
         permission_repository,
         password_provider,
+        access_token_provider,
         clock=lambda: NOW,
         id_factory=lambda _prefix, _created_at: SESSION_ID,
     )
@@ -143,10 +154,40 @@ def test_login_creates_session_and_records_last_login():
     assert result.manager_user is manager_user
     assert result.user_session.id == SESSION_ID
     assert result.user_session.user_id == USER_ID
+    assert result.access_token.token == "signed-access-token"
     assert manager_user.last_login_at == NOW
     user_sessions.add.assert_called_once_with(result.user_session)
     session.flush.assert_called_once_with()
     session.commit.assert_not_called()
+    service.access_token_provider.issue_access_token.assert_called_once_with(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        role_id="role-12345678",
+    )
+
+
+def test_authenticate_access_token_validates_session_and_user():
+    service, _session, users, user_sessions, _permissions = build_identity_service()
+    manager_user = build_user()
+    user_session = build_session()
+    claims = AccessTokenClaims(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        role_id=manager_user.role_id,
+        token_id="jwt-token-id",
+        issued_at=NOW,
+        not_before=NOW,
+        expires_at=NOW + timedelta(minutes=15),
+    )
+    service.access_token_provider.decode_access_token.return_value = claims
+    user_sessions.get_by_id.return_value = user_session
+    users.get_by_id.return_value = manager_user
+
+    result = service.authenticate_access_token("signed-access-token")
+
+    assert result.manager_user is manager_user
+    assert result.user_session is user_session
+    assert result.claims is claims
 
 
 @pytest.mark.parametrize(

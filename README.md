@@ -178,9 +178,11 @@ Implemented HTTP endpoints:
 POI reads return only records with `poi_status = 'active'`. The identity domain
 implements manager-user validation, persisted session lifecycle, and RBAC lookup
 services, but no authentication or administrative HTTP endpoints are exposed yet.
-Password hashing/verification and access-token issuance still require a configured
-security provider. Nearby search, QR activation, narration selection, TTS,
-listening ingestion, and offline package generation remain future use cases.
+Argon2id password hashing/verification and RS256 Access Token providers are
+implemented inside the Identity domain. HTTP authentication endpoints, production
+key configuration, and cookie handling are not wired yet. Nearby search, QR
+activation, narration selection, TTS, listening ingestion, and offline package
+generation remain future use cases.
 
 The target login, JWT, refresh-token, password-hashing, key-management, and
 revocation contracts are documented in

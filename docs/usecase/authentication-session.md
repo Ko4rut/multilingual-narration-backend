@@ -41,7 +41,8 @@ Use case trên là hợp đồng mục tiêu của luồng xác thực hoàn ch�
 
 Hiện tại `IdentityService` đã hỗ trợ kiểm tra tài khoản bằng Argon2id, tạo và kiểm
 tra session, logout, kiểm tra permission và thu hồi session khi tài khoản bị vô
-hiệu hóa hoặc đổi mật khẩu. Các HTTP endpoint, JWT provider, cookie handling và
+hiệu hóa hoặc đổi mật khẩu. JWT provider đã hỗ trợ ký và kiểm tra Access Token
+bằng `RS256`. Các HTTP endpoint, cấu hình khóa production, cookie handling và
 refresh-token rotation vẫn cần được triển khai.
 
 Thiết kế kỹ thuật chi tiết được trình bày tại

@@ -17,6 +17,10 @@ class InvalidCredentials(Exception):
     """The supplied email or password is invalid."""
 
 
+class InvalidAccessToken(Exception):
+    """The supplied access token cannot authenticate a request."""
+
+
 class InactiveManagerUser(Exception):
     """The manager user is not allowed to authenticate."""
 

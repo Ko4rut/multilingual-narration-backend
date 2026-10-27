@@ -26,6 +26,11 @@ from app.domains.identity.repositories.manager_user import ManagerUserRepository
 from app.domains.identity.repositories.permission import PermissionRepository
 from app.domains.identity.repositories.role import RoleRepository
 from app.domains.identity.repositories.user_session import UserSessionRepository
+from app.domains.identity.security.jwt import (
+    AccessTokenClaims,
+    AccessTokenProvider,
+    IssuedAccessToken,
+)
 from app.domains.identity.security.password import PasswordProvider
 from app.domains.identity.utils.identity import generate_dated_identifier, utc_now
 
@@ -39,6 +44,14 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 class LoginResult:
     manager_user: ManagerUserModel
     user_session: UserSessionModel
+    access_token: IssuedAccessToken
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticatedIdentity:
+    manager_user: ManagerUserModel
+    user_session: UserSessionModel
+    claims: AccessTokenClaims
 
 
 class IdentityService:
@@ -51,6 +64,7 @@ class IdentityService:
         user_session_repository: UserSessionRepository,
         permission_repository: PermissionRepository,
         password_provider: PasswordProvider,
+        access_token_provider: AccessTokenProvider,
         *,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str, datetime], str] = generate_dated_identifier,
@@ -60,6 +74,7 @@ class IdentityService:
         self.user_session_repository = user_session_repository
         self.permission_repository = permission_repository
         self.password_provider = password_provider
+        self.access_token_provider = access_token_provider
         self.clock = clock
         self.id_factory = id_factory
 
@@ -109,10 +124,33 @@ class IdentityService:
                 manager_user.last_login_at = created_at
                 self.user_session_repository.add(user_session)
                 self.session.flush()
+                access_token = self.access_token_provider.issue_access_token(
+                    user_id=manager_user.id,
+                    session_id=user_session.id,
+                    role_id=manager_user.role_id,
+                )
         except IntegrityError as exc:
             self._translate_session_integrity_error(exc)
 
-        return LoginResult(manager_user=manager_user, user_session=user_session)
+        return LoginResult(
+            manager_user=manager_user,
+            user_session=user_session,
+            access_token=access_token,
+        )
+
+    def authenticate_access_token(self, token: str) -> AuthenticatedIdentity:
+        claims = self.access_token_provider.decode_access_token(token)
+        user_session = self.user_session_repository.get_by_id(claims.session_id)
+        if user_session is None or user_session.user_id != claims.user_id:
+            raise UserSessionNotFound("User session not found")
+        self._require_usable_session(user_session, self.clock())
+        manager_user = self._require_manager_user(claims.user_id)
+        self._require_active_manager_user(manager_user)
+        return AuthenticatedIdentity(
+            manager_user=manager_user,
+            user_session=user_session,
+            claims=claims,
+        )
 
     def refresh(self, refresh_token_hash: str) -> UserSessionModel:
         token_hash = self._normalize_sha256_hash(refresh_token_hash)

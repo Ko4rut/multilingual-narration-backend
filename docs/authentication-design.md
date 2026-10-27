@@ -13,6 +13,8 @@ Hiện tại domain Identity đã có:
 
 - `ManagerUserModel`, `UserSessionModel` và các repository tương ứng;
 - Argon2id password provider dùng để hash, verify và nâng cấp password hash;
+- JWT provider ký và kiểm tra Access Token bằng `RS256`, `kid`, issuer, audience
+  và các claim thời gian bắt buộc;
 - kiểm tra trạng thái tài khoản `ACTIVE`/`INACTIVE`;
 - tạo, kiểm tra và thu hồi phiên đăng nhập;
 - thu hồi toàn bộ phiên khi tài khoản bị vô hiệu hóa hoặc đổi mật khẩu;
@@ -21,7 +23,6 @@ Hiện tại domain Identity đã có:
 Các phần sau **chưa được triển khai** và được mô tả như hợp đồng mục tiêu:
 
 - HTTP endpoint cho login, refresh, logout và thông tin người dùng hiện tại;
-- provider ký và kiểm tra JWT;
 - cấu hình khóa ký, cookie, issuer, audience và thời hạn token;
 - dependency xác thực request và ánh xạ lỗi HTTP;
 - refresh-token rotation và xử lý tranh chấp khi refresh đồng thời.
@@ -269,7 +270,7 @@ hash mật khẩu** vì quá nhanh và dễ bị brute force.
 
 ## 10. Quản lý khóa JWT
 
-Thiết kế mặc định dùng `RS256`:
+JWT provider hiện thực dùng `RS256`:
 
 - private key chỉ có dịch vụ phát hành token được đọc;
 - public key dùng để kiểm tra chữ ký;
