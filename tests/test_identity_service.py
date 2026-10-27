@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.orm import Session
 
-from app.domains.identity.enums import ManagerUserStatus
 from app.domains.identity.exceptions import (
     InactiveManagerUser,
     InvalidCredentials,
@@ -15,7 +14,10 @@ from app.domains.identity.exceptions import (
     UserSessionNotFound,
     UserSessionRevoked,
 )
-from app.domains.identity.models.manager_user import ManagerUserModel
+from app.domains.identity.models.manager_user import (
+    ManagerUserModel,
+    ManagerUserStatus,
+)
 from app.domains.identity.models.permission import PermissionModel
 from app.domains.identity.models.role import RoleModel
 from app.domains.identity.models.user_session import UserSessionModel

@@ -10,18 +10,22 @@ MINIMUM_REFRESH_TOKEN_BYTES = 32
 
 @dataclass(frozen=True, slots=True)
 class IssuedRefreshToken:
+    """Refresh Token thô để gửi một lần và SHA-256 hash để lưu trữ."""
+
     token: str = field(repr=False)
     token_hash: str
 
 
 class RefreshTokenProvider(Protocol):
+    """Hợp đồng sinh Refresh Token và chuyển token thô thành hash."""
+
     def issue_refresh_token(self) -> IssuedRefreshToken: ...
 
     def hash_refresh_token(self, token: str) -> str: ...
 
 
 class SecureRefreshTokenProvider:
-    """Generate opaque refresh tokens and expose only their SHA-256 hashes."""
+    """Sinh Refresh Token opaque và chỉ cung cấp SHA-256 hash để lưu trữ."""
 
     def __init__(
         self,
@@ -37,6 +41,8 @@ class SecureRefreshTokenProvider:
         self.token_factory = token_factory
 
     def issue_refresh_token(self) -> IssuedRefreshToken:
+        """Sinh token đủ entropy; token thô không được ghi vào cơ sở dữ liệu."""
+
         token = self.token_factory(self.token_bytes)
         if not token:
             raise ValueError("token_factory returned an empty refresh token")
@@ -47,6 +53,8 @@ class SecureRefreshTokenProvider:
 
     @staticmethod
     def hash_refresh_token(token: str) -> str:
+        """Băm token để tra cứu phiên mà không lưu thông tin xác thực gốc."""
+
         if not token:
             raise ValueError("refresh token must not be empty")
         return sha256(token.encode("utf-8")).hexdigest()

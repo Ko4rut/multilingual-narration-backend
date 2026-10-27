@@ -28,12 +28,16 @@ REQUIRED_ACCESS_TOKEN_CLAIMS = (
 
 @dataclass(frozen=True, slots=True)
 class IssuedAccessToken:
+    """JWT đã ký cùng thời điểm hết hạn phục vụ HTTP response."""
+
     token: str
     expires_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
 class AccessTokenClaims:
+    """Các claim đã được xác minh và chuyển về kiểu dữ liệu nội bộ."""
+
     user_id: str
     session_id: str
     role_id: str
@@ -44,6 +48,8 @@ class AccessTokenClaims:
 
 
 class AccessTokenProvider(Protocol):
+    """Hợp đồng cấp và xác thực Access Token cho tầng service."""
+
     def issue_access_token(
         self,
         *,
@@ -56,7 +62,11 @@ class AccessTokenProvider(Protocol):
 
 
 class JwtAccessTokenProvider:
-    """Issue and verify signed RS256 access tokens with explicit key selection."""
+    """Cấp và xác minh JWT ký RS256 với lựa chọn khóa rõ ràng bằng ``kid``.
+
+    JWT chỉ được ký để chống sửa đổi, không được mã hóa; vì vậy payload không
+    được chứa mật khẩu, Refresh Token hoặc dữ liệu bí mật.
+    """
 
     def __init__(
         self,
@@ -101,6 +111,8 @@ class JwtAccessTokenProvider:
         session_id: str,
         role_id: str,
     ) -> IssuedAccessToken:
+        """Tạo Access Token ngắn hạn gắn với người dùng, vai trò và phiên."""
+
         issued_at = self._aware_utc(self.clock())
         expires_at = issued_at + self.access_token_ttl
         payload = {
@@ -124,7 +136,11 @@ class JwtAccessTokenProvider:
         return IssuedAccessToken(token=token, expires_at=expires_at)
 
     def decode_access_token(self, token: str) -> AccessTokenClaims:
+        """Xác minh chữ ký, issuer, audience, loại token và các mốc thời gian."""
+
         try:
+            # Header chưa xác minh chỉ được dùng để chọn public key. Mọi claim
+            # chỉ được tin cậy sau khi jwt.decode xác minh chữ ký bên dưới.
             header = jwt.get_unverified_header(token)
             if header.get("alg") != JWT_ALGORITHM:
                 raise InvalidAccessToken("Access token algorithm is not allowed")
@@ -140,6 +156,8 @@ class JwtAccessTokenProvider:
                 issuer=self.issuer,
                 options={
                     "require": list(REQUIRED_ACCESS_TOKEN_CLAIMS),
+                    # Các mốc thời gian được kiểm tra thủ công bằng clock được
+                    # inject để kiểm thử tất định và vẫn áp dụng leeway.
                     "verify_exp": False,
                     "verify_iat": False,
                     "verify_nbf": False,

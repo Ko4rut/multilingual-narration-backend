@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 
 from sqlalchemy import DateTime, Enum as SqlEnum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-from app.domains.identity.enums import ManagerUserStatus
+
+
+class ManagerUserStatus(str, Enum):
+    """Trạng thái nghiệp vụ được lưu trong cột ``manager_user.user_status``."""
+
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
 
 
 class ManagerUserModel(Base):
