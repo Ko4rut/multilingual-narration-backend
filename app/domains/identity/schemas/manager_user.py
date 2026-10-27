@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.domains.identity.enums import ManagerUserStatus
+from app.domains.identity.models.manager_user import ManagerUserStatus
 
 
 class ManagerUserRead(BaseModel):

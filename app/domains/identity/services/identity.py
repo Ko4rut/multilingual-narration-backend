@@ -6,7 +6,6 @@ import re
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.domains.identity.enums import ManagerUserStatus
 from app.domains.identity.exceptions import (
     InactiveManagerUser,
     InvalidCredentials,
@@ -18,7 +17,10 @@ from app.domains.identity.exceptions import (
     UserSessionNotFound,
     UserSessionRevoked,
 )
-from app.domains.identity.models.manager_user import ManagerUserModel
+from app.domains.identity.models.manager_user import (
+    ManagerUserModel,
+    ManagerUserStatus,
+)
 from app.domains.identity.models.permission import PermissionModel
 from app.domains.identity.models.role import RoleModel
 from app.domains.identity.models.user_session import UserSessionModel
@@ -63,7 +65,7 @@ class AuthenticatedIdentity:
 
 
 class IdentityService:
-    """Authentication, session lifecycle, and RBAC checks."""
+    """Điều phối đăng nhập, vòng đời phiên và kiểm tra quyền truy cập."""
 
     def __init__(
         self,
@@ -98,6 +100,8 @@ class IdentityService:
         email: str,
         password: str,
     ) -> LoginResult:
+        """Kiểm tra thông tin đăng nhập và tạo một phiên người dùng mới."""
+
         normalized_email = self._normalize_email(email)
         created_at = self.clock()
 
@@ -110,9 +114,13 @@ class IdentityService:
                     password,
                     manager_user.password_hash if manager_user is not None else None,
                 )
+                # Provider vẫn thực hiện một phép băm giả khi email không tồn tại,
+                # giúp giảm chênh lệch thời gian có thể làm lộ tài khoản hợp lệ.
                 if manager_user is None or not password_verification.is_valid:
                     raise InvalidCredentials("Invalid email or password")
                 self._require_active_manager_user(manager_user)
+                # Nâng cấp hash ngay trong giao dịch đăng nhập nếu chính sách
+                # Argon2 hiện tại mạnh hơn chính sách đã dùng cho hash cũ.
                 if password_verification.updated_hash is not None:
                     manager_user.password_hash = password_verification.updated_hash
                 issued_refresh_token = self.refresh_token_provider.issue_refresh_token()
@@ -143,6 +151,8 @@ class IdentityService:
         )
 
     def authenticate_access_token(self, token: str) -> AuthenticatedIdentity:
+        """Xác thực JWT rồi đối chiếu người dùng và phiên ở cơ sở dữ liệu."""
+
         claims = self.access_token_provider.decode_access_token(token)
         user_session = self.user_session_repository.get_by_id(claims.session_id)
         if user_session is None or user_session.user_id != claims.user_id:
@@ -157,6 +167,8 @@ class IdentityService:
         )
 
     def refresh(self, refresh_token: str) -> RefreshResult:
+        """Xoay vòng Refresh Token và cấp Access Token mới trong một giao dịch."""
+
         token_hash = self.refresh_token_provider.hash_refresh_token(refresh_token)
         now = self.clock()
         try:
@@ -172,6 +184,8 @@ class IdentityService:
                 manager_user = self._require_manager_user(user_session.user_id)
                 self._require_active_manager_user(manager_user)
 
+                # Bản ghi đã được khóa FOR UPDATE ở repository; hai yêu cầu dùng
+                # cùng token không thể cùng xoay vòng thành công.
                 issued_refresh_token = self.refresh_token_provider.issue_refresh_token()
                 user_session.refresh_token_hash = issued_refresh_token.token_hash
                 self.session.flush()
@@ -190,6 +204,8 @@ class IdentityService:
         )
 
     def logout(self, refresh_token: str) -> UserSessionModel:
+        """Thu hồi phiên tương ứng với Refresh Token đã nhận."""
+
         token_hash = self.refresh_token_provider.hash_refresh_token(refresh_token)
         revoked_at = self.clock()
         with self.session.begin():
@@ -212,6 +228,8 @@ class IdentityService:
         function_name: str,
         action_name: str,
     ) -> bool:
+        """Kiểm tra vai trò của người dùng có một quyền chức năng/hành động."""
+
         manager_user = self._require_manager_user(user_id)
         if manager_user.user_status != ACTIVE_USER_STATUS:
             return False
@@ -270,7 +288,7 @@ class IdentityService:
 
 
 class ManagerUserService:
-    """Administrative manager-user use cases and transaction boundaries."""
+    """Các ca sử dụng quản trị người dùng và ranh giới giao dịch tương ứng."""
 
     def __init__(
         self,
@@ -292,11 +310,15 @@ class ManagerUserService:
         self.id_factory = id_factory
 
     def get_manager_user(self, user_id: str) -> ManagerUserModel:
+        """Lấy một người dùng quản trị hoặc báo lỗi nếu không tồn tại."""
+
         return self._require_manager_user(user_id)
 
     def list_manager_users(
         self, *, offset: int = 0, limit: int = 20
     ) -> list[ManagerUserModel]:
+        """Liệt kê người dùng theo phân trang có giới hạn an toàn."""
+
         if offset < 0:
             raise ValueError("offset must be greater than or equal to 0")
         if not 1 <= limit <= 100:
@@ -312,6 +334,8 @@ class ManagerUserService:
         full_name: str,
         user_status: str | ManagerUserStatus = ACTIVE_USER_STATUS,
     ) -> ManagerUserModel:
+        """Tạo người dùng mới sau khi kiểm tra email và vai trò."""
+
         normalized_email = self._normalize_email(email)
         normalized_name = self._required_text(full_name, "full_name")
         password_hash = self.password_provider.hash_password(password)
@@ -349,6 +373,8 @@ class ManagerUserService:
         full_name: str | None = None,
         user_status: str | ManagerUserStatus | None = None,
     ) -> ManagerUserModel:
+        """Cập nhật người dùng và thu hồi phiên khi tài khoản bị vô hiệu hóa."""
+
         now = self.clock()
         try:
             with self.session.begin():
@@ -398,6 +424,8 @@ class ManagerUserService:
         user_id: str,
         password: str,
     ) -> ManagerUserModel:
+        """Đổi mật khẩu và thu hồi toàn bộ phiên đang hoạt động của người dùng."""
+
         password_hash = self.password_provider.hash_password(password)
         now = self.clock()
         with self.session.begin():
@@ -470,7 +498,7 @@ class ManagerUserService:
 
 
 class RoleService:
-    """Role and role-permission read use cases."""
+    """Các ca sử dụng chỉ đọc dành cho vai trò và quyền của vai trò."""
 
     def __init__(
         self,
@@ -481,14 +509,20 @@ class RoleService:
         self.permission_repository = permission_repository
 
     def get_role(self, role_id: str) -> RoleModel:
+        """Lấy vai trò theo mã hoặc báo lỗi nếu không tồn tại."""
+
         role = self.role_repository.get_by_id(role_id)
         if role is None:
             raise RoleNotFound("Role not found")
         return role
 
     def list_roles(self) -> list[RoleModel]:
+        """Liệt kê toàn bộ vai trò."""
+
         return self.role_repository.list_all()
 
     def list_role_permissions(self, role_id: str) -> list[PermissionModel]:
+        """Liệt kê quyền của một vai trò đã tồn tại."""
+
         self.get_role(role_id)
         return self.permission_repository.list_by_role_id(role_id)

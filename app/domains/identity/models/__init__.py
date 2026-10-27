@@ -1,6 +1,9 @@
 from app.domains.identity.models.action import ActionModel
 from app.domains.identity.models.management_function import ManagementFunctionModel
-from app.domains.identity.models.manager_user import ManagerUserModel
+from app.domains.identity.models.manager_user import (
+    ManagerUserModel,
+    ManagerUserStatus,
+)
 from app.domains.identity.models.permission import PermissionModel
 from app.domains.identity.models.role import RoleModel
 from app.domains.identity.models.role_permission import RolePermissionModel
@@ -26,6 +29,7 @@ __all__ = [
     "ActionModel",
     "ManagementFunctionModel",
     "ManagerUserModel",
+    "ManagerUserStatus",
     "PermissionModel",
     "RoleModel",
     "RolePermissionModel",
