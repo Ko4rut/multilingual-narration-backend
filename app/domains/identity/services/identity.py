@@ -1,6 +1,6 @@
 from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 import re
 
 from sqlalchemy.exc import IntegrityError
@@ -32,12 +32,12 @@ from app.domains.identity.security.jwt import (
     IssuedAccessToken,
 )
 from app.domains.identity.security.password import PasswordProvider
+from app.domains.identity.security.refresh_token import RefreshTokenProvider
 from app.domains.identity.utils.identity import generate_dated_identifier, utc_now
 
 
 ACTIVE_USER_STATUS = ManagerUserStatus.ACTIVE
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +45,14 @@ class LoginResult:
     manager_user: ManagerUserModel
     user_session: UserSessionModel
     access_token: IssuedAccessToken
+    refresh_token: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshResult:
+    user_session: UserSessionModel
+    access_token: IssuedAccessToken
+    refresh_token: str = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +73,9 @@ class IdentityService:
         permission_repository: PermissionRepository,
         password_provider: PasswordProvider,
         access_token_provider: AccessTokenProvider,
+        refresh_token_provider: RefreshTokenProvider,
         *,
+        refresh_token_ttl: timedelta = timedelta(days=30),
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str, datetime], str] = generate_dated_identifier,
     ):
@@ -75,6 +85,10 @@ class IdentityService:
         self.permission_repository = permission_repository
         self.password_provider = password_provider
         self.access_token_provider = access_token_provider
+        self.refresh_token_provider = refresh_token_provider
+        if refresh_token_ttl <= timedelta(0):
+            raise ValueError("refresh_token_ttl must be positive")
+        self.refresh_token_ttl = refresh_token_ttl
         self.clock = clock
         self.id_factory = id_factory
 
@@ -83,15 +97,9 @@ class IdentityService:
         *,
         email: str,
         password: str,
-        refresh_token_hash: str,
-        expires_at: datetime,
     ) -> LoginResult:
         normalized_email = self._normalize_email(email)
-        token_hash = self._normalize_sha256_hash(refresh_token_hash)
         created_at = self.clock()
-        self._require_timezone_aware(expires_at, "expires_at")
-        if expires_at <= created_at:
-            raise ValueError("expires_at must be later than the current time")
 
         try:
             with self.session.begin():
@@ -107,17 +115,12 @@ class IdentityService:
                 self._require_active_manager_user(manager_user)
                 if password_verification.updated_hash is not None:
                     manager_user.password_hash = password_verification.updated_hash
-                if (
-                    self.user_session_repository.get_by_refresh_token_hash(token_hash)
-                    is not None
-                ):
-                    raise RefreshTokenAlreadyExists("Refresh-token hash already exists")
-
+                issued_refresh_token = self.refresh_token_provider.issue_refresh_token()
                 user_session = UserSessionModel(
                     id=self.id_factory("sess", created_at),
                     user_id=manager_user.id,
-                    refresh_token_hash=token_hash,
-                    expires_at=expires_at,
+                    refresh_token_hash=issued_refresh_token.token_hash,
+                    expires_at=created_at + self.refresh_token_ttl,
                     created_at=created_at,
                     revoked_at=None,
                 )
@@ -136,6 +139,7 @@ class IdentityService:
             manager_user=manager_user,
             user_session=user_session,
             access_token=access_token,
+            refresh_token=issued_refresh_token.token,
         )
 
     def authenticate_access_token(self, token: str) -> AuthenticatedIdentity:
@@ -152,24 +156,47 @@ class IdentityService:
             claims=claims,
         )
 
-    def refresh(self, refresh_token_hash: str) -> UserSessionModel:
-        token_hash = self._normalize_sha256_hash(refresh_token_hash)
-        user_session = self.user_session_repository.get_by_refresh_token_hash(
-            token_hash
-        )
-        if user_session is None:
-            raise UserSessionNotFound("User session not found")
-        self._require_usable_session(user_session, self.clock())
-        manager_user = self._require_manager_user(user_session.user_id)
-        self._require_active_manager_user(manager_user)
-        return user_session
+    def refresh(self, refresh_token: str) -> RefreshResult:
+        token_hash = self.refresh_token_provider.hash_refresh_token(refresh_token)
+        now = self.clock()
+        try:
+            with self.session.begin():
+                user_session = (
+                    self.user_session_repository.get_by_refresh_token_hash_for_update(
+                        token_hash
+                    )
+                )
+                if user_session is None:
+                    raise UserSessionNotFound("User session not found")
+                self._require_usable_session(user_session, now)
+                manager_user = self._require_manager_user(user_session.user_id)
+                self._require_active_manager_user(manager_user)
 
-    def logout(self, refresh_token_hash: str) -> UserSessionModel:
-        token_hash = self._normalize_sha256_hash(refresh_token_hash)
+                issued_refresh_token = self.refresh_token_provider.issue_refresh_token()
+                user_session.refresh_token_hash = issued_refresh_token.token_hash
+                self.session.flush()
+                access_token = self.access_token_provider.issue_access_token(
+                    user_id=manager_user.id,
+                    session_id=user_session.id,
+                    role_id=manager_user.role_id,
+                )
+        except IntegrityError as exc:
+            self._translate_session_integrity_error(exc)
+
+        return RefreshResult(
+            user_session=user_session,
+            access_token=access_token,
+            refresh_token=issued_refresh_token.token,
+        )
+
+    def logout(self, refresh_token: str) -> UserSessionModel:
+        token_hash = self.refresh_token_provider.hash_refresh_token(refresh_token)
         revoked_at = self.clock()
         with self.session.begin():
-            user_session = self.user_session_repository.get_by_refresh_token_hash(
-                token_hash
+            user_session = (
+                self.user_session_repository.get_by_refresh_token_hash_for_update(
+                    token_hash
+                )
             )
             if user_session is None:
                 raise UserSessionNotFound("User session not found")
@@ -221,18 +248,6 @@ class IdentityService:
         if not EMAIL_PATTERN.fullmatch(normalized_email):
             raise ValueError("email must be a valid email address")
         return normalized_email
-
-    @staticmethod
-    def _normalize_sha256_hash(value: str) -> str:
-        normalized_value = value.strip().lower()
-        if not SHA256_PATTERN.fullmatch(normalized_value):
-            raise ValueError("refresh_token_hash must be a SHA-256 hexadecimal digest")
-        return normalized_value
-
-    @staticmethod
-    def _require_timezone_aware(value: datetime, field_name: str) -> None:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(f"{field_name} must include timezone information")
 
     @staticmethod
     def _required_text(value: str, field_name: str) -> str:

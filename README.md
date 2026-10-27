@@ -180,7 +180,9 @@ implements manager-user validation, persisted session lifecycle, and RBAC lookup
 services, but no authentication or administrative HTTP endpoints are exposed yet.
 Argon2id password hashing/verification and RS256 Access Token providers are
 implemented inside the Identity domain. HTTP authentication endpoints, production
-key configuration, and cookie handling are not wired yet. Nearby search, QR
+key configuration, and cookie handling are not wired yet. Refresh tokens are
+generated as opaque credentials, stored only as SHA-256 hashes, and rotated under
+a row lock without extending the session's absolute expiration. Nearby search, QR
 activation, narration selection, TTS, listening ingestion, and offline package
 generation remain future use cases.
 

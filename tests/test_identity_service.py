@@ -12,6 +12,7 @@ from app.domains.identity.exceptions import (
     ManagerUserNotFound,
     RoleNotFound,
     UserSessionExpired,
+    UserSessionNotFound,
     UserSessionRevoked,
 )
 from app.domains.identity.models.manager_user import ManagerUserModel
@@ -31,6 +32,10 @@ from app.domains.identity.security.password import (
     PasswordProvider,
     PasswordVerification,
 )
+from app.domains.identity.security.refresh_token import (
+    IssuedRefreshToken,
+    RefreshTokenProvider,
+)
 from app.domains.identity.services.identity import (
     IdentityService,
     ManagerUserService,
@@ -42,6 +47,9 @@ NOW = datetime(2026, 10, 26, 8, 30, tzinfo=timezone.utc)
 USER_ID = "user-261026-12345678"
 SESSION_ID = "sess-261026-12345678"
 TOKEN_HASH = "a" * 64
+ROTATED_TOKEN_HASH = "b" * 64
+REFRESH_TOKEN = "current-refresh-token"
+ROTATED_REFRESH_TOKEN = "rotated-refresh-token"
 
 
 def build_user(
@@ -94,6 +102,12 @@ def build_identity_service():
         token="signed-access-token",
         expires_at=NOW + timedelta(minutes=15),
     )
+    refresh_token_provider = MagicMock(spec=RefreshTokenProvider)
+    refresh_token_provider.hash_refresh_token.return_value = TOKEN_HASH
+    refresh_token_provider.issue_refresh_token.return_value = IssuedRefreshToken(
+        token=ROTATED_REFRESH_TOKEN,
+        token_hash=ROTATED_TOKEN_HASH,
+    )
     service = IdentityService(
         session,
         user_repository,
@@ -101,6 +115,7 @@ def build_identity_service():
         permission_repository,
         password_provider,
         access_token_provider,
+        refresh_token_provider,
         clock=lambda: NOW,
         id_factory=lambda _prefix, _created_at: SESSION_ID,
     )
@@ -142,19 +157,19 @@ def test_login_creates_session_and_records_last_login():
     service, session, users, user_sessions, _permissions = build_identity_service()
     manager_user = build_user()
     users.get_by_email.return_value = manager_user
-    user_sessions.get_by_refresh_token_hash.return_value = None
 
     result = service.login(
         email=" ADMIN@MNR.LOCAL ",
         password="correct-password",
-        refresh_token_hash=TOKEN_HASH,
-        expires_at=NOW + timedelta(days=1),
     )
 
     assert result.manager_user is manager_user
     assert result.user_session.id == SESSION_ID
     assert result.user_session.user_id == USER_ID
+    assert result.user_session.refresh_token_hash == ROTATED_TOKEN_HASH
+    assert result.user_session.expires_at == NOW + timedelta(days=30)
     assert result.access_token.token == "signed-access-token"
+    assert result.refresh_token == ROTATED_REFRESH_TOKEN
     assert manager_user.last_login_at == NOW
     user_sessions.add.assert_called_once_with(result.user_session)
     session.flush.assert_called_once_with()
@@ -210,8 +225,6 @@ def test_login_rejects_invalid_or_inactive_user(user, password, error):
         service.login(
             email="admin@mnr.local",
             password=password,
-            refresh_token_hash=TOKEN_HASH,
-            expires_at=NOW + timedelta(days=1),
         )
 
 
@@ -224,21 +237,60 @@ def test_login_rejects_invalid_or_inactive_user(user, password, error):
 )
 def test_refresh_rejects_unusable_session(user_session, error):
     service, _session, _users, user_sessions, _permissions = build_identity_service()
-    user_sessions.get_by_refresh_token_hash.return_value = user_session
+    user_sessions.get_by_refresh_token_hash_for_update.return_value = user_session
 
     with pytest.raises(error):
-        service.refresh(TOKEN_HASH)
+        service.refresh(REFRESH_TOKEN)
+
+
+def test_refresh_rotates_token_and_issues_new_access_token_atomically():
+    service, session, users, user_sessions, _permissions = build_identity_service()
+    manager_user = build_user()
+    user_session = build_session()
+    original_expiration = user_session.expires_at
+    user_sessions.get_by_refresh_token_hash_for_update.return_value = user_session
+    users.get_by_id.return_value = manager_user
+
+    result = service.refresh(REFRESH_TOKEN)
+
+    assert result.user_session is user_session
+    assert result.refresh_token == ROTATED_REFRESH_TOKEN
+    assert result.access_token.token == "signed-access-token"
+    assert user_session.refresh_token_hash == ROTATED_TOKEN_HASH
+    assert user_session.expires_at == original_expiration
+    service.refresh_token_provider.hash_refresh_token.assert_called_once_with(
+        REFRESH_TOKEN
+    )
+    user_sessions.get_by_refresh_token_hash_for_update.assert_called_once_with(
+        TOKEN_HASH
+    )
+    session.flush.assert_called_once_with()
+    session.commit.assert_not_called()
+
+
+def test_rotated_refresh_token_cannot_be_reused():
+    service, _session, _users, user_sessions, _permissions = build_identity_service()
+    user_sessions.get_by_refresh_token_hash_for_update.return_value = None
+
+    with pytest.raises(UserSessionNotFound):
+        service.refresh(REFRESH_TOKEN)
+
+    service.refresh_token_provider.issue_refresh_token.assert_not_called()
+    service.access_token_provider.issue_access_token.assert_not_called()
 
 
 def test_logout_revokes_only_the_selected_session():
     service, session, _users, user_sessions, _permissions = build_identity_service()
     user_session = build_session()
-    user_sessions.get_by_refresh_token_hash.return_value = user_session
+    user_sessions.get_by_refresh_token_hash_for_update.return_value = user_session
 
-    result = service.logout(TOKEN_HASH)
+    result = service.logout(REFRESH_TOKEN)
 
     assert result is user_session
     assert result.revoked_at == NOW
+    service.refresh_token_provider.hash_refresh_token.assert_called_once_with(
+        REFRESH_TOKEN
+    )
     session.flush.assert_called_once_with()
 
 

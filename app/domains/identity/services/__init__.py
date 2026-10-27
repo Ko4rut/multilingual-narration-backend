@@ -3,6 +3,7 @@ from app.domains.identity.services.identity import (
     IdentityService,
     LoginResult,
     ManagerUserService,
+    RefreshResult,
     RoleService,
 )
 
@@ -11,5 +12,6 @@ __all__ = [
     "IdentityService",
     "LoginResult",
     "ManagerUserService",
+    "RefreshResult",
     "RoleService",
 ]

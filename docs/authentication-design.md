@@ -17,6 +17,8 @@ Hiện tại domain Identity đã có:
   và các claim thời gian bắt buộc;
 - kiểm tra trạng thái tài khoản `ACTIVE`/`INACTIVE`;
 - tạo, kiểm tra và thu hồi phiên đăng nhập;
+- sinh Refresh Token opaque, chỉ lưu SHA-256, rotate token bằng row lock và giữ
+  thời hạn phiên tuyệt đối;
 - thu hồi toàn bộ phiên khi tài khoản bị vô hiệu hóa hoặc đổi mật khẩu;
 - truy vấn quyền theo role, function và action.
 
@@ -25,7 +27,6 @@ Các phần sau **chưa được triển khai** và được mô tả như hợp
 - HTTP endpoint cho login, refresh, logout và thông tin người dùng hiện tại;
 - cấu hình khóa ký, cookie, issuer, audience và thời hạn token;
 - dependency xác thực request và ánh xạ lỗi HTTP;
-- refresh-token rotation và xử lý tranh chấp khi refresh đồng thời.
 
 ## 2. Nguyên tắc bảo mật
 
@@ -128,8 +129,8 @@ Quy trình xử lý:
 8. Sinh Refresh Token bằng ít nhất 32 byte ngẫu nhiên, tính SHA-256 và chỉ lưu hash
    vào `user_session` cùng `expires_at`, `created_at`, `revoked_at = NULL`.
 9. Cập nhật `manager_user.last_login_at`.
-10. Sau khi transaction thành công, token provider ký JWT Access Token chứa `sub`
-    và `sid` của phiên vừa tạo.
+10. Sau khi session được flush, token provider ký JWT Access Token chứa `sub` và
+    `sid` trong cùng transaction; lỗi ký token làm transaction bị rollback.
 11. Trả Access Token và gửi Refresh Token bằng cookie bảo mật.
 
 Response body đề xuất:
@@ -207,7 +208,8 @@ Quy trình:
    để hai request refresh đồng thời không cùng thành công.
 3. Kiểm tra session tồn tại, chưa hết hạn, chưa bị thu hồi.
 4. Kiểm tra tài khoản sở hữu session vẫn là `ACTIVE`.
-5. Sinh Refresh Token mới, cập nhật hash và thời hạn theo chính sách rotation.
+5. Sinh Refresh Token mới và cập nhật hash. `expires_at` không được kéo dài, bảo
+   đảm phiên có thời hạn tuyệt đối 30 ngày tính từ lúc đăng nhập.
 6. Phát hành Access Token mới với cùng `sub`, `sid`, role hiện tại và `jti` mới.
 7. Commit transaction rồi thay cookie Refresh Token.
 
@@ -215,6 +217,10 @@ Refresh Token cũ hết hiệu lực ngay sau khi rotation thành công. Với s
 tại, token cũ dùng lại sẽ được xem là token không hợp lệ. Nếu cần phát hiện replay
 và thu hồi toàn bộ “token family”, phải bổ sung bảng lịch sử/token family bằng một
 migration riêng; không nên giả lập tính năng đó chỉ bằng `user_session` hiện tại.
+
+Repository dùng `SELECT ... FOR UPDATE` khi refresh và logout. Vì vậy hai thao tác
+đồng thời trên cùng token được tuần tự hóa; sau lần rotation đầu tiên, hash cũ
+không còn khớp và request đến sau không thể rotate lại token cũ.
 
 ## 8. Đăng xuất và thu hồi phiên
 

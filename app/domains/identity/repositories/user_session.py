@@ -22,6 +22,17 @@ class UserSessionRepository:
         )
         return self.session.scalar(statement)
 
+    def get_by_refresh_token_hash_for_update(
+        self,
+        refresh_token_hash: str,
+    ) -> UserSessionModel | None:
+        statement = (
+            select(UserSessionModel)
+            .where(UserSessionModel.refresh_token_hash == refresh_token_hash)
+            .with_for_update()
+        )
+        return self.session.scalar(statement)
+
     def list_by_user_id(self, user_id: str) -> list[UserSessionModel]:
         statement = (
             select(UserSessionModel)

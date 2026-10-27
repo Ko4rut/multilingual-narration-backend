@@ -58,3 +58,14 @@ def test_revoke_all_active_sessions_updates_loaded_entities_without_commit():
 
     assert all(user_session.revoked_at == NOW for user_session in sessions)
     session.commit.assert_not_called()
+
+
+def test_refresh_token_lookup_for_rotation_locks_session_row():
+    session = MagicMock(spec=Session)
+    repository = UserSessionRepository(session)
+
+    repository.get_by_refresh_token_hash_for_update("a" * 64)
+
+    statement = session.scalar.call_args.args[0]
+    assert "FOR UPDATE" in str(statement)
+    assert "a" * 64 in statement.compile().params.values()

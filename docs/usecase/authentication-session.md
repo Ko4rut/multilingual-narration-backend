@@ -43,7 +43,8 @@ Hiện tại `IdentityService` đã hỗ trợ kiểm tra tài khoản bằng Ar
 tra session, logout, kiểm tra permission và thu hồi session khi tài khoản bị vô
 hiệu hóa hoặc đổi mật khẩu. JWT provider đã hỗ trợ ký và kiểm tra Access Token
 bằng `RS256`. Các HTTP endpoint, cấu hình khóa production, cookie handling và
-refresh-token rotation vẫn cần được triển khai.
+token-family replay detection vẫn cần được triển khai. Refresh Token opaque,
+SHA-256 storage, rotation và khóa phiên khi refresh đồng thời đã được triển khai.
 
 Thiết kế kỹ thuật chi tiết được trình bày tại
 [authentication-design.md](../authentication-design.md).
