@@ -39,10 +39,10 @@
 
 Use case trên là hợp đồng mục tiêu của luồng xác thực hoàn chỉnh.
 
-Hiện tại `IdentityService` đã hỗ trợ kiểm tra tài khoản, tạo và kiểm tra session,
-logout, kiểm tra permission và thu hồi session khi tài khoản bị vô hiệu hóa hoặc
-đổi mật khẩu. Các HTTP endpoint, password provider production, JWT provider,
-cookie handling và refresh-token rotation vẫn cần được triển khai.
+Hiện tại `IdentityService` đã hỗ trợ kiểm tra tài khoản bằng Argon2id, tạo và kiểm
+tra session, logout, kiểm tra permission và thu hồi session khi tài khoản bị vô
+hiệu hóa hoặc đổi mật khẩu. Các HTTP endpoint, JWT provider, cookie handling và
+refresh-token rotation vẫn cần được triển khai.
 
 Thiết kế kỹ thuật chi tiết được trình bày tại
 [authentication-design.md](../authentication-design.md).

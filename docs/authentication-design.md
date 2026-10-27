@@ -12,7 +12,7 @@ thu hồi phiên, đổi mật khẩu và kiểm tra quyền.
 Hiện tại domain Identity đã có:
 
 - `ManagerUserModel`, `UserSessionModel` và các repository tương ứng;
-- kiểm tra email/mật khẩu thông qua `password_verifier` được inject;
+- Argon2id password provider dùng để hash, verify và nâng cấp password hash;
 - kiểm tra trạng thái tài khoản `ACTIVE`/`INACTIVE`;
 - tạo, kiểm tra và thu hồi phiên đăng nhập;
 - thu hồi toàn bộ phiên khi tài khoản bị vô hiệu hóa hoặc đổi mật khẩu;
@@ -21,7 +21,6 @@ Hiện tại domain Identity đã có:
 Các phần sau **chưa được triển khai** và được mô tả như hợp đồng mục tiêu:
 
 - HTTP endpoint cho login, refresh, logout và thông tin người dùng hiện tại;
-- thư viện hash/verify mật khẩu production;
 - provider ký và kiểm tra JWT;
 - cấu hình khóa ký, cookie, issuer, audience và thời hạn token;
 - dependency xác thực request và ánh xạ lỗi HTTP;
@@ -243,7 +242,8 @@ tài khoản trên mỗi request.
 
 ## 9. Hash mật khẩu
 
-Password provider production nên dùng Argon2id. Không tự cài đặt thuật toán hash.
+Password provider production dùng `pwdlib` với Argon2id. Không tự cài đặt thuật
+toán hash.
 Provider cần có hai hàm độc lập:
 
 ```python

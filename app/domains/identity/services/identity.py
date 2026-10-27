@@ -26,6 +26,7 @@ from app.domains.identity.repositories.manager_user import ManagerUserRepository
 from app.domains.identity.repositories.permission import PermissionRepository
 from app.domains.identity.repositories.role import RoleRepository
 from app.domains.identity.repositories.user_session import UserSessionRepository
+from app.domains.identity.security.password import PasswordProvider
 from app.domains.identity.utils.identity import generate_dated_identifier, utc_now
 
 
@@ -49,7 +50,7 @@ class IdentityService:
         manager_user_repository: ManagerUserRepository,
         user_session_repository: UserSessionRepository,
         permission_repository: PermissionRepository,
-        password_verifier: Callable[[str, str], bool],
+        password_provider: PasswordProvider,
         *,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str, datetime], str] = generate_dated_identifier,
@@ -58,7 +59,7 @@ class IdentityService:
         self.manager_user_repository = manager_user_repository
         self.user_session_repository = user_session_repository
         self.permission_repository = permission_repository
-        self.password_verifier = password_verifier
+        self.password_provider = password_provider
         self.clock = clock
         self.id_factory = id_factory
 
@@ -82,12 +83,15 @@ class IdentityService:
                 manager_user = self.manager_user_repository.get_by_email(
                     normalized_email
                 )
-                if manager_user is None or not self.password_verifier(
+                password_verification = self.password_provider.verify_password(
                     password,
-                    manager_user.password_hash,
-                ):
+                    manager_user.password_hash if manager_user is not None else None,
+                )
+                if manager_user is None or not password_verification.is_valid:
                     raise InvalidCredentials("Invalid email or password")
                 self._require_active_manager_user(manager_user)
+                if password_verification.updated_hash is not None:
+                    manager_user.password_hash = password_verification.updated_hash
                 if (
                     self.user_session_repository.get_by_refresh_token_hash(token_hash)
                     is not None
@@ -221,6 +225,7 @@ class ManagerUserService:
         manager_user_repository: ManagerUserRepository,
         role_repository: RoleRepository,
         user_session_repository: UserSessionRepository,
+        password_provider: PasswordProvider,
         *,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str, datetime], str] = generate_dated_identifier,
@@ -229,27 +234,34 @@ class ManagerUserService:
         self.manager_user_repository = manager_user_repository
         self.role_repository = role_repository
         self.user_session_repository = user_session_repository
+        self.password_provider = password_provider
         self.clock = clock
         self.id_factory = id_factory
 
     def get_manager_user(self, user_id: str) -> ManagerUserModel:
         return self._require_manager_user(user_id)
 
-    def list_manager_users(self, *, offset: int = 0, limit: int = 20) -> list[ManagerUserModel]:
+    def list_manager_users(
+        self, *, offset: int = 0, limit: int = 20
+    ) -> list[ManagerUserModel]:
         if offset < 0:
             raise ValueError("offset must be greater than or equal to 0")
         if not 1 <= limit <= 100:
             raise ValueError("limit must be between 1 and 100")
         return self.manager_user_repository.list(offset=offset, limit=limit)
 
-    def create_manager_user(self, *, role_id: str, email: str, password_hash: str, full_name: str, user_status: str | ManagerUserStatus = ACTIVE_USER_STATUS,
+    def create_manager_user(
+        self,
+        *,
+        role_id: str,
+        email: str,
+        password: str,
+        full_name: str,
+        user_status: str | ManagerUserStatus = ACTIVE_USER_STATUS,
     ) -> ManagerUserModel:
         normalized_email = self._normalize_email(email)
         normalized_name = self._required_text(full_name, "full_name")
-        normalized_password_hash = self._required_text(
-            password_hash,
-            "password_hash",
-        )
+        password_hash = self.password_provider.hash_password(password)
         normalized_status = self._normalize_user_status(user_status)
         created_at = self.clock()
 
@@ -261,7 +273,7 @@ class ManagerUserService:
                     id=self.id_factory("user", created_at),
                     role_id=role_id,
                     email=normalized_email,
-                    password_hash=normalized_password_hash,
+                    password_hash=password_hash,
                     full_name=normalized_name,
                     user_status=normalized_status,
                     created_at=created_at,
@@ -328,19 +340,16 @@ class ManagerUserService:
 
         return manager_user
 
-    def change_password_hash(
+    def change_password(
         self,
         user_id: str,
-        password_hash: str,
+        password: str,
     ) -> ManagerUserModel:
-        normalized_password_hash = self._required_text(
-            password_hash,
-            "password_hash",
-        )
+        password_hash = self.password_provider.hash_password(password)
         now = self.clock()
         with self.session.begin():
             manager_user = self._require_manager_user(user_id)
-            manager_user.password_hash = normalized_password_hash
+            manager_user.password_hash = password_hash
             manager_user.last_updated_at = now
             self.user_session_repository.revoke_all_active_for_user(
                 user_id,

@@ -22,6 +22,10 @@ from app.domains.identity.repositories.manager_user import ManagerUserRepository
 from app.domains.identity.repositories.permission import PermissionRepository
 from app.domains.identity.repositories.role import RoleRepository
 from app.domains.identity.repositories.user_session import UserSessionRepository
+from app.domains.identity.security.password import (
+    PasswordProvider,
+    PasswordVerification,
+)
 from app.domains.identity.services.identity import (
     IdentityService,
     ManagerUserService,
@@ -71,14 +75,21 @@ def build_identity_service():
     user_repository = MagicMock(spec=ManagerUserRepository)
     user_session_repository = MagicMock(spec=UserSessionRepository)
     permission_repository = MagicMock(spec=PermissionRepository)
+    password_provider = MagicMock(spec=PasswordProvider)
+    password_provider.verify_password.side_effect = lambda password, password_hash: (
+        PasswordVerification(
+            is_valid=(
+                password == "correct-password"
+                and password_hash == "secure-password-hash"
+            )
+        )
+    )
     service = IdentityService(
         session,
         user_repository,
         user_session_repository,
         permission_repository,
-        lambda password, password_hash: (
-            password == "correct-password" and password_hash == "secure-password-hash"
-        ),
+        password_provider,
         clock=lambda: NOW,
         id_factory=lambda _prefix, _created_at: SESSION_ID,
     )
@@ -96,11 +107,14 @@ def build_manager_user_service():
     user_repository = MagicMock(spec=ManagerUserRepository)
     role_repository = MagicMock(spec=RoleRepository)
     user_session_repository = MagicMock(spec=UserSessionRepository)
+    password_provider = MagicMock(spec=PasswordProvider)
+    password_provider.hash_password.side_effect = lambda password: f"hashed:{password}"
     service = ManagerUserService(
         session,
         user_repository,
         role_repository,
         user_session_repository,
+        password_provider,
         clock=lambda: NOW,
         id_factory=lambda _prefix, _created_at: USER_ID,
     )
@@ -213,17 +227,19 @@ def test_create_manager_user_validates_role_and_normalizes_values():
     result = service.create_manager_user(
         role_id="role-12345678",
         email="  ADMIN@MNR.LOCAL ",
-        password_hash=" secure-password-hash ",
+        password=" secure-password ",
         full_name=" Administrator ",
         user_status=" ACTIVE ",
     )
 
     assert result.id == USER_ID
     assert result.email == "admin@mnr.local"
+    assert result.password_hash == "hashed: secure-password "
     assert result.user_status is ManagerUserStatus.ACTIVE
     assert result.created_at == NOW
     users.add.assert_called_once_with(result)
     session.flush.assert_called_once_with()
+    service.password_provider.hash_password.assert_called_once_with(" secure-password ")
 
 
 def test_create_manager_user_rejects_duplicate_email_and_unknown_role():
@@ -233,7 +249,7 @@ def test_create_manager_user_rejects_duplicate_email_and_unknown_role():
         service.create_manager_user(
             role_id="role-12345678",
             email="admin@mnr.local",
-            password_hash="secure-password-hash",
+            password="secure-password",
             full_name="Administrator",
         )
 
@@ -243,7 +259,7 @@ def test_create_manager_user_rejects_duplicate_email_and_unknown_role():
         service.create_manager_user(
             role_id="role-missing",
             email="other@mnr.local",
-            password_hash="secure-password-hash",
+            password="secure-password",
             full_name="Other User",
         )
 
@@ -266,9 +282,12 @@ def test_change_password_revokes_active_sessions():
     manager_user = build_user()
     users.get_by_id.return_value = manager_user
 
-    result = service.change_password_hash(USER_ID, "new-secure-hash")
+    result = service.change_password(USER_ID, "new-secure-password")
 
-    assert result.password_hash == "new-secure-hash"
+    assert result.password_hash == "hashed:new-secure-password"
+    service.password_provider.hash_password.assert_called_once_with(
+        "new-secure-password"
+    )
     user_sessions.revoke_all_active_for_user.assert_called_once_with(USER_ID, NOW)
     session.flush.assert_called_once_with()
 
