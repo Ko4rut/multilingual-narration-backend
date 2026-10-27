@@ -12,6 +12,7 @@ from app.domains.identity.exceptions import (
     ManagerUserNotFound,
     RoleNotFound,
     UserSessionExpired,
+    UserSessionNotFound,
     UserSessionRevoked,
 )
 from app.domains.identity.models.manager_user import ManagerUserModel
@@ -22,6 +23,19 @@ from app.domains.identity.repositories.manager_user import ManagerUserRepository
 from app.domains.identity.repositories.permission import PermissionRepository
 from app.domains.identity.repositories.role import RoleRepository
 from app.domains.identity.repositories.user_session import UserSessionRepository
+from app.domains.identity.security.jwt import (
+    AccessTokenClaims,
+    AccessTokenProvider,
+    IssuedAccessToken,
+)
+from app.domains.identity.security.password import (
+    PasswordProvider,
+    PasswordVerification,
+)
+from app.domains.identity.security.refresh_token import (
+    IssuedRefreshToken,
+    RefreshTokenProvider,
+)
 from app.domains.identity.services.identity import (
     IdentityService,
     ManagerUserService,
@@ -33,6 +47,9 @@ NOW = datetime(2026, 10, 26, 8, 30, tzinfo=timezone.utc)
 USER_ID = "user-261026-12345678"
 SESSION_ID = "sess-261026-12345678"
 TOKEN_HASH = "a" * 64
+ROTATED_TOKEN_HASH = "b" * 64
+REFRESH_TOKEN = "current-refresh-token"
+ROTATED_REFRESH_TOKEN = "rotated-refresh-token"
 
 
 def build_user(
@@ -71,14 +88,34 @@ def build_identity_service():
     user_repository = MagicMock(spec=ManagerUserRepository)
     user_session_repository = MagicMock(spec=UserSessionRepository)
     permission_repository = MagicMock(spec=PermissionRepository)
+    password_provider = MagicMock(spec=PasswordProvider)
+    password_provider.verify_password.side_effect = lambda password, password_hash: (
+        PasswordVerification(
+            is_valid=(
+                password == "correct-password"
+                and password_hash == "secure-password-hash"
+            )
+        )
+    )
+    access_token_provider = MagicMock(spec=AccessTokenProvider)
+    access_token_provider.issue_access_token.return_value = IssuedAccessToken(
+        token="signed-access-token",
+        expires_at=NOW + timedelta(minutes=15),
+    )
+    refresh_token_provider = MagicMock(spec=RefreshTokenProvider)
+    refresh_token_provider.hash_refresh_token.return_value = TOKEN_HASH
+    refresh_token_provider.issue_refresh_token.return_value = IssuedRefreshToken(
+        token=ROTATED_REFRESH_TOKEN,
+        token_hash=ROTATED_TOKEN_HASH,
+    )
     service = IdentityService(
         session,
         user_repository,
         user_session_repository,
         permission_repository,
-        lambda password, password_hash: (
-            password == "correct-password" and password_hash == "secure-password-hash"
-        ),
+        password_provider,
+        access_token_provider,
+        refresh_token_provider,
         clock=lambda: NOW,
         id_factory=lambda _prefix, _created_at: SESSION_ID,
     )
@@ -96,11 +133,14 @@ def build_manager_user_service():
     user_repository = MagicMock(spec=ManagerUserRepository)
     role_repository = MagicMock(spec=RoleRepository)
     user_session_repository = MagicMock(spec=UserSessionRepository)
+    password_provider = MagicMock(spec=PasswordProvider)
+    password_provider.hash_password.side_effect = lambda password: f"hashed:{password}"
     service = ManagerUserService(
         session,
         user_repository,
         role_repository,
         user_session_repository,
+        password_provider,
         clock=lambda: NOW,
         id_factory=lambda _prefix, _created_at: USER_ID,
     )
@@ -117,22 +157,52 @@ def test_login_creates_session_and_records_last_login():
     service, session, users, user_sessions, _permissions = build_identity_service()
     manager_user = build_user()
     users.get_by_email.return_value = manager_user
-    user_sessions.get_by_refresh_token_hash.return_value = None
 
     result = service.login(
         email=" ADMIN@MNR.LOCAL ",
         password="correct-password",
-        refresh_token_hash=TOKEN_HASH,
-        expires_at=NOW + timedelta(days=1),
     )
 
     assert result.manager_user is manager_user
     assert result.user_session.id == SESSION_ID
     assert result.user_session.user_id == USER_ID
+    assert result.user_session.refresh_token_hash == ROTATED_TOKEN_HASH
+    assert result.user_session.expires_at == NOW + timedelta(days=30)
+    assert result.access_token.token == "signed-access-token"
+    assert result.refresh_token == ROTATED_REFRESH_TOKEN
     assert manager_user.last_login_at == NOW
     user_sessions.add.assert_called_once_with(result.user_session)
     session.flush.assert_called_once_with()
     session.commit.assert_not_called()
+    service.access_token_provider.issue_access_token.assert_called_once_with(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        role_id="role-12345678",
+    )
+
+
+def test_authenticate_access_token_validates_session_and_user():
+    service, _session, users, user_sessions, _permissions = build_identity_service()
+    manager_user = build_user()
+    user_session = build_session()
+    claims = AccessTokenClaims(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        role_id=manager_user.role_id,
+        token_id="jwt-token-id",
+        issued_at=NOW,
+        not_before=NOW,
+        expires_at=NOW + timedelta(minutes=15),
+    )
+    service.access_token_provider.decode_access_token.return_value = claims
+    user_sessions.get_by_id.return_value = user_session
+    users.get_by_id.return_value = manager_user
+
+    result = service.authenticate_access_token("signed-access-token")
+
+    assert result.manager_user is manager_user
+    assert result.user_session is user_session
+    assert result.claims is claims
 
 
 @pytest.mark.parametrize(
@@ -155,8 +225,6 @@ def test_login_rejects_invalid_or_inactive_user(user, password, error):
         service.login(
             email="admin@mnr.local",
             password=password,
-            refresh_token_hash=TOKEN_HASH,
-            expires_at=NOW + timedelta(days=1),
         )
 
 
@@ -169,21 +237,60 @@ def test_login_rejects_invalid_or_inactive_user(user, password, error):
 )
 def test_refresh_rejects_unusable_session(user_session, error):
     service, _session, _users, user_sessions, _permissions = build_identity_service()
-    user_sessions.get_by_refresh_token_hash.return_value = user_session
+    user_sessions.get_by_refresh_token_hash_for_update.return_value = user_session
 
     with pytest.raises(error):
-        service.refresh(TOKEN_HASH)
+        service.refresh(REFRESH_TOKEN)
+
+
+def test_refresh_rotates_token_and_issues_new_access_token_atomically():
+    service, session, users, user_sessions, _permissions = build_identity_service()
+    manager_user = build_user()
+    user_session = build_session()
+    original_expiration = user_session.expires_at
+    user_sessions.get_by_refresh_token_hash_for_update.return_value = user_session
+    users.get_by_id.return_value = manager_user
+
+    result = service.refresh(REFRESH_TOKEN)
+
+    assert result.user_session is user_session
+    assert result.refresh_token == ROTATED_REFRESH_TOKEN
+    assert result.access_token.token == "signed-access-token"
+    assert user_session.refresh_token_hash == ROTATED_TOKEN_HASH
+    assert user_session.expires_at == original_expiration
+    service.refresh_token_provider.hash_refresh_token.assert_called_once_with(
+        REFRESH_TOKEN
+    )
+    user_sessions.get_by_refresh_token_hash_for_update.assert_called_once_with(
+        TOKEN_HASH
+    )
+    session.flush.assert_called_once_with()
+    session.commit.assert_not_called()
+
+
+def test_rotated_refresh_token_cannot_be_reused():
+    service, _session, _users, user_sessions, _permissions = build_identity_service()
+    user_sessions.get_by_refresh_token_hash_for_update.return_value = None
+
+    with pytest.raises(UserSessionNotFound):
+        service.refresh(REFRESH_TOKEN)
+
+    service.refresh_token_provider.issue_refresh_token.assert_not_called()
+    service.access_token_provider.issue_access_token.assert_not_called()
 
 
 def test_logout_revokes_only_the_selected_session():
     service, session, _users, user_sessions, _permissions = build_identity_service()
     user_session = build_session()
-    user_sessions.get_by_refresh_token_hash.return_value = user_session
+    user_sessions.get_by_refresh_token_hash_for_update.return_value = user_session
 
-    result = service.logout(TOKEN_HASH)
+    result = service.logout(REFRESH_TOKEN)
 
     assert result is user_session
     assert result.revoked_at == NOW
+    service.refresh_token_provider.hash_refresh_token.assert_called_once_with(
+        REFRESH_TOKEN
+    )
     session.flush.assert_called_once_with()
 
 
@@ -213,17 +320,19 @@ def test_create_manager_user_validates_role_and_normalizes_values():
     result = service.create_manager_user(
         role_id="role-12345678",
         email="  ADMIN@MNR.LOCAL ",
-        password_hash=" secure-password-hash ",
+        password=" secure-password ",
         full_name=" Administrator ",
         user_status=" ACTIVE ",
     )
 
     assert result.id == USER_ID
     assert result.email == "admin@mnr.local"
+    assert result.password_hash == "hashed: secure-password "
     assert result.user_status is ManagerUserStatus.ACTIVE
     assert result.created_at == NOW
     users.add.assert_called_once_with(result)
     session.flush.assert_called_once_with()
+    service.password_provider.hash_password.assert_called_once_with(" secure-password ")
 
 
 def test_create_manager_user_rejects_duplicate_email_and_unknown_role():
@@ -233,7 +342,7 @@ def test_create_manager_user_rejects_duplicate_email_and_unknown_role():
         service.create_manager_user(
             role_id="role-12345678",
             email="admin@mnr.local",
-            password_hash="secure-password-hash",
+            password="secure-password",
             full_name="Administrator",
         )
 
@@ -243,7 +352,7 @@ def test_create_manager_user_rejects_duplicate_email_and_unknown_role():
         service.create_manager_user(
             role_id="role-missing",
             email="other@mnr.local",
-            password_hash="secure-password-hash",
+            password="secure-password",
             full_name="Other User",
         )
 
@@ -266,9 +375,12 @@ def test_change_password_revokes_active_sessions():
     manager_user = build_user()
     users.get_by_id.return_value = manager_user
 
-    result = service.change_password_hash(USER_ID, "new-secure-hash")
+    result = service.change_password(USER_ID, "new-secure-password")
 
-    assert result.password_hash == "new-secure-hash"
+    assert result.password_hash == "hashed:new-secure-password"
+    service.password_provider.hash_password.assert_called_once_with(
+        "new-secure-password"
+    )
     user_sessions.revoke_all_active_for_user.assert_called_once_with(USER_ID, NOW)
     session.flush.assert_called_once_with()
 
