@@ -4,6 +4,18 @@ x-backend: &backend
     context: .
   environment:
     DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-narration_app}:${POSTGRES_PASSWORD:-narration_dev_password}@postgres:5432/${POSTGRES_DB:-narration_db}
+    JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
+    JWT_PUBLIC_KEYS: "${JWT_PUBLIC_KEYS:-{}}"
+    JWT_ACTIVE_KEY_ID: ${JWT_ACTIVE_KEY_ID:-auth-key-1}
+    JWT_ISSUER: ${JWT_ISSUER:-mnr-backend}
+    JWT_AUDIENCE: ${JWT_AUDIENCE:-mnr-admin-web}
+    JWT_LEEWAY_SECONDS: ${JWT_LEEWAY_SECONDS:-30}
+    ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
+    REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-2592000}
+    AUTH_REFRESH_COOKIE_NAME: ${AUTH_REFRESH_COOKIE_NAME:-refresh_token}
+    AUTH_COOKIE_PATH: ${AUTH_COOKIE_PATH:-/api/v1/identity}
+    AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
+    AUTH_COOKIE_SAMESITE: ${AUTH_COOKIE_SAMESITE:-strict}
 
 services:
   postgres:
