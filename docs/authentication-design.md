@@ -1,5 +1,8 @@
 # Thiết kế xác thực, JWT và quản lý phiên đăng nhập
 
+Luồng nghiệp vụ tổng thể từ đăng nhập đến đăng xuất được mô tả tại
+[usecase/authentication-session.md](usecase/authentication-session.md).
+
 ## 1. Phạm vi và trạng thái triển khai
 
 Tài liệu này mô tả hợp đồng bảo mật mục tiêu cho người dùng quản trị
