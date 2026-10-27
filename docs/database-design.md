@@ -48,7 +48,7 @@ Thông tin về từng phiên đăng nhập không được lưu trực tiếp t
 | id              | varchar   | No       | Mã định danh duy nhất của người dùng trong hệ thống, định dạng: `user-ddmmyy-xxxxxxxx`.                                       |
 | role_id         | varchar   | No       | Mã vai trò được gán cho người dùng để xác định quyền truy cập của người dùng, liên kết đến bảng **Roles**.                    |
 | email           | varchar   | No       | Địa chỉ email của người dùng, được sử dụng làm thông tin nhận diện và phục vụ quá trình đăng nhập vào hệ thống, đổi mật khẩu. |
-| password_hash   | varchar   | No       | Mật khẩu của người dùng sau khi đã được mã hóa bằng thuật toán hash trước khi lưu vào cơ sở dữ liệu.                          |
+| password_hash   | varchar   | No       | Mật khẩu đã được băm một chiều bằng Argon2id trước khi lưu; không phải dữ liệu mã hóa có thể giải mã.                         |
 | full_name       | varchar   | No       | Họ và tên hoặc tên hiển thị của người dùng trong hệ thống.                                                                    |
 | user_status     | enum      | No       | Trạng thái hoạt động của tài khoản người dùng, gồm: `ACTIVE`/`INACTIVE`.                                                      |
 | created_at      | timestamp | No       | Thời điểm tài khoản người dùng được tạo trong hệ thống.                                                                       |
@@ -92,7 +92,7 @@ Lưu trữ các phiên đăng nhập của người dùng quản trị.
 | id                 | varchar   | No       | Mã định danh duy nhất của phiên đăng nhập, định dạng: `sess-ddmmyy-xxxxxxxx`.                               |
 | user_id            | varchar   | No       | Người dùng sở hữu phiên đăng nhập, liên kết đến bảng **Manager_Users**.                                     |
 | refresh_token_hash | varchar   | No       | SHA-256 của Refresh Token, được sử dụng để cấp lại Access Token mà không lưu token gốc.                     |
-| expires_at         | timestamp | No       | Thời điểm Refresh Token hiện tại hết hiệu lực.                                                              |
+| expires_at         | timestamp | No       | Thời điểm hết hạn tuyệt đối của phiên; rotate Refresh Token không kéo dài thời điểm này.                    |
 | created_at         | timestamp | No       | Thời điểm phiên đăng nhập được tạo.                                                                         |
 | revoked_at         | timestamp | Yes      | Thời điểm phiên bị thu hồi hoặc đăng xuất. NULL nghĩa là phiên chưa bị thu hồi.                             |
 

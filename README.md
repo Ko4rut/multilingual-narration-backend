@@ -92,7 +92,9 @@ Copy-Item .env.example .env
 ```
 
 The default local `DATABASE_URL` uses PostgreSQL on host port `5433`. Inside
-Docker, services connect to `postgres:5432`.
+Docker, services connect to `postgres:5432`. Docker Compose also forwards the
+Identity token/cookie settings from `.env`; without JWT key material the service
+starts, but authentication endpoints return `503`.
 
 Schema changes are applied explicitly with Alembic and are never run at API startup.
 
@@ -112,8 +114,8 @@ The seed is deterministic and idempotent. It creates a deliberately varied datas
 - 5 representative audit records
 
 Seed URLs use the reserved `example.local` domain and are metadata only. Password
-and refresh-token values are non-production hashes; authentication is not yet
-implemented.
+and refresh-token values are non-production placeholders; they are not valid
+credentials for the authentication endpoints.
 
 Run the seed again to verify idempotency:
 
@@ -164,9 +166,11 @@ app/
 
 Each domain keeps one shared router and service named after the domain, under
 `routers/<domain>.py` and `services/<domain>.py`. Its `models/`, `schemas/`, and
-`repositories/` packages contain one module per database table. Each domain also
-has an empty `utils/<domain>.py` placeholder; repository modules without an
-implemented use case remain placeholders.
+`repositories/` packages contain one module per database table. A domain may use
+`utils/<domain>.py` for small domain-specific helpers that do not belong to the
+HTTP, persistence, or security layers; repository modules without an implemented
+use case remain placeholders. The Identity layout and dependency rules are
+documented in [app/domains/identity/README.md](app/domains/identity/README.md).
 
 Implemented HTTP endpoints:
 
@@ -174,23 +178,26 @@ Implemented HTTP endpoints:
 - `GET /api/v1/pois?offset=0&limit=20`
 - `GET /api/v1/pois/{poi_id}` where `poi_id` is a string such as
   `poi-010926-951c03a1`
+- `POST /api/v1/identity/login`
+- `POST /api/v1/identity/refresh`
+- `POST /api/v1/identity/logout`
+- `GET /api/v1/identity/me`
 
-POI reads return only records with `poi_status = 'active'`. The identity domain
-implements manager-user validation, persisted session lifecycle, and RBAC lookup
-services, but no authentication or administrative HTTP endpoints are exposed yet.
-Argon2id password hashing/verification and RS256 Access Token providers are
-implemented inside the Identity domain. HTTP authentication endpoints, production
-key configuration, and cookie handling are not wired yet. Refresh tokens are
-generated as opaque credentials, stored only as SHA-256 hashes, and rotated under
-a row lock without extending the session's absolute expiration. Nearby search, QR
+POI reads return only records with `poi_status = 'active'`. The Identity endpoints
+use Argon2id passwords, RS256 Access Tokens and opaque Refresh Tokens stored in an
+`HttpOnly` cookie. Refresh Tokens are stored only as SHA-256 hashes and rotated
+under a row lock without extending the session's absolute expiration. A deployment
+must supply `JWT_PRIVATE_KEY` and `JWT_PUBLIC_KEYS`; no development signing key is
+built into the application. The API can start without those keys, but Identity
+endpoints that construct the JWT provider return `503 Service Unavailable` until
+valid keys are supplied. Administrative Identity endpoints, nearby search, QR
 activation, narration selection, TTS, listening ingestion, and offline package
 generation remain future use cases.
 
 The target login, JWT, refresh-token, password-hashing, key-management, and
 revocation contracts are documented in
 [docs/authentication-design.md](docs/authentication-design.md). The document
-clearly separates implemented Identity behavior from planned HTTP and security
-provider work.
+also identifies production key provisioning and future authentication hardening.
 
 ## Verification
 

@@ -19,14 +19,18 @@ Hiện tại domain Identity đã có:
 - tạo, kiểm tra và thu hồi phiên đăng nhập;
 - sinh Refresh Token opaque, chỉ lưu SHA-256, rotate token bằng row lock và giữ
   thời hạn phiên tuyệt đối;
+- HTTP endpoint login, refresh, logout và lấy người dùng hiện tại;
+- cấu hình issuer, audience, thời hạn token và thuộc tính cookie;
+- dependency xác thực Bearer token, đối chiếu session và ánh xạ lỗi `401`;
 - thu hồi toàn bộ phiên khi tài khoản bị vô hiệu hóa hoặc đổi mật khẩu;
-- truy vấn quyền theo role, function và action.
+- service truy vấn quyền theo role, function và action.
 
-Các phần sau **chưa được triển khai** và được mô tả như hợp đồng mục tiêu:
+Các phần sau **chưa được triển khai**:
 
-- HTTP endpoint cho login, refresh, logout và thông tin người dùng hiện tại;
-- cấu hình khóa ký, cookie, issuer, audience và thời hạn token;
-- dependency xác thực request và ánh xạ lỗi HTTP;
+- cấp private/public key thật từ secret manager của môi trường triển khai;
+- logout tất cả thiết bị và endpoint quản trị tài khoản/vai trò;
+- dependency kiểm tra permission và ánh xạ `403` cho endpoint nghiệp vụ;
+- rate limiting, MFA và phát hiện replay theo token family.
 
 ## 2. Nguyên tắc bảo mật
 
@@ -37,7 +41,8 @@ Các phần sau **chưa được triển khai** và được mô tả như hợp
    JWT.
 3. Refresh Token là chuỗi opaque sinh ngẫu nhiên bằng CSPRNG. Database chỉ lưu
    SHA-256 của token, không lưu token gốc.
-4. Tất cả endpoint xác thực chỉ hoạt động qua HTTPS trong môi trường thật.
+4. Môi trường thật phải đặt API sau HTTPS. Ứng dụng không tự chặn HTTP; đây là
+   trách nhiệm của reverse proxy/load balancer và cấu hình triển khai.
 5. Access Token có thời hạn ngắn. Refresh Token có thời hạn dài hơn nhưng gắn với
    một bản ghi `user_session` có thể bị thu hồi.
 6. Không log mật khẩu, JWT hoàn chỉnh, refresh token hoặc khóa ký.
@@ -104,10 +109,10 @@ hạn ngắn và cơ chế invalidation rõ ràng.
 
 ## 5. Quy trình đăng nhập
 
-Endpoint mục tiêu:
+Endpoint:
 
 ```http
-POST /api/v1/auth/login
+POST /api/v1/identity/login
 Content-Type: application/json
 
 {
@@ -133,7 +138,7 @@ Quy trình xử lý:
     `sid` trong cùng transaction; lỗi ký token làm transaction bị rollback.
 11. Trả Access Token và gửi Refresh Token bằng cookie bảo mật.
 
-Response body đề xuất:
+Response body thực tế:
 
 ```json
 {
@@ -145,16 +150,18 @@ Response body đề xuất:
     "role_id": "role-12345678",
     "email": "admin@mnr.local",
     "full_name": "Administrator",
-    "user_status": "ACTIVE"
+    "user_status": "ACTIVE",
+    "created_at": "2026-10-27T08:00:00Z",
+    "last_updated_at": "2026-10-27T08:00:00Z",
+    "last_login_at": "2026-10-27T08:30:00Z"
   }
 }
 ```
 
-Refresh Token không xuất hiện trong JSON nếu ứng dụng web dùng cookie. Cookie đề
-xuất:
+Refresh Token không xuất hiện trong JSON. Router đặt cookie với cấu hình mặc định:
 
 ```text
-HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth
+HttpOnly; Secure; SameSite=Strict; Path=/api/v1/identity
 ```
 
 Access Token nên giữ trong memory của ứng dụng web, không lưu vào `localStorage`.
@@ -169,8 +176,8 @@ Authorization: Bearer <access-token>
 
 Dependency xác thực thực hiện theo thứ tự:
 
-1. Chỉ chấp nhận thuật toán nằm trong allowlist cấu hình; không tin giá trị `alg`
-   từ token để tự chọn thuật toán.
+1. Chỉ chấp nhận thuật toán cố định `RS256`; không tin giá trị `alg` từ token để
+   tự chọn thuật toán.
 2. Chọn public key theo `kid` và kiểm tra chữ ký.
 3. Kiểm tra `iss`, `aud`, `type`, `exp`, `nbf`, `iat`, `sub` và `sid`.
 4. Đọc `user_session` theo `sid`; phiên phải tồn tại, chưa hết hạn và chưa bị thu
@@ -188,16 +195,17 @@ Quy ước lỗi:
 
 - `401 Unauthorized`: thiếu token, token sai/hết hạn, session sai/hết hạn/bị thu
   hồi, hoặc tài khoản không còn hoạt động;
-- `403 Forbidden`: đã xác thực nhưng không có permission cần thiết;
+- `403 Forbidden`: quy ước cho endpoint yêu cầu permission; dependency HTTP thực
+  thi permission hiện chưa được triển khai;
 - response `401` kèm `WWW-Authenticate: Bearer`;
 - không trả chi tiết chữ ký, claim hoặc bước xác thực bị lỗi cho client.
 
 ## 7. Làm mới Access Token
 
-Endpoint mục tiêu:
+Endpoint:
 
 ```http
-POST /api/v1/auth/refresh
+POST /api/v1/identity/refresh
 Cookie: refresh_token=<opaque-token>
 ```
 
@@ -226,13 +234,13 @@ không còn khớp và request đến sau không thể rotate lại token cũ.
 
 ### Đăng xuất thiết bị hiện tại
 
-`POST /api/v1/auth/logout` nhận Refresh Token từ cookie, tìm session bằng hash và
+`POST /api/v1/identity/logout` nhận Refresh Token từ cookie, tìm session bằng hash và
 đặt `revoked_at` bằng thời điểm hiện tại. Endpoint phải idempotent và luôn xóa
 cookie phía client.
 
 ### Đăng xuất tất cả thiết bị
 
-`POST /api/v1/auth/logout-all` xác thực người dùng rồi cập nhật `revoked_at` cho
+`POST /api/v1/identity/logout-all` (chưa triển khai) xác thực người dùng rồi cập nhật `revoked_at` cho
 mọi session đang hoạt động của `user_id`.
 
 ### Thu hồi tự động
@@ -261,8 +269,8 @@ def verify_password(plain_password: str, encoded_hash: str) -> bool: ...
 Quy tắc:
 
 - salt được thư viện sinh ngẫu nhiên cho từng mật khẩu;
-- tham số memory/time/parallelism lấy từ cấu hình bảo mật và được benchmark trên
-  hạ tầng triển khai;
+- provider hiện dùng tham số Argon2id mặc định của `pwdlib`; trước production cần
+  benchmark trên hạ tầng đích và bổ sung cấu hình nếu cần thay đổi chính sách;
 - giới hạn hợp lý độ dài password trước khi hash để tránh yêu cầu tài nguyên bất
   thường;
 - khi thông số hash cũ không còn đạt chính sách, rehash sau lần đăng nhập thành
@@ -291,31 +299,38 @@ JWT ký chỉ bảo đảm tính toàn vẹn và nguồn phát hành. Payload kh
 nhu cầu bảo mật payload, phải đánh giá JWE riêng; với các claim định danh tối thiểu
 trong tài liệu này, JWE không cần thiết.
 
-## 11. Cấu hình dự kiến
+## 11. Cấu hình
 
-Các setting sau nên được thêm vào `app/core/config.py` khi triển khai provider:
+Các setting sau được đọc bởi `app/core/config.py`:
 
 ```text
-JWT_ALGORITHM=RS256
 JWT_ISSUER=mnr-backend
 JWT_AUDIENCE=mnr-admin-web
 JWT_ACTIVE_KEY_ID=auth-key-2026-01
 JWT_PRIVATE_KEY=<secret, không đặt trong .env.example>
-JWT_PUBLIC_KEYS=<key set hoặc nguồn secret manager>
+JWT_PUBLIC_KEYS=<JSON object kid -> public key, lấy từ secret manager>
+JWT_LEEWAY_SECONDS=30
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_SECONDS=2592000
+AUTH_REFRESH_COOKIE_NAME=refresh_token
+AUTH_COOKIE_PATH=/api/v1/identity
+AUTH_COOKIE_DOMAIN=<để trống hoặc domain của ứng dụng quản trị>
 AUTH_COOKIE_SECURE=true
 AUTH_COOKIE_SAMESITE=strict
 ```
 
-Ứng dụng phải fail fast khi chạy production mà thiếu khóa hoặc dùng cấu hình yếu.
-Không log `SecretStr` hay full connection/key material.
+Ứng dụng không có khóa mẫu. Nếu thiếu key set hoặc `kid` đang hoạt động không tồn
+tại trong key set, dependency tạo JWT provider trả `503 Service Unavailable`.
+Hạ tầng production phải kiểm tra secret trước khi đưa instance vào phục vụ. Không
+log `SecretStr` hay full connection/key material.
 
 ## 12. Transaction và trách nhiệm từng tầng
 
 | Tầng              | Trách nhiệm                                                                     |
 | ----------------- | ------------------------------------------------------------------------------- |
-| Router            | Parse schema, cookie/header, dependency wiring, response model và HTTP status   |
+| Router endpoint   | Parse schema, gọi service, response model và HTTP status                        |
+| Router dependency | Tạo provider/repository/service và xác thực Bearer token                        |
+| HTTP helper       | Đặt/xóa cookie, tính `expires_in` và chuẩn hóa lỗi xác thực                     |
 | Service           | Quy tắc đăng nhập, transaction, tạo/thu hồi session và điều phối token provider |
 | Repository        | Truy vấn SQLAlchemy bằng Session được inject; không commit                      |
 | Password provider | Hash, verify và kiểm tra nhu cầu rehash                                         |
@@ -344,32 +359,44 @@ không log password, JWT, Refresh Token, hash của credential hoặc private ke
 Nên rate-limit login, refresh và reset-password theo IP và định danh tài khoản;
 cảnh báo khi có nhiều lần thất bại, refresh token reuse hoặc hoạt động bất thường.
 
-## 14. API mục tiêu
+## 14. API
 
-| Method | Path                      | Xác thực       | Mục đích                                     |
-| ------ | ------------------------- | -------------- | -------------------------------------------- |
-| `POST` | `/api/v1/auth/login`      | Không          | Đăng nhập, tạo session và cấp token          |
-| `POST` | `/api/v1/auth/refresh`    | Refresh cookie | Rotate refresh token và cấp Access Token mới |
-| `POST` | `/api/v1/auth/logout`     | Refresh cookie | Thu hồi session hiện tại                     |
-| `POST` | `/api/v1/auth/logout-all` | Bearer token   | Thu hồi mọi session của người dùng           |
-| `GET`  | `/api/v1/auth/me`         | Bearer token   | Trả thông tin tài khoản và role hiện tại     |
+| Method | Path                          | Xác thực       | Mục đích                                     |
+| ------ | ----------------------------- | -------------- | -------------------------------------------- |
+| `POST` | `/api/v1/identity/login`      | Không          | Đăng nhập, tạo session và cấp token          |
+| `POST` | `/api/v1/identity/refresh`    | Refresh cookie | Rotate refresh token và cấp Access Token mới |
+| `POST` | `/api/v1/identity/logout`     | Refresh cookie | Thu hồi session hiện tại                     |
+| `GET`  | `/api/v1/identity/me`         | Bearer token   | Trả tài khoản và `role_id` hiện tại          |
+| `POST` | `/api/v1/identity/logout-all` | Bearer token   | Kế hoạch: thu hồi mọi session của người dùng |
 
 Các endpoint quản trị user/role phải yêu cầu permission phù hợp; không được xem
 việc có JWT hợp lệ là đồng nghĩa với có quyền quản trị.
 
-## 15. Tiêu chí kiểm thử khi triển khai
+## 15. Phạm vi kiểm thử
 
-- login đúng tạo đúng một session và không trả password hash/refresh-token hash;
-- email không tồn tại và password sai trả cùng một lỗi;
-- tài khoản `INACTIVE` không thể login hoặc refresh;
-- JWT sai chữ ký, sai issuer/audience/type, hết hạn hoặc chưa có hiệu lực bị từ chối;
-- không chấp nhận thuật toán ngoài allowlist;
-- refresh token chỉ được lưu dưới dạng SHA-256;
-- refresh rotation vô hiệu hóa token cũ và xử lý đúng hai request đồng thời;
-- logout chỉ thu hồi session hiện tại; logout-all thu hồi mọi session;
+Kiểm thử đơn vị hiện tại bao phủ:
+
+- Argon2id hash/verify/rehash và giới hạn độ dài mật khẩu;
+- cấp/đọc JWT RS256, token hết hạn, sai audience và `kid` không tồn tại;
+- login tạo session, cập nhật `last_login_at`, từ chối credential sai và tài
+  khoản `INACTIVE`;
+- Refresh Token được sinh đủ entropy, chỉ lưu SHA-256, được rotate và token cũ
+  không thể dùng lại;
+- repository khóa bản ghi bằng `SELECT ... FOR UPDATE` khi rotate;
+- session hết hạn/bị thu hồi không thể refresh;
+- logout chỉ thu hồi session hiện tại và xóa cookie;
 - đổi mật khẩu hoặc vô hiệu hóa tài khoản thu hồi mọi session;
-- session hết hạn/bị thu hồi không thể dùng Access Token hoặc refresh;
-- `401` và `403` được phân biệt đúng;
-- permission được đọc theo dữ liệu hiện tại, không chỉ theo claim cũ trong JWT;
-- cookie có `HttpOnly`, `Secure`, `SameSite` và `Path` đúng trong production;
-- không có credential hoặc khóa bí mật trong log, response và audit snapshot.
+- truy vấn permission theo role, function và action hiện tại;
+- cookie có `HttpOnly`, `Secure`, `SameSite` và `Path` đúng;
+- response người dùng không chứa `password_hash`.
+
+Cần bổ sung hoặc kiểm thử tích hợp trước production:
+
+- luồng HTTP thật với PostgreSQL và bộ khóa lấy từ môi trường triển khai;
+- hai request refresh đồng thời trên PostgreSQL thực;
+- các trường hợp JWT sai issuer/type/thuật toán, `iat` hoặc `nbf` ở tương lai;
+- logout-all thu hồi mọi session;
+- dependency permission trả `403` cho người đã xác thực nhưng không đủ quyền;
+- cấu hình khóa từ secret manager và chính sách Argon2id đã benchmark;
+- không có credential hoặc khóa bí mật trong log/audit;
+- token-family replay detection, rate limiting và MFA.
