@@ -274,13 +274,22 @@ Ví dụ một số hành động:
 | **PK**     | `id`          | Khóa chính, định danh duy nhất hành động. |
 | **UNIQUE** | `name`        | Mỗi tên hành động chỉ xuất hiện một lần.  |
 
-## 2.2 GROUP 2: POINT OF INTEREST MANAGEMENT
+## 2.2 GROUP 2: POINT OF INTEREST AND MULTILINGUAL NARRATION MANAGEMENT
 
-Nhóm chịu trách nhiệm quản lý các điểm tham quan (Point of Interest - POI) trong hệ thống.
+Nhóm chịu trách nhiệm quản lý các điểm tham quan (Point of Interest - POI), nội dung thuyết minh đa ngôn ngữ và tệp audio tương ứng trong hệ thống.
 
 Mỗi POI chứa các dữ liệu cần thiết để ứng dụng nhận diện vị trí, hiển thị thông tin và kích hoạt thuyết minh tự động, bao gồm tọa độ, bán kính kích hoạt, mã QR, hình ảnh, trạng thái và khu vực.
 
 Một POI có thể thuộc nhiều danh mục khác nhau thông qua bảng ánh xạ Poi_Category_Mappings.
+
+Mỗi POI cũng có thể có nhiều nội dung theo các ngôn ngữ khác nhau. Mỗi nội dung được quản lý theo phiên bản để một phiên bản mới có thể đi qua quy trình soạn thảo - phê duyệt mà không làm mất phiên bản đã được phát hành trước đó.
+
+Các bảng thuộc nhóm:
+
+- `Point_Of_Interests`
+- `Poi_Category_Mapping`
+- `Poi_Contents`
+- `Content_Audios`
 
 ### 2.2.1 Point_Of_Interests (Điểm tham quan)
 
@@ -422,18 +431,7 @@ Một POI có thể thuộc nhiều danh mục và một danh mục có thể ch
 | **UNIQUE** | (`poi_id`, `poi_category_id`) | Mỗi cặp POI - danh mục chỉ xuất hiện một lần. |
 | **INDEX**  | `poi_category_id`             | Tăng tốc truy vấn POI theo danh mục.          |
 
-## 2.3 GROUP 3: MULTILINGUAL NARRATION CONTENT
-
-Nhóm chịu trách nhiệm quản lý nội dung thuyết minh đa ngôn ngữ và tệp audio tương ứng của các POI.
-
-Mỗi POI có thể có nhiều nội dung theo các ngôn ngữ khác nhau. Mỗi nội dung được quản lý theo phiên bản để một phiên bản mới có thể đi qua quy trình soạn thảo - phê duyệt mà không làm mất phiên bản đã được phát hành trước đó.
-
-Các bảng thuộc nhóm:
-
-- `Poi_Contents`
-- `Content_Audios`
-
-### 2.3.1 Poi_Contents (Nội dung thuyết minh của POI)
+### 2.2.3 Poi_Contents (Nội dung thuyết minh của POI)
 
 **_[1] Ý nghĩa bảng (Description)_**
 
@@ -540,7 +538,7 @@ Hệ thống sử dụng tiếng Anh (en) làm ngôn ngữ thuyết minh mặc �
     - Cơ chế Fallback được áp dụng cho  chế độ Online.
 ```
 
-### 2.3.2 Content_Audios (Âm thanh nội dung)
+### 2.2.4 Content_Audios (Âm thanh nội dung)
 
 **_[1] Ý nghĩa bảng (Description)_**
 
@@ -613,13 +611,13 @@ Asset cũ có thể được garbage-collect sau khi không còn manifest/packag
 
 ```
 
-## 2.4 GROUP 4: OFFLINE CONTENT DISTRIBUTION
+## 2.3 GROUP 3: OFFLINE CONTENT DISTRIBUTION
 
 Nhóm chịu trách nhiệm quản lý các gói dữ liệu được chuẩn bị để ứng dụng mobile có thể tải xuống và sử dụng khi không có kết nối Internet.
 
 Trong thiết kế này, Offline Package được xem là một package logic + manifest, không nhất thiết là một file ZIP chứa lặp lại toàn bộ audio và hình ảnh. Các asset như audio/hình ảnh vẫn có URL và checksum riêng, nhờ đó ứng dụng có thể tái sử dụng asset đã tải từ một package khác thay vì tải lại.
 
-### 2.4.1 Offline_Packages (Gói dữ liệu ngoại tuyến)
+### 2.3.1 Offline_Packages (Gói dữ liệu ngoại tuyến)
 
 **_[1] Ý nghĩa bảng (Description)_**
 
@@ -875,7 +873,7 @@ Nhờ tách 3 tầng như vậy:
     - Dễ dàng cache, CDN, và kiểm tra toàn vẹn.
 ```
 
-### 2.4.2 Offline_Package_Items
+### 2.3.2 Offline_Package_Items
 
 **_[1] Ý nghĩa bảng (Description)_**
 
@@ -960,7 +958,7 @@ Việc loại item khỏi package không đồng nghĩa với việc xóa Poi_Co
 Physical asset chỉ được xóa khi không còn package hoặc manifest còn hiệu lực nào tham chiếu đến asset đó.
 ```
 
-## 2.5 GROUP 5: VISITOR ACTIVITY AND ANALYTICS
+## 2.4 GROUP 4: VISITOR ACTIVITY AND ANALYTICS
 
 Nhóm chịu trách nhiệm ghi nhận dữ liệu tương tác của khách du lịch với nội dung thuyết minh.
 
@@ -972,7 +970,7 @@ Các bảng thuộc nhóm:
 
 - `Listening_Histories`: Lịch sử nghe
 
-### 2.5.1 Listening_Histories (Lịch sử nghe)
+### 2.4.1 Listening_Histories (Lịch sử nghe)
 
 **_[1] Ý nghĩa bảng (Description)_**
 
@@ -1033,7 +1031,7 @@ Các type hiện tại gồm:
 
 - Khi thiết bị offline, event được lưu trong local SQLite và đồng bộ lên server sau khi có mạng.
 
-## 2.6 GROUP 6: MASTER AND REFERENCE DATA
+## 2.5 GROUP 5: MASTER AND REFERENCE DATA
 
 Nhóm lưu trữ các dữ liệu danh mục dùng chung trong toàn hệ thống.
 
@@ -1045,7 +1043,7 @@ Các bảng thuộc nhóm:
 - `Languages`
 - `Poi_Categories`
 
-### 2.6.1 Poi_Categories (Danh mục POI)
+### 2.5.1 Poi_Categories (Danh mục POI)
 
 **_[1] Ý nghĩa bảng (Description)_**
 
@@ -1070,7 +1068,7 @@ Việc phân loại giúp hệ thống tổ chức, tìm kiếm, lọc dữ li�
 | **UNIQUE** | `category_code` | Mỗi mã danh mục chỉ xuất hiện một lần.                              |
 | **CHECK**  | `category_code` | Chỉ chứa chữ thường, số và dấu gạch ngang (dùng cho `package_key`). |
 
-### 2.6.2 Regions (Khu vực)
+### 2.5.2 Regions (Khu vực)
 
 **_[1] Ý nghĩa bảng (Description)_**
 
@@ -1095,7 +1093,7 @@ Khu vực có thể đại diện cho một khu du lịch, khuôn viên, bảo t
 | **UNIQUE** | `region_code` | Mỗi mã khu vực chỉ xuất hiện một lần.                               |
 | **CHECK**  | `region_code` | Chỉ chứa chữ thường, số và dấu gạch ngang (dùng cho `package_key`). |
 
-### 2.6.3 Languages (Ngôn ngữ)
+### 2.5.3 Languages (Ngôn ngữ)
 
 **_[1] Ý nghĩa bảng (Description)_**
 
@@ -1144,7 +1142,7 @@ Khi chuyển `UNSUPPORTED` sang `SUPPORTED`:
 
 - Cho phép tạo nội dung mới trở lại.
 
-## 2.7 GROUP 7: AUDIT AND TRACEABILITY
+## 2.6 GROUP 6: AUDIT AND TRACEABILITY
 
 Nhóm chịu trách nhiệm ghi nhận các hành động thay đổi dữ liệu do người dùng quản trị thực hiện.
 
@@ -1154,7 +1152,7 @@ Các bảng thuộc nhóm:
 
 - `Audit_Log`
 
-### 2.7.1 Audit_Log (Nhật ký hệ thống)
+### 2.6.1 Audit_Log (Nhật ký hệ thống)
 
 **_[1] Ý nghĩa bảng (Description)_**
 
