@@ -33,6 +33,8 @@ Nhóm chịu trách nhiệm quản lý thông tin người dùng quản trị, p
 
 Cơ chế phân quyền được xây dựng theo mô hình Role-Based Access Control (RBAC). Mỗi người dùng được gán một vai trò; mỗi vai trò có thể sở hữu nhiều quyền; mỗi quyền được xác định dựa trên sự kết hợp giữa một **chức năng** và một **hành động** cụ thể.
 
+Các bảng trong nhóm được giữ làm database contract. Backend băm/xác minh mật khẩu bằng Argon2id, ký Access Token RS256, lưu `user_session`, xoay Refresh Token qua cookie HttpOnly và thu hồi session khi logout. JWT chứa `sid` và được đối chiếu lại với session cho mỗi request xác thực.
+
 ### 2.1.1 Manager_Users (Người dùng quản trị)
 
 **_[1] Ý nghĩa bảng (Description)_**
@@ -48,7 +50,7 @@ Thông tin về từng phiên đăng nhập không được lưu trực tiếp t
 | id              | varchar   | No       | Mã định danh duy nhất của người dùng trong hệ thống, định dạng: `user-ddmmyy-xxxxxxxx`.                                       |
 | role_id         | varchar   | No       | Mã vai trò được gán cho người dùng để xác định quyền truy cập của người dùng, liên kết đến bảng **Roles**.                    |
 | email           | varchar   | No       | Địa chỉ email của người dùng, được sử dụng làm thông tin nhận diện và phục vụ quá trình đăng nhập vào hệ thống, đổi mật khẩu. |
-| password_hash   | varchar   | No       | Mật khẩu đã được băm một chiều bằng Argon2id trước khi lưu; không phải dữ liệu mã hóa có thể giải mã.                         |
+| password_hash   | varchar   | No       | Mật khẩu được băm một chiều bằng Argon2id trước khi lưu; mật khẩu gốc không được lưu trong cơ sở dữ liệu.                        |
 | full_name       | varchar   | No       | Họ và tên hoặc tên hiển thị của người dùng trong hệ thống.                                                                    |
 | user_status     | enum      | No       | Trạng thái hoạt động của tài khoản người dùng, gồm: `ACTIVE`/`INACTIVE`.                                                      |
 | created_at      | timestamp | No       | Thời điểm tài khoản người dùng được tạo trong hệ thống.                                                                       |
@@ -79,6 +81,10 @@ Các trạng thái hiện tại gồm:
 Email được chuẩn hóa về chữ thường và kiểm tra định dạng ở tầng ứng dụng trước
 khi lưu; database bảo đảm tính duy nhất bằng ràng buộc `UNIQUE`.
 
+API quản trị không hard-delete tài khoản. Thao tác ngừng sử dụng chuyển
+`user_status` sang `INACTIVE` và thu hồi các session đang hoạt động để giữ nguyên
+audit history cùng các khóa ngoại đã tham chiếu tài khoản.
+
 ### 2.1.2 User_Sessions (Phiên người dùng)
 
 **_[1] Ý nghĩa bảng (Description)_**
@@ -92,7 +98,7 @@ Lưu trữ các phiên đăng nhập của người dùng quản trị.
 | id                 | varchar   | No       | Mã định danh duy nhất của phiên đăng nhập, định dạng: `sess-ddmmyy-xxxxxxxx`.                               |
 | user_id            | varchar   | No       | Người dùng sở hữu phiên đăng nhập, liên kết đến bảng **Manager_Users**.                                     |
 | refresh_token_hash | varchar   | No       | SHA-256 của Refresh Token, được sử dụng để cấp lại Access Token mà không lưu token gốc.                     |
-| expires_at         | timestamp | No       | Thời điểm hết hạn tuyệt đối của phiên; rotate Refresh Token không kéo dài thời điểm này.                    |
+| expires_at         | timestamp | No       | Thời điểm hết hạn tuyệt đối của phiên.                                                                      |
 | created_at         | timestamp | No       | Thời điểm phiên đăng nhập được tạo.                                                                         |
 | revoked_at         | timestamp | Yes      | Thời điểm phiên bị thu hồi hoặc đăng xuất. NULL nghĩa là phiên chưa bị thu hồi.                             |
 
@@ -114,8 +120,9 @@ Phiên không được cấp Access Token mới nếu đã hết hạn (`expires
 
 Khi người dùng đăng xuất khỏi một thiết bị, chỉ phiên tương ứng cần được cập nhật `revoked_at`.
 
-Quy trình cấp Access Token, quản lý JWT/Refresh Token, hash mật khẩu và thu hồi
-phiên được mô tả tại [authentication-design.md](authentication-design.md).
+Luồng hiện tại cấp Access Token JWT RS256 có claim `sid`, xoay Refresh Token trong
+cookie HttpOnly và luôn đối chiếu session trong database trước khi chấp nhận Bearer
+token. Refresh Token gốc không được lưu hoặc trả trong JSON response.
 
 ### 2.1.3 Roles (Vai trò)
 
@@ -175,6 +182,10 @@ Bảng xác định mỗi vai trò được phép sở hữu những quyền nà
 | **FK**    | `role_id`                    | Tham chiếu đến `Roles(id)`.                                     |
 | **FK**    | `permission_id`              | Tham chiếu đến `Permissions(id)`.                               |
 | **INDEX** | `role_id`                    | Tăng tốc truy vấn danh sách quyền của một vai trò.              |
+
+API thay tập permission của role bằng một transaction: kiểm tra toàn bộ
+`permission_id`, xóa các mapping không còn được yêu cầu và thêm mapping mới. Nếu
+một permission không tồn tại thì toàn bộ thay đổi được rollback.
 
 ### 2.1.5 Permissions (Quyền truy cập)
 

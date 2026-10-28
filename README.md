@@ -92,9 +92,9 @@ Copy-Item .env.example .env
 ```
 
 The default local `DATABASE_URL` uses PostgreSQL on host port `5433`. Inside
-Docker, services connect to `postgres:5432`. Docker Compose also forwards the
-Identity token/cookie settings from `.env`; without JWT key material the service
-starts, but authentication endpoints return `503`.
+Docker, services connect to `postgres:5432`. Identity login additionally requires
+`JWT_PRIVATE_KEY` and `JWT_PUBLIC_KEYS`; real keys must come from the deployment
+secret store and must not be committed to `.env` or source control.
 
 Schema changes are applied explicitly with Alembic and are never run at API startup.
 
@@ -114,8 +114,8 @@ The seed is deterministic and idempotent. It creates a deliberately varied datas
 - 5 representative audit records
 
 Seed URLs use the reserved `example.local` domain and are metadata only. Password
-and refresh-token values are non-production placeholders; they are not valid
-credentials for the authentication endpoints.
+and refresh-token hash values are non-production placeholders, so the sample users
+cannot be used as real login credentials without first assigning Argon2id hashes.
 
 Run the seed again to verify idempotency:
 
@@ -174,29 +174,33 @@ documented in [app/domains/identity/README.md](app/domains/identity/README.md).
 Implemented HTTP endpoints:
 
 - `GET /health`
+- `POST /api/v1/identity/login`
+- `POST /api/v1/identity/refresh` using the HttpOnly Refresh Token cookie
+- `POST /api/v1/identity/logout`
+- `GET /api/v1/identity/me` with a Bearer Access Token
+- `GET|POST /api/v1/identity/manager-users`
+- `GET|PATCH /api/v1/identity/manager-users/{user_id}`
+- `PUT /api/v1/identity/manager-users/{user_id}/password`
+- `GET|POST /api/v1/identity/roles`
+- `GET|PATCH /api/v1/identity/roles/{role_id}`
+- `GET|PUT /api/v1/identity/roles/{role_id}/permissions`
+- `GET /api/v1/identity/permissions`
 - `GET /api/v1/pois?offset=0&limit=20`
 - `GET /api/v1/pois/{poi_id}` where `poi_id` is a string such as
   `poi-010926-951c03a1`
-- `POST /api/v1/identity/login`
-- `POST /api/v1/identity/refresh`
-- `POST /api/v1/identity/logout`
-- `GET /api/v1/identity/me`
 
-POI reads return only records with `poi_status = 'active'`. The Identity endpoints
-use Argon2id passwords, RS256 Access Tokens and opaque Refresh Tokens stored in an
-`HttpOnly` cookie. Refresh Tokens are stored only as SHA-256 hashes and rotated
-under a row lock without extending the session's absolute expiration. A deployment
-must supply `JWT_PRIVATE_KEY` and `JWT_PUBLIC_KEYS`; no development signing key is
-built into the application. The API can start without those keys, but Identity
-endpoints that construct the JWT provider return `503 Service Unavailable` until
-valid keys are supplied. Administrative Identity endpoints, nearby search, QR
-activation, narration selection, TTS, listening ingestion, and offline package
-generation remain future use cases.
-
-The target login, JWT, refresh-token, password-hashing, key-management, and
-revocation contracts are documented in
-[docs/authentication-design.md](docs/authentication-design.md). The document
-also identifies production key provisioning and future authentication hardening.
+POI reads return only records with `poi_status = 'active'`. Identity models,
+repositories and management services exist. Passwords are hashed and verified
+with Argon2id inside the Identity service, and RS256 Access Tokens can be signed
+and verified with keys injected from configuration. Login, refresh, logout and
+current-user endpoints are available. Login persists a session, stores only the
+SHA-256 Refresh Token hash, returns the opaque token in a secure HttpOnly cookie,
+and binds the Access Token to the session through its `sid` claim. Refresh rotates that cookie;
+logout revokes the session so its Access Tokens stop working immediately.
+Manager-user and role routes require the matching `User Management` permission
+(`read`, `create`, or `update`). Accounts are deactivated through `user_status`
+instead of hard-deleted. Nearby search, QR activation, narration selection, TTS,
+listening ingestion, and offline package generation remain future use cases.
 
 ## Verification
 
