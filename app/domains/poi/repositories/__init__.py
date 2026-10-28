@@ -1,1 +1,1 @@
-"""POI repository modules."""
+"""POI and narration repository modules."""

@@ -155,8 +155,7 @@ app/
   domains/
     identity/             Manager users, sessions, roles and permissions
     catalog/              POI categories, regions and languages
-    poi/                  POIs and category mappings
-    narration/            Multilingual content and audio
+    poi/                  POIs, category mappings, multilingual content and audio
     listening/            Listening history
     offline/              Offline packages and package items
     audit/                Administrative audit log

@@ -17,9 +17,8 @@ working-tree diff to distinguish existing edits. Consult README for runtime setu
 
 | Domain | Ownership |
 | --- | --- |
-| `poi` | PointOfInterest, PoiCategory, PoiCategoryMapping; map/QR/POI management |
-| `narration` | PoiContent, ContentAudio; language selection, publishing, TTS |
-| `catalog` | Region, Language |
+| `poi` | PointOfInterest, PoiCategoryMapping, PoiContent, ContentAudio; map/QR, multilingual narration, publishing and TTS |
+| `catalog` | Region, Language, PoiCategory |
 | `identity` | ManagementUser, Role, RolePermission, Permission, Action, ManagementFunction |
 | `listening` | ListeningHistory; playback events and analytics |
 | `offline` | OfflinePackage; optional package use case |

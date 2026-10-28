@@ -13,9 +13,13 @@ from app.domains.identity.models import (
     UserSession,
 )
 from app.domains.listening.models import ListeningHistory
-from app.domains.narration.models import ContentAudio, PoiContent
 from app.domains.offline.models import OfflinePackage, OfflinePackageItem
-from app.domains.poi.models import PoiCategoryMapping, PointOfInterest
+from app.domains.poi.models import (
+    ContentAudio,
+    PoiCategoryMapping,
+    PoiContent,
+    PointOfInterest,
+)
 
 __all__ = [
     "Base",
