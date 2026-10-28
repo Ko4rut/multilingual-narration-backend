@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "0004_enforce_identity_constraints"
+revision = "0004_identity_constraints"
 down_revision = "0003_update_identity_models"
 branch_labels = None
 depends_on = None

@@ -1,17 +1,31 @@
 from app.domains.identity.services.identity import (
+    AccessTokenClaims,
+    Argon2PasswordHasher,
     AuthenticatedIdentity,
+    CredentialLoginResult,
     IdentityService,
-    LoginResult,
+    InvalidAccessToken,
+    IssuedRefreshToken,
+    IssuedAccessToken,
+    JwtAccessTokenSigner,
     ManagerUserService,
     RefreshResult,
     RoleService,
+    SecureRefreshTokenManager,
 )
 
 __all__ = [
+    "AccessTokenClaims",
+    "Argon2PasswordHasher",
     "AuthenticatedIdentity",
+    "CredentialLoginResult",
     "IdentityService",
-    "LoginResult",
+    "InvalidAccessToken",
+    "IssuedRefreshToken",
+    "IssuedAccessToken",
+    "JwtAccessTokenSigner",
     "ManagerUserService",
     "RefreshResult",
     "RoleService",
+    "SecureRefreshTokenManager",
 ]

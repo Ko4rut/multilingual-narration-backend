@@ -19,7 +19,8 @@ class Settings(BaseSettings):
         "narration_dev_password@localhost:5433/narration_db"
     )
 
-    # Khóa JWT không có giá trị mặc định để tránh vô tình chạy với khóa mẫu.
+    # Không cung cấp khóa mặc định. Môi trường chạy API phải inject private key
+    # và tập public key; nếu thiếu, endpoint đăng nhập sẽ trả HTTP 503.
     jwt_private_key: SecretStr | None = None
     jwt_public_keys: dict[str, str] = Field(default_factory=dict)
     jwt_active_key_id: str = "auth-key-1"

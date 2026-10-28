@@ -1,184 +1,87 @@
 # Identity domain
 
-Domain `identity` quản lý tài khoản quản trị, vai trò, quyền, đăng nhập và vòng
-đời phiên. Domain này sở hữu các entity:
+Domain `identity` quản lý dữ liệu người dùng quản trị, vai trò, quyền và các bản
+ghi phiên được mô tả trong database design. Luồng xác thực hiện tại lưu phiên,
+dùng JWT RS256 cho Access Token và cookie HttpOnly cho Refresh Token.
 
-- `manager_user`;
-- `user_session`;
-- `role`;
-- `role_permission`;
-- `permission`;
-- `management_function`;
-- `action`.
-
-## Cấu trúc thư mục
+## Cấu trúc
 
 ```text
 identity/
-├── models/                 SQLAlchemy ORM, mỗi bảng một file
-│   └── manager_user.py     ManagerUserModel và ManagerUserStatus
-├── schemas/                Pydantic request/response DTO
-│   └── authentication.py   DTO cho login và Access Token
-├── repositories/           Truy vấn database bằng Session được inject
-├── services/
-│   └── identity.py         Nghiệp vụ, transaction và điều phối repository/provider
-├── security/
-│   ├── password.py         Hash và xác minh mật khẩu bằng Argon2id
-│   ├── jwt.py              Ký và xác minh Access Token RS256
-│   └── refresh_token.py    Sinh Refresh Token opaque và SHA-256 hash
-├── routers/
-│   ├── identity.py         Khai báo các HTTP endpoint
-│   ├── dependencies.py     FastAPI dependency và dependency injection
-│   └── http.py             Cookie, lỗi xác thực và quy ước HTTP dùng chung
-├── utils/
-│   └── identity.py         Đồng hồ UTC và sinh ID dạng prefix-ddmmyy-xxxxxxxx
-└── exceptions/
-    ├── authentication.py   Lỗi credential và Access Token
-    ├── manager_user.py     Lỗi tài khoản quản trị
-    ├── role.py             Lỗi vai trò
-    └── user_session.py     Lỗi phiên và Refresh Token
+├── models/          ORM cho user, session, role và permission
+├── repositories/    Truy vấn SQLAlchemy bằng Session được inject
+├── schemas/         DTO công khai, không trả password_hash/token hash
+├── services/        Argon2id, JWT RS256, quản trị user và RBAC
+├── routers/         Login/refresh/logout/me, dependency và quy ước cookie
+├── exceptions/      Lỗi nghiệp vụ của user, session và role
+└── utils/           Hàm thời gian UTC và sinh business ID
 ```
 
-## Trách nhiệm từng tầng
+## Trách nhiệm hiện tại
 
-### `models/`
+`ManagerUserService` nhận mật khẩu plaintext khi tạo hoặc đổi tài khoản, băm bằng
+Argon2id rồi chỉ gán hash vào model trước khi lưu. Plaintext không được chuyển
+cho repository hoặc ghi xuống database.
 
-Chỉ mô tả dữ liệu được lưu bằng SQLAlchemy: cột, khóa ngoại, enum và constraint.
-Model không xác thực HTTP, không mở transaction và không chứa logic cấp token.
-Enum chỉ phục vụ một entity được đặt cạnh entity đó; vì vậy
-`ManagerUserStatus` nằm trong `models/manager_user.py` thay vì một file enum chung.
+`IdentityService.authenticate_credentials()` chuẩn hóa email, lấy tài khoản và
+dùng Argon2id `verify` để đối chiếu mật khẩu nhập vào với hash đã lưu. Khi login,
+service tạo `user_session`, cập nhật `last_login_at`, chỉ lưu SHA-256 của Refresh
+Token và ký Access Token chứa user ID, session ID (`sid`), role ID cùng các claim
+thời gian bắt buộc trong một transaction.
 
-### `schemas/`
+`JwtAccessTokenSigner` nhận private/public key qua constructor, ký bằng private
+key và xác minh bằng public key tương ứng với `kid`. JWT chỉ được ký, không được
+mã hóa, nên payload không chứa mật khẩu hoặc hash. Khóa thật phải được inject từ
+secret manager hoặc cấu hình triển khai; source code không cung cấp khóa mặc định.
 
-Định nghĩa dữ liệu vào/ra của API bằng Pydantic. Response schema không được chứa
-`password_hash`, Refresh Token, Refresh Token hash hoặc khóa ký.
+`POST /api/v1/identity/login` trả Access Token và đặt Refresh Token vào cookie
+`Secure`, `HttpOnly`, `SameSite=strict`. `POST /refresh` khóa session bằng
+`FOR UPDATE`, xoay Refresh Token rồi cấp Access Token mới. `POST /logout` thu hồi
+session và xóa cookie theo cách idempotent. `GET /me` xác minh chữ ký JWT, session,
+trạng thái tài khoản và role hiện tại trước khi trả dữ liệu user công khai.
 
-### `repositories/`
+`IdentityService` cũng kiểm tra quyền theo cặp chức năng/hành động;
+`ManagerUserService` quản lý tài khoản; `RoleService` quản lý metadata role và thay
+thế tập permission theo transaction nguyên tử.
 
-Chỉ thực hiện truy vấn bằng `Session` được truyền vào constructor. Repository có
-thể `add()` hoặc thực hiện câu lệnh khóa bản ghi, nhưng không được `commit()` và
-không được biết `Request`, `Response`, cookie hay HTTP status.
+Mỗi request dùng Bearer token đều đối chiếu `sid` với session trong database. Vì
+vậy session đã logout, hết hạn hoặc bị thu hồi do đổi mật khẩu/vô hiệu hóa tài
+khoản sẽ làm Access Token mất hiệu lực ngay cả khi chữ ký JWT còn hạn.
 
-### `services/`
+## Quy tắc tầng
 
-Chứa business rule và sở hữu transaction của write use case. `IdentityService`
-điều phối đăng nhập, xác thực Access Token, refresh, logout và kiểm tra quyền.
-`ManagerUserService` quản lý tài khoản; `RoleService` cung cấp các ca sử dụng đọc
-vai trò và quyền.
+- Router không truy vấn database trực tiếp.
+- Service sở hữu transaction của write use case.
+- Repository không commit transaction.
+- Model không phụ thuộc router, service hoặc repository.
+- Response schema không chứa `password_hash` hay `refresh_token_hash`.
 
-Service chỉ làm việc với kiểu dữ liệu domain và các provider protocol. Service
-không đọc header/cookie và không trả `HTTPException`.
+## Route quản trị và RBAC
 
-### `security/`
+Tất cả route dưới đây yêu cầu Bearer token hợp lệ và permission thuộc chức năng
+`User Management`; các path đều có prefix `/api/v1/identity`:
 
-Chứa các provider bảo mật cụ thể và protocol tương ứng:
+| Method | Path | Permission | Mục đích |
+| --- | --- | --- | --- |
+| GET | `/manager-users` | `read` | Danh sách có phân trang |
+| POST | `/manager-users` | `create` | Tạo tài khoản, băm mật khẩu |
+| GET | `/manager-users/{user_id}` | `read` | Chi tiết tài khoản |
+| PATCH | `/manager-users/{user_id}` | `update` | Sửa role, email, tên hoặc trạng thái |
+| PUT | `/manager-users/{user_id}/password` | `update` | Đổi mật khẩu và thu hồi mọi session |
+| GET | `/roles` | `read` | Danh sách role |
+| POST | `/roles` | `create` | Tạo role cùng tập quyền ban đầu |
+| GET | `/roles/{role_id}` | `read` | Chi tiết role |
+| PATCH | `/roles/{role_id}` | `update` | Sửa tên hoặc mô tả role |
+| GET | `/roles/{role_id}/permissions` | `read` | Danh sách quyền của role |
+| PUT | `/roles/{role_id}/permissions` | `update` | Thay toàn bộ tập quyền nguyên tử |
+| GET | `/permissions` | `read` | Permission catalog để cấu hình role |
 
-- mật khẩu được hash một chiều bằng Argon2id;
-- Access Token là JWT được ký bằng RS256, không phải dữ liệu mã hóa;
-- Refresh Token là chuỗi opaque ngẫu nhiên, database chỉ lưu SHA-256 hash.
+Không cung cấp hard-delete cho manager user hoặc role. Tài khoản được vô hiệu hóa
+bằng trạng thái `INACTIVE` để giữ quan hệ dữ liệu và audit history.
 
-Khóa JWT thật phải được cấp qua cấu hình môi trường hoặc secret manager, không đặt
-khóa mặc định trong source code.
+## Chưa triển khai
 
-### `routers/identity.py`
+- MFA, giới hạn số lần đăng nhập sai và cơ chế phát hiện replay theo token family.
 
-Chỉ giữ các controller HTTP:
-
-- nhận và validate request schema;
-- gọi service đã được inject;
-- chuyển kết quả sang response schema;
-- ánh xạ business exception sang HTTP response;
-- đọc hoặc cập nhật Refresh Token cookie qua hàm hỗ trợ HTTP.
-
-Mỗi endpoint là một hàm riêng theo cách tổ chức thông thường của FastAPI. Đây
-không phải business logic; số hàm endpoint tương ứng với số API được công khai.
-
-### `routers/dependencies.py`
-
-Đây là composition root của Identity tại HTTP boundary. File này tạo password,
-JWT và Refresh Token provider; ghép repository với cùng một database `Session`;
-tạo `IdentityService`; đồng thời cung cấp dependency xác thực Bearer token.
-
-File này được đặt trong `routers/` vì phụ thuộc trực tiếp vào FastAPI. Không chuyển
-nó vào `core`: cách làm đó sẽ khiến `core` biết chi tiết riêng của Identity.
-
-### `routers/http.py`
-
-Chứa các thao tác chỉ có ý nghĩa tại HTTP boundary:
-
-- đặt và xóa Refresh Token cookie;
-- tính `expires_in` cho response;
-- tạo phản hồi `401 Unauthorized` thống nhất;
-- nhóm các business exception được xem là lỗi xác thực.
-
-File này không thuộc `security/`, vì cookie và HTTP status không phải thuật toán
-bảo mật. Nó cũng không thuộc `utils/`, vì phụ thuộc FastAPI và cấu hình HTTP.
-
-### `utils/`
-
-Chỉ dành cho hàm thuần có thể dùng lại trong domain mà không phụ thuộc FastAPI,
-SQLAlchemy hoặc hạ tầng web. Hiện file cung cấp thời gian UTC và sinh ID có tám ký
-tự hex. Không chuyển dependency wiring hay HTTP helper vào đây.
-
-### `exceptions/`
-
-Chứa business exception được chia theo đối tượng hoặc ca sử dụng. Các tầng khác
-nên import từ `app.domains.identity.exceptions`; `exceptions/__init__.py` chịu
-trách nhiệm re-export các exception công khai để caller không phụ thuộc vào tên
-file con.
-
-## Hướng phụ thuộc
-
-```text
-HTTP request
-    -> routers/identity.py
-        -> routers/dependencies.py
-            -> services/identity.py
-                -> repositories/*
-                -> security/* (qua provider protocol)
-                -> models/*
-        -> routers/http.py
-        -> schemas/*
-```
-
-Quy tắc quan trọng:
-
-- router không truy vấn database trực tiếp;
-- service không import FastAPI;
-- repository không commit transaction;
-- security provider không đọc request/cookie;
-- model không phụ thuộc router, service hoặc repository;
-- module nghiệp vụ không import `app.main` hay router.
-
-## API hiện có
-
-Tất cả endpoint được đăng ký dưới prefix `/api/v1`:
-
-| Method | Path                       | Chức năng                                  |
-| ------ | -------------------------- | ------------------------------------------ |
-| `POST` | `/api/v1/identity/login`   | Đăng nhập, tạo session và cấp token        |
-| `POST` | `/api/v1/identity/refresh` | Rotate Refresh Token và cấp Access Token   |
-| `POST` | `/api/v1/identity/logout`  | Thu hồi session hiện tại và xóa cookie     |
-| `GET`  | `/api/v1/identity/me`      | Lấy thông tin người dùng đang đăng nhập    |
-
-Refresh Token chỉ được gửi qua cookie `HttpOnly`. Access Token được gửi trong
-response body và client sử dụng qua header `Authorization: Bearer <token>`.
-
-## Ranh giới transaction
-
-Mỗi write use case mở một transaction trước truy vấn đầu tiên và bao trùm toàn bộ
-thao tác liên quan. Login tạo session và ký token trong cùng use case; refresh khóa
-session bằng `SELECT ... FOR UPDATE` trước khi rotate token; logout cập nhật
-`revoked_at`. Request cleanup chỉ đóng hoặc rollback session còn dang dở.
-
-## Phần chưa triển khai
-
-- logout tất cả thiết bị qua HTTP;
-- endpoint quản trị user/role/permission;
-- dependency HTTP kiểm tra permission và trả `403`;
-- MFA, rate limiting và khóa tạm thời sau nhiều lần đăng nhập sai;
-- phát hiện Refresh Token replay theo token family;
-- cấp và xoay khóa JWT từ secret manager của hạ tầng production.
-
-Thiết kế chi tiết của luồng xác thực nằm tại
-[`docs/authentication-design.md`](../../../docs/authentication-design.md).
+Use case nghiệp vụ mục tiêu và giới hạn của phiên bản hiện tại được mô tả tại
+[`docs/usecase/authentication-session.md`](../../../docs/usecase/authentication-session.md).

@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy.orm import Session
 
 from app.domains.identity.exceptions import (
@@ -10,6 +12,7 @@ from app.domains.identity.exceptions import (
     ManagerUserEmailAlreadyExists,
     ManagerUserNotFound,
     RoleNotFound,
+    RoleNameAlreadyExists,
     UserSessionExpired,
     UserSessionNotFound,
     UserSessionRevoked,
@@ -20,28 +23,24 @@ from app.domains.identity.models.manager_user import (
 )
 from app.domains.identity.models.permission import PermissionModel
 from app.domains.identity.models.role import RoleModel
+from app.domains.identity.models.role_permission import RolePermissionModel
 from app.domains.identity.models.user_session import UserSessionModel
 from app.domains.identity.repositories.manager_user import ManagerUserRepository
 from app.domains.identity.repositories.permission import PermissionRepository
 from app.domains.identity.repositories.role import RoleRepository
+from app.domains.identity.repositories.role_permission import RolePermissionRepository
 from app.domains.identity.repositories.user_session import UserSessionRepository
-from app.domains.identity.security.jwt import (
-    AccessTokenClaims,
-    AccessTokenProvider,
-    IssuedAccessToken,
-)
-from app.domains.identity.security.password import (
-    PasswordProvider,
-    PasswordVerification,
-)
-from app.domains.identity.security.refresh_token import (
-    IssuedRefreshToken,
-    RefreshTokenProvider,
-)
 from app.domains.identity.services.identity import (
+    AccessTokenClaims,
+    Argon2PasswordHasher,
     IdentityService,
+    InvalidAccessToken,
+    IssuedAccessToken,
+    IssuedRefreshToken,
+    JwtAccessTokenSigner,
     ManagerUserService,
     RoleService,
+    SecureRefreshTokenManager,
 )
 
 
@@ -50,8 +49,6 @@ USER_ID = "user-261026-12345678"
 SESSION_ID = "sess-261026-12345678"
 TOKEN_HASH = "a" * 64
 ROTATED_TOKEN_HASH = "b" * 64
-REFRESH_TOKEN = "current-refresh-token"
-ROTATED_REFRESH_TOKEN = "rotated-refresh-token"
 
 
 def build_user(
@@ -61,7 +58,7 @@ def build_user(
         id=USER_ID,
         role_id="role-12345678",
         email="admin@mnr.local",
-        password_hash="secure-password-hash",
+        password_hash="externally-generated-password-hash",
         full_name="Administrator",
         user_status=status,
         created_at=NOW,
@@ -90,43 +87,39 @@ def build_identity_service():
     user_repository = MagicMock(spec=ManagerUserRepository)
     user_session_repository = MagicMock(spec=UserSessionRepository)
     permission_repository = MagicMock(spec=PermissionRepository)
-    password_provider = MagicMock(spec=PasswordProvider)
-    password_provider.verify_password.side_effect = lambda password, password_hash: (
-        PasswordVerification(
-            is_valid=(
-                password == "correct-password"
-                and password_hash == "secure-password-hash"
-            )
-        )
+    password_hasher = MagicMock(spec=Argon2PasswordHasher)
+    password_hasher.verify_password.side_effect = (
+        lambda password, password_hash: password == "correct-password"
+        and password_hash == "externally-generated-password-hash"
     )
-    access_token_provider = MagicMock(spec=AccessTokenProvider)
-    access_token_provider.issue_access_token.return_value = IssuedAccessToken(
+    access_token_signer = MagicMock(spec=JwtAccessTokenSigner)
+    access_token_signer.issue_access_token.return_value = IssuedAccessToken(
         token="signed-access-token",
         expires_at=NOW + timedelta(minutes=15),
     )
-    refresh_token_provider = MagicMock(spec=RefreshTokenProvider)
-    refresh_token_provider.hash_refresh_token.return_value = TOKEN_HASH
-    refresh_token_provider.issue_refresh_token.return_value = IssuedRefreshToken(
-        token=ROTATED_REFRESH_TOKEN,
+    refresh_token_manager = MagicMock(spec=SecureRefreshTokenManager)
+    refresh_token_manager.hash_refresh_token.return_value = TOKEN_HASH
+    refresh_token_manager.issue_refresh_token.return_value = IssuedRefreshToken(
+        token="rotated-refresh-token",
         token_hash=ROTATED_TOKEN_HASH,
     )
     service = IdentityService(
-        session,
-        user_repository,
-        user_session_repository,
-        permission_repository,
-        password_provider,
-        access_token_provider,
-        refresh_token_provider,
+        session=session,
+        manager_user_repository=user_repository,
+        user_session_repository=user_session_repository,
+        permission_repository=permission_repository,
+        password_hasher=password_hasher,
+        access_token_signer=access_token_signer,
+        refresh_token_manager=refresh_token_manager,
         clock=lambda: NOW,
         id_factory=lambda _prefix, _created_at: SESSION_ID,
     )
     return (
         service,
-        session,
         user_repository,
-        user_session_repository,
         permission_repository,
+        password_hasher,
+        access_token_signer,
     )
 
 
@@ -135,14 +128,16 @@ def build_manager_user_service():
     user_repository = MagicMock(spec=ManagerUserRepository)
     role_repository = MagicMock(spec=RoleRepository)
     user_session_repository = MagicMock(spec=UserSessionRepository)
-    password_provider = MagicMock(spec=PasswordProvider)
-    password_provider.hash_password.side_effect = lambda password: f"hashed:{password}"
+    password_hasher = MagicMock(spec=Argon2PasswordHasher)
+    password_hasher.hash_password.side_effect = (
+        lambda password: f"hashed:{password}"
+    )
     service = ManagerUserService(
         session,
         user_repository,
         role_repository,
         user_session_repository,
-        password_provider,
+        password_hasher,
         clock=lambda: NOW,
         id_factory=lambda _prefix, _created_at: USER_ID,
     )
@@ -155,149 +150,24 @@ def build_manager_user_service():
     )
 
 
-def test_login_creates_session_and_records_last_login():
-    service, session, users, user_sessions, _permissions = build_identity_service()
-    manager_user = build_user()
-    users.get_by_email.return_value = manager_user
-
-    result = service.login(
-        email=" ADMIN@MNR.LOCAL ",
-        password="correct-password",
+def build_role_service():
+    session = MagicMock(spec=Session)
+    roles = MagicMock(spec=RoleRepository)
+    permissions = MagicMock(spec=PermissionRepository)
+    role_permissions = MagicMock(spec=RolePermissionRepository)
+    service = RoleService(
+        roles,
+        permissions,
+        session=session,
+        role_permission_repository=role_permissions,
+        clock=lambda: NOW,
+        id_factory=lambda _prefix: "role-12345678",
     )
-
-    assert result.manager_user is manager_user
-    assert result.user_session.id == SESSION_ID
-    assert result.user_session.user_id == USER_ID
-    assert result.user_session.refresh_token_hash == ROTATED_TOKEN_HASH
-    assert result.user_session.expires_at == NOW + timedelta(days=30)
-    assert result.access_token.token == "signed-access-token"
-    assert result.refresh_token == ROTATED_REFRESH_TOKEN
-    assert manager_user.last_login_at == NOW
-    user_sessions.add.assert_called_once_with(result.user_session)
-    session.flush.assert_called_once_with()
-    session.commit.assert_not_called()
-    service.access_token_provider.issue_access_token.assert_called_once_with(
-        user_id=USER_ID,
-        session_id=SESSION_ID,
-        role_id="role-12345678",
-    )
-
-
-def test_authenticate_access_token_validates_session_and_user():
-    service, _session, users, user_sessions, _permissions = build_identity_service()
-    manager_user = build_user()
-    user_session = build_session()
-    claims = AccessTokenClaims(
-        user_id=USER_ID,
-        session_id=SESSION_ID,
-        role_id=manager_user.role_id,
-        token_id="jwt-token-id",
-        issued_at=NOW,
-        not_before=NOW,
-        expires_at=NOW + timedelta(minutes=15),
-    )
-    service.access_token_provider.decode_access_token.return_value = claims
-    user_sessions.get_by_id.return_value = user_session
-    users.get_by_id.return_value = manager_user
-
-    result = service.authenticate_access_token("signed-access-token")
-
-    assert result.manager_user is manager_user
-    assert result.user_session is user_session
-    assert result.claims is claims
-
-
-@pytest.mark.parametrize(
-    ("user", "password", "error"),
-    [
-        (None, "correct-password", InvalidCredentials),
-        (build_user(), "wrong-password", InvalidCredentials),
-        (
-            build_user(status=ManagerUserStatus.INACTIVE),
-            "correct-password",
-            InactiveManagerUser,
-        ),
-    ],
-)
-def test_login_rejects_invalid_or_inactive_user(user, password, error):
-    service, _session, users, _user_sessions, _permissions = build_identity_service()
-    users.get_by_email.return_value = user
-
-    with pytest.raises(error):
-        service.login(
-            email="admin@mnr.local",
-            password=password,
-        )
-
-
-@pytest.mark.parametrize(
-    ("user_session", "error"),
-    [
-        (build_session(expires_at=NOW), UserSessionExpired),
-        (build_session(revoked_at=NOW), UserSessionRevoked),
-    ],
-)
-def test_refresh_rejects_unusable_session(user_session, error):
-    service, _session, _users, user_sessions, _permissions = build_identity_service()
-    user_sessions.get_by_refresh_token_hash_for_update.return_value = user_session
-
-    with pytest.raises(error):
-        service.refresh(REFRESH_TOKEN)
-
-
-def test_refresh_rotates_token_and_issues_new_access_token_atomically():
-    service, session, users, user_sessions, _permissions = build_identity_service()
-    manager_user = build_user()
-    user_session = build_session()
-    original_expiration = user_session.expires_at
-    user_sessions.get_by_refresh_token_hash_for_update.return_value = user_session
-    users.get_by_id.return_value = manager_user
-
-    result = service.refresh(REFRESH_TOKEN)
-
-    assert result.user_session is user_session
-    assert result.refresh_token == ROTATED_REFRESH_TOKEN
-    assert result.access_token.token == "signed-access-token"
-    assert user_session.refresh_token_hash == ROTATED_TOKEN_HASH
-    assert user_session.expires_at == original_expiration
-    service.refresh_token_provider.hash_refresh_token.assert_called_once_with(
-        REFRESH_TOKEN
-    )
-    user_sessions.get_by_refresh_token_hash_for_update.assert_called_once_with(
-        TOKEN_HASH
-    )
-    session.flush.assert_called_once_with()
-    session.commit.assert_not_called()
-
-
-def test_rotated_refresh_token_cannot_be_reused():
-    service, _session, _users, user_sessions, _permissions = build_identity_service()
-    user_sessions.get_by_refresh_token_hash_for_update.return_value = None
-
-    with pytest.raises(UserSessionNotFound):
-        service.refresh(REFRESH_TOKEN)
-
-    service.refresh_token_provider.issue_refresh_token.assert_not_called()
-    service.access_token_provider.issue_access_token.assert_not_called()
-
-
-def test_logout_revokes_only_the_selected_session():
-    service, session, _users, user_sessions, _permissions = build_identity_service()
-    user_session = build_session()
-    user_sessions.get_by_refresh_token_hash_for_update.return_value = user_session
-
-    result = service.logout(REFRESH_TOKEN)
-
-    assert result is user_session
-    assert result.revoked_at == NOW
-    service.refresh_token_provider.hash_refresh_token.assert_called_once_with(
-        REFRESH_TOKEN
-    )
-    session.flush.assert_called_once_with()
+    return service, session, roles, permissions, role_permissions
 
 
 def test_has_permission_requires_active_user():
-    service, _session, users, _user_sessions, permissions = build_identity_service()
+    service, users, permissions, _password_hasher, _signer = build_identity_service()
     users.get_by_id.return_value = build_user()
     permissions.role_has_permission.return_value = True
 
@@ -312,6 +182,245 @@ def test_has_permission_requires_active_user():
         function_name="User Management",
         action_name="read",
     )
+
+
+def test_inactive_user_has_no_permission():
+    service, users, permissions, _password_hasher, _signer = build_identity_service()
+    users.get_by_id.return_value = build_user(status=ManagerUserStatus.INACTIVE)
+
+    assert not service.has_permission(
+        USER_ID,
+        function_name="User Management",
+        action_name="read",
+    )
+    permissions.role_has_permission.assert_not_called()
+
+
+def test_authenticate_credentials_verifies_stored_password_hash():
+    service, users, _permissions, password_hasher, _signer = build_identity_service()
+    manager_user = build_user()
+    users.get_by_email.return_value = manager_user
+
+    result = service.authenticate_credentials(
+        email=" ADMIN@MNR.LOCAL ",
+        password="correct-password",
+    )
+
+    assert result is manager_user
+    users.get_by_email.assert_called_once_with("admin@mnr.local")
+    password_hasher.verify_password.assert_called_once_with(
+        "correct-password",
+        manager_user.password_hash,
+    )
+
+
+@pytest.mark.parametrize(
+    ("manager_user", "password", "expected_error"),
+    [
+        (None, "correct-password", InvalidCredentials),
+        (build_user(), "wrong-password", InvalidCredentials),
+        (
+            build_user(status=ManagerUserStatus.INACTIVE),
+            "correct-password",
+            InactiveManagerUser,
+        ),
+    ],
+)
+def test_authenticate_credentials_rejects_invalid_login(
+    manager_user,
+    password,
+    expected_error,
+):
+    service, users, _permissions, password_hasher, _signer = build_identity_service()
+    users.get_by_email.return_value = manager_user
+
+    with pytest.raises(expected_error):
+        service.authenticate_credentials(
+            email="admin@mnr.local",
+            password=password,
+        )
+
+    password_hasher.verify_password.assert_called_once_with(
+        password,
+        manager_user.password_hash if manager_user is not None else None,
+    )
+
+
+def test_authenticate_and_issue_access_token_signs_for_valid_user():
+    service, users, _permissions, _password_hasher, signer = (
+        build_identity_service()
+    )
+    manager_user = build_user()
+    users.get_by_email.return_value = manager_user
+
+    result = service.authenticate_and_issue_access_token(
+        email="admin@mnr.local",
+        password="correct-password",
+    )
+
+    assert result.manager_user is manager_user
+    assert result.user_session.id == SESSION_ID
+    assert result.user_session.refresh_token_hash == ROTATED_TOKEN_HASH
+    assert result.refresh_token == "rotated-refresh-token"
+    assert manager_user.last_login_at == NOW
+    service.user_session_repository.add.assert_called_once_with(result.user_session)
+    assert result.access_token.token == "signed-access-token"
+    signer.issue_access_token.assert_called_once_with(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        role_id="role-12345678",
+    )
+
+
+def test_authenticate_access_token_checks_current_user_and_role():
+    service, users, _permissions, _password_hasher, signer = (
+        build_identity_service()
+    )
+    manager_user = build_user()
+    claims = AccessTokenClaims(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        role_id="role-12345678",
+        token_id="token-id-12345678",
+        issued_at=NOW,
+        not_before=NOW,
+        expires_at=NOW + timedelta(minutes=15),
+    )
+    signer.decode_access_token.return_value = claims
+    user_session = build_session()
+    service.user_session_repository.get_by_id.return_value = user_session
+    users.get_by_id.return_value = manager_user
+
+    identity = service.authenticate_access_token("signed-access-token")
+
+    assert identity.manager_user is manager_user
+    assert identity.user_session is user_session
+    assert identity.claims is claims
+    signer.decode_access_token.assert_called_once_with("signed-access-token")
+
+
+def test_authenticate_access_token_rejects_stale_role():
+    service, users, _permissions, _password_hasher, signer = (
+        build_identity_service()
+    )
+    claims = AccessTokenClaims(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        role_id="role-old-role",
+        token_id="token-id-12345678",
+        issued_at=NOW,
+        not_before=NOW,
+        expires_at=NOW + timedelta(minutes=15),
+    )
+    signer.decode_access_token.return_value = claims
+    service.user_session_repository.get_by_id.return_value = build_session()
+    users.get_by_id.return_value = build_user()
+
+    with pytest.raises(InvalidAccessToken):
+        service.authenticate_access_token("signed-access-token")
+
+
+@pytest.mark.parametrize(
+    ("user_session", "expected_error"),
+    [
+        (None, UserSessionNotFound),
+        (build_session(expires_at=NOW), UserSessionExpired),
+        (build_session(revoked_at=NOW), UserSessionRevoked),
+    ],
+)
+def test_authenticate_access_token_rejects_unusable_session(
+    user_session,
+    expected_error,
+):
+    service, _users, _permissions, _password_hasher, signer = (
+        build_identity_service()
+    )
+    signer.decode_access_token.return_value = AccessTokenClaims(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        role_id="role-12345678",
+        token_id="token-id-12345678",
+        issued_at=NOW,
+        not_before=NOW,
+        expires_at=NOW + timedelta(minutes=15),
+    )
+    service.user_session_repository.get_by_id.return_value = user_session
+
+    with pytest.raises(expected_error):
+        service.authenticate_access_token("signed-access-token")
+
+
+@pytest.mark.parametrize(
+    ("user_session", "expected_error"),
+    [
+        (build_session(expires_at=NOW), UserSessionExpired),
+        (build_session(revoked_at=NOW), UserSessionRevoked),
+    ],
+)
+def test_refresh_rejects_expired_or_revoked_session(
+    user_session,
+    expected_error,
+):
+    service, _users, _permissions, _password_hasher, _signer = (
+        build_identity_service()
+    )
+    service.user_session_repository.get_by_refresh_token_hash_for_update.return_value = (
+        user_session
+    )
+
+    with pytest.raises(expected_error):
+        service.refresh("current-refresh-token")
+
+
+def test_refresh_rotates_token_and_issues_new_access_token():
+    service, users, _permissions, _password_hasher, signer = (
+        build_identity_service()
+    )
+    user_session = build_session()
+    manager_user = build_user()
+    service.user_session_repository.get_by_refresh_token_hash_for_update.return_value = (
+        user_session
+    )
+    users.get_by_id.return_value = manager_user
+
+    result = service.refresh("current-refresh-token")
+
+    assert result.user_session is user_session
+    assert result.refresh_token == "rotated-refresh-token"
+    assert user_session.refresh_token_hash == ROTATED_TOKEN_HASH
+    signer.issue_access_token.assert_called_once_with(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        role_id="role-12345678",
+    )
+
+
+def test_rotated_refresh_token_cannot_be_reused():
+    service, _users, _permissions, _password_hasher, signer = (
+        build_identity_service()
+    )
+    service.user_session_repository.get_by_refresh_token_hash_for_update.return_value = (
+        None
+    )
+
+    with pytest.raises(UserSessionNotFound):
+        service.refresh("old-refresh-token")
+
+    signer.issue_access_token.assert_not_called()
+
+
+def test_logout_revokes_selected_session():
+    service, _users, _permissions, _password_hasher, _signer = (
+        build_identity_service()
+    )
+    user_session = build_session()
+    service.user_session_repository.get_by_refresh_token_hash_for_update.return_value = (
+        user_session
+    )
+
+    assert service.logout("current-refresh-token") is user_session
+    assert user_session.revoked_at == NOW
+    service.session.flush.assert_called_once_with()
 
 
 def test_create_manager_user_validates_role_and_normalizes_values():
@@ -334,7 +443,9 @@ def test_create_manager_user_validates_role_and_normalizes_values():
     assert result.created_at == NOW
     users.add.assert_called_once_with(result)
     session.flush.assert_called_once_with()
-    service.password_provider.hash_password.assert_called_once_with(" secure-password ")
+    service.password_hasher.hash_password.assert_called_once_with(
+        " secure-password "
+    )
 
 
 def test_create_manager_user_rejects_duplicate_email_and_unknown_role():
@@ -372,7 +483,7 @@ def test_deactivating_user_revokes_active_sessions():
     session.flush.assert_called_once_with()
 
 
-def test_change_password_revokes_active_sessions():
+def test_change_password_hashes_value_and_revokes_active_sessions():
     service, session, users, _roles, user_sessions = build_manager_user_service()
     manager_user = build_user()
     users.get_by_id.return_value = manager_user
@@ -380,7 +491,7 @@ def test_change_password_revokes_active_sessions():
     result = service.change_password(USER_ID, "new-secure-password")
 
     assert result.password_hash == "hashed:new-secure-password"
-    service.password_provider.hash_password.assert_called_once_with(
+    service.password_hasher.hash_password.assert_called_once_with(
         "new-secure-password"
     )
     user_sessions.revoke_all_active_for_user.assert_called_once_with(USER_ID, NOW)
@@ -429,3 +540,154 @@ def test_role_service_raises_domain_error_when_missing():
 
     with pytest.raises(RoleNotFound):
         service.get_role("role-missing")
+
+
+def test_create_role_assigns_permissions_and_audit_fields():
+    service, session, roles, permissions, role_permissions = build_role_service()
+    roles.get_by_name.return_value = None
+    permissions.get_by_id.side_effect = [
+        MagicMock(spec=PermissionModel),
+        MagicMock(spec=PermissionModel),
+    ]
+
+    role = service.create_role(
+        name=" Curator ",
+        description=" Museum content ",
+        permission_ids=["perm-00000001", "perm-00000002"],
+        actor_user_id=USER_ID,
+    )
+
+    assert role.id == "role-12345678"
+    assert role.name == "Curator"
+    assert role.description == "Museum content"
+    assert role.created_by == USER_ID
+    assert role.last_updated_by == USER_ID
+    roles.add.assert_called_once_with(role)
+    added = [call.args[0] for call in role_permissions.add.call_args_list]
+    assert all(isinstance(item, RolePermissionModel) for item in added)
+    assert {item.permission_id for item in added} == {
+        "perm-00000001",
+        "perm-00000002",
+    }
+    session.flush.assert_called_once_with()
+
+
+def test_create_role_rejects_duplicate_name():
+    service, _session, roles, _permissions, role_permissions = build_role_service()
+    roles.get_by_name.return_value = MagicMock(spec=RoleModel)
+
+    with pytest.raises(RoleNameAlreadyExists):
+        service.create_role(
+            name="System Administrator",
+            description=None,
+            permission_ids=[],
+            actor_user_id=USER_ID,
+        )
+
+    role_permissions.add.assert_not_called()
+
+
+def test_replace_role_permissions_adds_and_removes_atomically():
+    service, session, roles, permissions, role_permissions = build_role_service()
+    role = MagicMock(spec=RoleModel)
+    roles.get_by_id.return_value = role
+    permissions.get_by_id.side_effect = [
+        MagicMock(spec=PermissionModel),
+        MagicMock(spec=PermissionModel),
+    ]
+    role_permissions.list_by_role_id.return_value = [
+        RolePermissionModel(
+            role_id="role-12345678",
+            permission_id="perm-old00001",
+        ),
+        RolePermissionModel(
+            role_id="role-12345678",
+            permission_id="perm-00000001",
+        ),
+    ]
+    expected = [MagicMock(spec=PermissionModel)]
+    permissions.list_by_role_id.return_value = expected
+
+    result = service.replace_role_permissions(
+        "role-12345678",
+        permission_ids=["perm-00000001", "perm-00000002"],
+        actor_user_id=USER_ID,
+    )
+
+    assert result == expected
+    role_permissions.remove.assert_called_once_with(
+        "role-12345678",
+        "perm-old00001",
+    )
+    added = role_permissions.add.call_args.args[0]
+    assert added.permission_id == "perm-00000002"
+    assert role.last_updated_by == USER_ID
+    assert role.last_updated_at == NOW
+    session.flush.assert_called_once_with()
+
+
+def test_argon2_password_hasher_hashes_and_verifies_plaintext():
+    password_hasher = Argon2PasswordHasher()
+
+    encoded_hash = password_hasher.hash_password("correct-password")
+
+    assert encoded_hash.startswith("$argon2id$")
+    assert encoded_hash != "correct-password"
+    assert password_hasher.verify_password("correct-password", encoded_hash)
+    assert not password_hasher.verify_password("wrong-password", encoded_hash)
+    assert not password_hasher.verify_password("correct-password", None)
+
+
+def test_refresh_token_manager_only_persists_sha256_hash():
+    manager = SecureRefreshTokenManager(
+        token_factory=lambda token_bytes: f"refresh-token-{token_bytes}"
+    )
+
+    issued = manager.issue_refresh_token()
+
+    assert issued.token == "refresh-token-48"
+    assert len(issued.token_hash) == 64
+    assert issued.token not in repr(issued)
+    assert manager.hash_refresh_token(issued.token) == issued.token_hash
+
+
+def test_jwt_signer_issues_and_verifies_rs256_access_token():
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    public_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode()
+    signer = JwtAccessTokenSigner(
+        private_key=private_pem,
+        public_keys={"key-1": public_pem},
+        active_key_id="key-1",
+        issuer="mnr-backend",
+        audience="mnr-admin-web",
+        access_token_ttl=timedelta(minutes=15),
+        leeway=timedelta(0),
+        clock=lambda: NOW,
+        token_id_factory=lambda: "token-id-12345678",
+    )
+
+    issued_token = signer.issue_access_token(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        role_id="role-12345678",
+    )
+    claims = signer.decode_access_token(issued_token.token)
+
+    assert issued_token.expires_at == NOW + timedelta(minutes=15)
+    assert claims.user_id == USER_ID
+    assert claims.session_id == SESSION_ID
+    assert claims.role_id == "role-12345678"
+    assert claims.token_id == "token-id-12345678"
+    assert claims.expires_at == issued_token.expires_at
+
+    # Thay đổi chỉ một ký tự cũng làm chữ ký không còn hợp lệ.
+    with pytest.raises(InvalidAccessToken):
+        signer.decode_access_token(f"{issued_token.token}x")

@@ -13,19 +13,12 @@ class UserSessionRepository:
     def get_by_id(self, session_id: str) -> UserSessionModel | None:
         return self.session.get(UserSessionModel, session_id)
 
-    def get_by_refresh_token_hash(
-        self,
-        refresh_token_hash: str,
-    ) -> UserSessionModel | None:
-        statement = select(UserSessionModel).where(
-            UserSessionModel.refresh_token_hash == refresh_token_hash
-        )
-        return self.session.scalar(statement)
-
     def get_by_refresh_token_hash_for_update(
         self,
         refresh_token_hash: str,
     ) -> UserSessionModel | None:
+        """Khóa session để hai request không thể xoay cùng token đồng thời."""
+
         statement = (
             select(UserSessionModel)
             .where(UserSessionModel.refresh_token_hash == refresh_token_hash)
