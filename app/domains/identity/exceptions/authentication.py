@@ -1,6 +1,2 @@
-class InvalidCredentials(Exception):
-    """Email hoặc mật khẩu được cung cấp không hợp lệ."""
-
-
 class InvalidAccessToken(Exception):
-    """Access Token không thể dùng để xác thực request."""
+    """JWT không hợp lệ, hết hạn hoặc không khớp trạng thái Identity hiện tại."""

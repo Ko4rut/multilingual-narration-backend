@@ -3,37 +3,39 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException, Response
+from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request
 
 from app.core.config import Settings
+from app.domains.identity.exceptions import InvalidCredentials
 from app.domains.identity.models.manager_user import ManagerUserStatus
 from app.domains.identity.routers.dependencies import (
-    get_access_token_provider,
+    get_access_token_signer,
     get_current_identity,
+    require_user_management_read,
 )
 from app.domains.identity.routers.identity import (
+    create_manager_user,
     get_me,
     login,
     logout,
     refresh_access_token,
 )
 from app.domains.identity.schemas.authentication import LoginRequest
+from app.domains.identity.schemas.manager_user import ManagerUserCreate
+from app.main import create_app
 
 
 NOW = datetime.now(timezone.utc)
 
 
 def _settings(**overrides: object) -> Settings:
-    return Settings(
-        _env_file=None,
-        auth_cookie_secure=True,
-        **overrides,
-    )
+    return Settings(_env_file=None, auth_cookie_secure=True, **overrides)
 
 
 def _manager_user() -> SimpleNamespace:
     return SimpleNamespace(
-        id="user-271026-12345678",
+        id="user-281026-12345678",
         role_id="role-12345678",
         email="admin@example.com",
         full_name="Admin",
@@ -65,12 +67,21 @@ class IdentityServiceStub:
         self.login_arguments: tuple[str, str] | None = None
         self.refreshed_token: str | None = None
         self.logged_out_token: str | None = None
+        self.access_token: str | None = None
+        self.login_error: Exception | None = None
 
-    def login(self, *, email: str, password: str) -> SimpleNamespace:
+    def authenticate_and_issue_access_token(
+        self,
+        *,
+        email: str,
+        password: str,
+    ) -> SimpleNamespace:
+        if self.login_error is not None:
+            raise self.login_error
         self.login_arguments = (email, password)
         return SimpleNamespace(
             manager_user=_manager_user(),
-            user_session=SimpleNamespace(expires_at=NOW + timedelta(days=1)),
+            user_session=SimpleNamespace(expires_at=NOW + timedelta(days=30)),
             access_token=SimpleNamespace(
                 token="signed-access-token",
                 expires_at=NOW + timedelta(minutes=15),
@@ -81,7 +92,7 @@ class IdentityServiceStub:
     def refresh(self, token: str) -> SimpleNamespace:
         self.refreshed_token = token
         return SimpleNamespace(
-            user_session=SimpleNamespace(expires_at=NOW + timedelta(days=1)),
+            user_session=SimpleNamespace(expires_at=NOW + timedelta(days=30)),
             access_token=SimpleNamespace(
                 token="rotated-access-token",
                 expires_at=NOW + timedelta(minutes=15),
@@ -92,8 +103,24 @@ class IdentityServiceStub:
     def logout(self, token: str) -> None:
         self.logged_out_token = token
 
+    def authenticate_access_token(self, token: str) -> SimpleNamespace:
+        self.access_token = token
+        return SimpleNamespace(manager_user=_manager_user())
 
-def test_login_returns_access_token_and_sets_httponly_cookie() -> None:
+    def has_permission(self, user_id: str, **kwargs: str) -> bool:
+        return True
+
+
+class ManagerUserServiceStub:
+    def __init__(self) -> None:
+        self.password: str | None = None
+
+    def create_manager_user(self, **values: object) -> SimpleNamespace:
+        self.password = str(values["password"])
+        return _manager_user()
+
+
+def test_login_returns_token_and_sets_secure_httponly_cookie() -> None:
     service = IdentityServiceStub()
     response = Response()
 
@@ -105,7 +132,7 @@ def test_login_returns_access_token_and_sets_httponly_cookie() -> None:
     )
 
     assert result.access_token == "signed-access-token"
-    assert result.user.id == "user-271026-12345678"
+    assert result.user.id == "user-281026-12345678"
     assert service.login_arguments == ("admin@example.com", "secret")
     cookie = response.headers["set-cookie"]
     assert "opaque-refresh-token" in cookie
@@ -115,7 +142,23 @@ def test_login_returns_access_token_and_sets_httponly_cookie() -> None:
     assert "Path=/api/v1/identity" in cookie
 
 
-def test_refresh_rotates_cookie_without_returning_refresh_token() -> None:
+def test_login_maps_invalid_credentials_to_generic_unauthorized() -> None:
+    service = IdentityServiceStub()
+    service.login_error = InvalidCredentials("invalid email or password")
+
+    with pytest.raises(HTTPException) as exc_info:
+        login(
+            LoginRequest(email="admin@example.com", password="wrong"),
+            Response(),
+            service,
+            _settings(),
+        )
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "Authentication required"
+
+
+def test_refresh_rotates_cookie_without_exposing_refresh_token() -> None:
     service = IdentityServiceStub()
     response = Response()
 
@@ -126,13 +169,10 @@ def test_refresh_rotates_cookie_without_returning_refresh_token() -> None:
         _settings(),
     )
 
-    assert result.model_dump() == {
-        "access_token": "rotated-access-token",
-        "token_type": "Bearer",
-        "expires_in": result.expires_in,
-    }
+    assert result.access_token == "rotated-access-token"
     assert service.refreshed_token == "old-refresh-token"
     assert "rotated-refresh-token" in response.headers["set-cookie"]
+    assert "refresh_token" not in result.model_dump()
 
 
 def test_logout_revokes_session_and_deletes_cookie() -> None:
@@ -152,12 +192,18 @@ def test_logout_revokes_session_and_deletes_cookie() -> None:
     assert "Max-Age=0" in cookie
 
 
-def test_me_only_exposes_public_manager_user_fields() -> None:
-    identity = SimpleNamespace(manager_user=_manager_user())
+def test_me_and_bearer_dependency_only_return_public_user() -> None:
+    service = IdentityServiceStub()
+    credentials = HTTPAuthorizationCredentials(
+        scheme="Bearer",
+        credentials="signed-access-token",
+    )
 
+    identity = get_current_identity(credentials, service)
     result = get_me(identity)
 
-    assert result.id == "user-271026-12345678"
+    assert service.access_token == "signed-access-token"
+    assert result.id == "user-281026-12345678"
     assert "password_hash" not in result.model_dump()
 
 
@@ -171,6 +217,65 @@ def test_missing_bearer_token_is_unauthorized() -> None:
 
 def test_missing_jwt_keys_reports_service_unavailable() -> None:
     with pytest.raises(HTTPException) as exc_info:
-        get_access_token_provider(_settings())
+        get_access_token_signer(_settings())
 
     assert exc_info.value.status_code == 503
+
+
+def test_all_authentication_routes_are_registered() -> None:
+    paths = create_app().openapi()["paths"]
+
+    assert "post" in paths["/api/v1/identity/login"]
+    assert "post" in paths["/api/v1/identity/refresh"]
+    assert "post" in paths["/api/v1/identity/logout"]
+    assert "get" in paths["/api/v1/identity/me"]
+    assert paths["/api/v1/identity/me"]["get"]["security"] == [
+        {"HTTPBearer": []}
+    ]
+
+
+def test_manager_user_creation_passes_plaintext_only_to_service() -> None:
+    service = ManagerUserServiceStub()
+    identity = SimpleNamespace(manager_user=_manager_user())
+
+    result = create_manager_user(
+        ManagerUserCreate(
+            role_id="role-12345678",
+            email="admin@example.com",
+            password="new-secret-password",
+            full_name="Admin",
+        ),
+        identity,
+        service,
+    )
+
+    assert result.id == "user-281026-12345678"
+    assert service.password == "new-secret-password"
+    assert "password_hash" not in result.model_dump()
+
+
+def test_user_management_dependency_returns_403_without_permission() -> None:
+    service = IdentityServiceStub()
+    service.has_permission = lambda *args, **kwargs: False
+    identity = SimpleNamespace(manager_user=_manager_user())
+
+    with pytest.raises(HTTPException) as exc_info:
+        require_user_management_read(identity, service)
+
+    assert exc_info.value.status_code == 403
+
+
+def test_manager_user_and_role_routes_are_registered() -> None:
+    paths = create_app().openapi()["paths"]
+
+    expected_methods = {
+        "/api/v1/identity/manager-users": {"get", "post"},
+        "/api/v1/identity/manager-users/{user_id}": {"get", "patch"},
+        "/api/v1/identity/manager-users/{user_id}/password": {"put"},
+        "/api/v1/identity/roles": {"get", "post"},
+        "/api/v1/identity/roles/{role_id}": {"get", "patch"},
+        "/api/v1/identity/roles/{role_id}/permissions": {"get", "put"},
+        "/api/v1/identity/permissions": {"get"},
+    }
+    for path, methods in expected_methods.items():
+        assert set(paths[path]) >= methods

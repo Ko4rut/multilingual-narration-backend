@@ -2,16 +2,16 @@ from app.core.exceptions import ResourceNotFound
 
 
 class UserSessionNotFound(ResourceNotFound):
-    """Không tìm thấy phiên người dùng được yêu cầu."""
+    """Không tìm thấy phiên tương ứng với token được cung cấp."""
 
 
 class UserSessionExpired(Exception):
-    """Phiên người dùng đã hết hạn."""
+    """Phiên đăng nhập đã hết hạn."""
 
 
 class UserSessionRevoked(Exception):
-    """Phiên người dùng đã bị thu hồi."""
+    """Phiên đăng nhập đã bị thu hồi."""
 
 
 class RefreshTokenAlreadyExists(Exception):
-    """Một phiên khác đã sử dụng Refresh Token hash này."""
+    """Refresh Token hash vừa sinh đã trùng với một session khác."""
