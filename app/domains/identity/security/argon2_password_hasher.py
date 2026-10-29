@@ -1,4 +1,14 @@
-"""Băm và xác minh mật khẩu cho domain Identity."""
+"""Băm và xác minh mật khẩu của tài khoản quản trị bằng Argon2id.
+
+Module này nhận mật khẩu dạng văn bản thuần và thực hiện hai nhiệm vụ:
+
+- tạo chuỗi hash có salt để service lưu vào ``manager_user.password_hash``;
+- xác minh mật khẩu đăng nhập dựa trên chuỗi hash đã lưu.
+
+Argon2PasswordHasher không đọc/ghi cơ sở dữ liệu và không xử lý HTTP.
+Lớp được ManagerUserService dùng khi tạo hoặc đổi mật khẩu, đồng thời được
+AuthenticationService dùng khi kiểm tra thông tin đăng nhập.
+"""
 
 from pwdlib import PasswordHash
 from pwdlib.exceptions import UnknownHashError

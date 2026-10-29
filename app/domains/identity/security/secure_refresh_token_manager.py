@@ -1,4 +1,15 @@
-"""Sinh Refresh Token và tạo hash an toàn để lưu trong database."""
+"""Sinh refresh token ngẫu nhiên và tạo hash dùng để lưu trong database.
+
+Refresh token ở đây là một chuỗi opaque: bản thân chuỗi không chứa thông tin
+người dùng. Mỗi lần cấp token, module trả về hai giá trị:
+
+- token gốc để tầng HTTP gửi cho client qua cookie bảo mật;
+- SHA-256 hash để ``AuthenticationService`` lưu và tra cứu phiên đăng nhập.
+
+Module không tự lưu phiên, đặt cookie hay thu hồi token. Những thao tác đó lần
+lượt thuộc về service, repository và router. Không lưu token gốc giúp hạn chế
+việc token bị sử dụng trực tiếp nếu dữ liệu phiên trong database bị lộ.
+"""
 
 from collections.abc import Callable
 from dataclasses import dataclass, field

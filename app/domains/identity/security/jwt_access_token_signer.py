@@ -1,4 +1,15 @@
-"""Ký và xác minh JWT Access Token cho domain Identity."""
+"""Phát hành và xác minh JWT access token bằng chữ ký bất đối xứng RS256.
+
+Khi đăng nhập hoặc làm mới phiên, ``AuthenticationService`` gọi module này để
+ký access token bằng private key. Khi một request cần xác thực, service gọi lại
+module để kiểm tra ``kid``, chữ ký, issuer, audience, loại token, các claim bắt
+buộc và thời hạn sử dụng bằng public key tương ứng.
+
+JWT chỉ được ký, không được mã hóa; payload có thể được client đọc nên tuyệt đối
+không chứa mật khẩu hoặc dữ liệu bí mật. Module cũng không kiểm tra trạng thái
+người dùng hay phiên trong database: sau khi giải mã thành công, trách nhiệm đó
+vẫn thuộc về ``AuthenticationService`` và repository.
+"""
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
