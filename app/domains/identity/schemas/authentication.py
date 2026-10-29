@@ -6,14 +6,14 @@ from app.domains.identity.schemas.manager_user import ManagerUserRead
 
 
 class LoginRequest(BaseModel):
-    """Email và mật khẩu nhận từ biểu mẫu đăng nhập."""
+    """Dữ liệu yêu cầu đăng nhập của người dùng quản lý."""
 
     email: str = Field(min_length=3, max_length=255)
     password: SecretStr = Field(min_length=1, max_length=1024)
 
 
 class AccessTokenResponse(BaseModel):
-    """Access Token công khai; Refresh Token chỉ tồn tại trong cookie."""
+    """Access Token được cấp cho người dùng quản lý sau khi đăng nhập thành công."""
 
     access_token: str
     token_type: Literal["Bearer"] = "Bearer"

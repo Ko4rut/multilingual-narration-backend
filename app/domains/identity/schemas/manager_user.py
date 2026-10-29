@@ -41,8 +41,9 @@ class ManagerUserUpdate(BaseModel):
     user_status: ManagerUserStatus | None = None
     password: SecretStr | None = Field(default=None, min_length=1, max_length=1024)
 
-    @model_validator(mode="after") #
+    @model_validator(mode="after")
     def require_change(self) -> "ManagerUserUpdate":
+        # Bắt buộc có ít nhất một field được gửi lên (không chấp nhận body rỗng).
         if not self.model_fields_set:
             raise ValueError("at least one field must be provided")
         return self

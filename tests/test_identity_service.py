@@ -519,7 +519,7 @@ def test_list_manager_users_rejects_invalid_pagination(offset, limit):
     with pytest.raises(ValueError):
         service.list_manager_users(offset=offset, limit=limit)
 
-    users.list.assert_not_called()
+    users.get_all.assert_not_called()
 
 
 def test_role_service_gets_role_and_permissions():
@@ -528,7 +528,7 @@ def test_role_service_gets_role_and_permissions():
     expected_role = MagicMock(spec=RoleModel)
     expected_permissions = [MagicMock(spec=PermissionModel)]
     roles.get_by_id.return_value = expected_role
-    permissions.list_by_role_id.return_value = expected_permissions
+    permissions.get_all_by_role_id.return_value = expected_permissions
     service = RoleService(roles, permissions)
 
     assert service.get_role("role-12345678") is expected_role
@@ -598,7 +598,7 @@ def test_replace_role_permissions_adds_and_removes_atomically():
         MagicMock(spec=PermissionModel),
         MagicMock(spec=PermissionModel),
     ]
-    role_permissions.list_by_role_id.return_value = [
+    role_permissions.get_all_by_role_id.return_value = [
         RolePermissionModel(
             role_id="role-12345678",
             permission_id="perm-old00001",
@@ -609,7 +609,7 @@ def test_replace_role_permissions_adds_and_removes_atomically():
         ),
     ]
     expected = [MagicMock(spec=PermissionModel)]
-    permissions.list_by_role_id.return_value = expected
+    permissions.get_all_by_role_id.return_value = expected
 
     result = service.replace_role_permissions(
         "role-12345678",

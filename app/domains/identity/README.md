@@ -53,6 +53,8 @@ khoản sẽ làm Access Token mất hiệu lực ngay cả khi chữ ký JWT c�
 - Router không truy vấn database trực tiếp.
 - Service sở hữu transaction của write use case.
 - Repository không commit transaction.
+- Repository dùng `get_by_*` để lấy một bản ghi và `get_all*` để lấy danh sách;
+  các tên `exists`/`role_has_permission` được dành cho truy vấn boolean.
 - Model không phụ thuộc router, service hoặc repository.
 - Response schema không chứa `password_hash` hay `refresh_token_hash`.
 

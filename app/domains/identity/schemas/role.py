@@ -8,6 +8,8 @@ PermissionId = Annotated[str, Field(min_length=1, max_length=50)]
 
 
 class RoleRead(BaseModel):
+    # Model để đọc dữ liệu vai trò từ cơ sở dữ liệu.
+    # Không được sử dụng để tạo hoặc cập nhật vai trò.
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -20,6 +22,8 @@ class RoleRead(BaseModel):
 
 
 class RoleCreate(BaseModel):
+    # Model để tạo vai trò mới.
+    # Sử dụng để nhận dữ liệu từ yêu cầu API và xác thực dữ liệu đó trước khi lưu vào cơ sở dữ liệu.
     name: str = Field(min_length=1, max_length=100)
     description: str | None = None
     permission_ids: list[PermissionId] = Field(default_factory=list, max_length=100)
@@ -33,6 +37,8 @@ class RoleCreate(BaseModel):
 
 
 class RoleUpdate(BaseModel):
+    # Model để cập nhật vai trò.
+    # Sử dụng để nhận dữ liệu từ yêu cầu API và xác thực dữ liệu đó trước khi cập nhật vào cơ sở dữ liệu.
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = None
 
@@ -44,6 +50,8 @@ class RoleUpdate(BaseModel):
 
 
 class RolePermissionsUpdate(BaseModel):
+    # Model để cập nhật quyền của vai trò.
+    # Sử dụng để nhận dữ liệu từ yêu cầu API và xác thực dữ liệu đó trước khi cập nhật vào cơ sở dữ liệu.
     permission_ids: list[PermissionId] = Field(max_length=100)
 
     @field_validator("permission_ids")

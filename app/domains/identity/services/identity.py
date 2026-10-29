@@ -642,7 +642,7 @@ class ManagerUserService:
             raise ValueError("offset must be greater than or equal to 0")
         if not 1 <= limit <= 100:
             raise ValueError("limit must be between 1 and 100")
-        return self.manager_user_repository.list(offset=offset, limit=limit)
+        return self.manager_user_repository.get_all(offset=offset, limit=limit)
 
     def create_manager_user(
         self,
@@ -839,18 +839,18 @@ class RoleService:
     def list_roles(self) -> list[RoleModel]:
         """Liệt kê toàn bộ vai trò."""
 
-        return self.role_repository.list_all()
+        return self.role_repository.get_all()
 
     def list_role_permissions(self, role_id: str) -> list[PermissionModel]:
         """Liệt kê quyền của một vai trò đã tồn tại."""
 
         self.get_role(role_id)
-        return self.permission_repository.list_by_role_id(role_id)
+        return self.permission_repository.get_all_by_role_id(role_id)
 
     def list_permissions(self) -> list[PermissionModel]:
         """Liệt kê permission catalog để giao diện cấu hình role sử dụng."""
 
-        return self.permission_repository.list_all()
+        return self.permission_repository.get_all()
 
     def create_role(
         self,
@@ -949,7 +949,7 @@ class RoleService:
             self._require_permissions(unique_permission_ids)
             existing = {
                 item.permission_id
-                for item in role_permissions.list_by_role_id(role_id)
+                for item in role_permissions.get_all_by_role_id(role_id)
             }
             requested = set(unique_permission_ids)
             for permission_id in existing - requested:
@@ -964,7 +964,7 @@ class RoleService:
             role.last_updated_by = actor_user_id
             role.last_updated_at = now
             session.flush()
-            permissions = self.permission_repository.list_by_role_id(role_id)
+            permissions = self.permission_repository.get_all_by_role_id(role_id)
         return permissions
 
     def _require_permissions(self, permission_ids: list[str]) -> None:
