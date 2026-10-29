@@ -5,31 +5,27 @@ from app.domains.identity.models.manager_user import ManagerUserModel
 
 
 class ManagerUserRepository:
-    """Persistence operations used by manager-user use cases."""
-
+    
     def __init__(self, session: Session):
         self.session = session
 
     def get_by_id(self, user_id: str) -> ManagerUserModel | None:
+        # Lấy tài khoản quản trị theo ID.
         return self.session.get(ManagerUserModel, user_id)
 
     def get_by_email(self, email: str) -> ManagerUserModel | None:
-        statement = select(ManagerUserModel).where(ManagerUserModel.email == email)
-        return self.session.scalar(statement)
+        # Lấy tài khoản theo email đã được service chuẩn hóa.
+        return self.session.scalar(select(ManagerUserModel).where(ManagerUserModel.email == email))
 
-    def list(
-        self,
-        *,
-        offset: int,
-        limit: int,
-    ) -> list[ManagerUserModel]:
-        statement = (
+    def get_all(self, *, offset: int, limit: int) -> list[ManagerUserModel]:
+        # Lấy danh sách tài k`hoản theo phân trang ``offset``/``limit``.
+        return list(self.session.scalars(
             select(ManagerUserModel)
-            .order_by(ManagerUserModel.id)
+            .order_by(ManagerUserModel.created_at)
             .offset(offset)
             .limit(limit)
-        )
-        return list(self.session.scalars(statement))
-
+        ))
+    
     def add(self, manager_user: ManagerUserModel) -> None:
+        # Đưa tài khoản mới vào Session; service chịu trách nhiệm commit.
         self.session.add(manager_user)

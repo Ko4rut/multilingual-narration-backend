@@ -6,8 +6,8 @@ from pydantic import BaseModel, ConfigDict
 
 
 class UserSessionRead(BaseModel):
-    """Public session fields; the refresh-token hash is intentionally excluded."""
-
+    # Model để đọc dữ liệu phiên người dùng từ cơ sở dữ liệu.
+    # Không được sử dụng để tạo hoặc cập nhật phiên người dùng.
     model_config = ConfigDict(from_attributes=True)
 
     id: str

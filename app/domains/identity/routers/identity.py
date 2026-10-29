@@ -22,7 +22,7 @@ from app.domains.identity.exceptions import (
 )
 from app.domains.identity.routers.dependencies import (
     get_current_identity,
-    get_identity_service,
+    get_authentication_service,
     get_manager_user_service,
     get_role_service,
     require_user_management_create,
@@ -43,7 +43,6 @@ from app.domains.identity.schemas.authentication import (
 )
 from app.domains.identity.schemas.manager_user import (
     ManagerUserCreate,
-    ManagerUserPasswordUpdate,
     ManagerUserRead,
     ManagerUserUpdate,
 )
@@ -54,12 +53,12 @@ from app.domains.identity.schemas.role import (
     RoleRead,
     RoleUpdate,
 )
-from app.domains.identity.services.identity import (
+from app.domains.identity.services.authentication import (
+    AuthenticationService,
     AuthenticatedIdentity,
-    IdentityService,
-    ManagerUserService,
-    RoleService,
 )
+from app.domains.identity.services.manager_user import ManagerUserService
+from app.domains.identity.services.role import RoleService
 
 
 router = APIRouter(prefix="/identity", tags=["Identity"])
@@ -82,7 +81,10 @@ UserManagementUpdate = Annotated[
 def login(
     payload: LoginRequest,
     response: Response,
-    service: Annotated[IdentityService, Depends(get_identity_service)],
+    service: Annotated[
+        AuthenticationService,
+        Depends(get_authentication_service),
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> LoginResponse:
     """Tạo session, trả Access Token và đặt Refresh Token HttpOnly."""
@@ -122,7 +124,10 @@ def login(
 def refresh_access_token(
     request: Request,
     response: Response,
-    service: Annotated[IdentityService, Depends(get_identity_service)],
+    service: Annotated[
+        AuthenticationService,
+        Depends(get_authentication_service),
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AccessTokenResponse:
     """Xoay Refresh Token cookie và cấp Access Token mới."""
@@ -156,7 +161,10 @@ def refresh_access_token(
 def logout(
     request: Request,
     response: Response,
-    service: Annotated[IdentityService, Depends(get_identity_service)],
+    service: Annotated[
+        AuthenticationService,
+        Depends(get_authentication_service),
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> None:
     """Thu hồi session hiện tại và luôn xóa Refresh Token cookie."""
@@ -244,25 +252,17 @@ def update_manager_user(
             email=payload.email,
             full_name=payload.full_name,
             user_status=payload.user_status,
+            password=(
+                payload.password.get_secret_value()
+                if payload.password is not None
+                else None
+            ),
         )
     except ManagerUserEmailAlreadyExists as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return ManagerUserRead.model_validate(user)
-
-
-@router.put("/manager-users/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
-def change_manager_user_password(
-    user_id: Annotated[str, Path(min_length=1, max_length=50)],
-    payload: ManagerUserPasswordUpdate,
-    _identity: UserManagementUpdate,
-    service: Annotated[ManagerUserService, Depends(get_manager_user_service)],
-) -> None:
-    try:
-        service.change_password(user_id, payload.password.get_secret_value())
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/roles", response_model=list[RoleRead])

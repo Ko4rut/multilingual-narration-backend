@@ -34,13 +34,13 @@ def test_get_by_email_filters_by_email():
     assert statement.compile().params == {"email_1": "admin@mnr.local"}
 
 
-def test_list_has_stable_order_and_pagination():
+def test_get_all_has_stable_order_and_pagination():
     session = MagicMock(spec=Session)
     expected_users = [MagicMock(spec=ManagerUserModel)]
     session.scalars.return_value = expected_users
     repository = ManagerUserRepository(session)
 
-    result = repository.list(offset=20, limit=10)
+    result = repository.get_all(offset=20, limit=10)
 
     assert result == expected_users
     statement = session.scalars.call_args.args[0]

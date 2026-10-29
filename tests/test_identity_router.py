@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException, Response
 from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import ValidationError
 from starlette.requests import Request
 
 from app.core.config import Settings
@@ -20,9 +21,13 @@ from app.domains.identity.routers.identity import (
     login,
     logout,
     refresh_access_token,
+    update_manager_user,
 )
 from app.domains.identity.schemas.authentication import LoginRequest
-from app.domains.identity.schemas.manager_user import ManagerUserCreate
+from app.domains.identity.schemas.manager_user import (
+    ManagerUserCreate,
+    ManagerUserUpdate,
+)
 from app.main import create_app
 
 
@@ -62,7 +67,7 @@ def _request(cookie: str | None = None) -> Request:
     )
 
 
-class IdentityServiceStub:
+class AuthenticationServiceStub:
     def __init__(self) -> None:
         self.login_arguments: tuple[str, str] | None = None
         self.refreshed_token: str | None = None
@@ -114,14 +119,23 @@ class IdentityServiceStub:
 class ManagerUserServiceStub:
     def __init__(self) -> None:
         self.password: str | None = None
+        self.updated_values: dict[str, object] | None = None
 
     def create_manager_user(self, **values: object) -> SimpleNamespace:
         self.password = str(values["password"])
         return _manager_user()
 
+    def update_manager_user(
+        self,
+        _user_id: str,
+        **values: object,
+    ) -> SimpleNamespace:
+        self.updated_values = values
+        return _manager_user()
+
 
 def test_login_returns_token_and_sets_secure_httponly_cookie() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     response = Response()
 
     result = login(
@@ -143,7 +157,7 @@ def test_login_returns_token_and_sets_secure_httponly_cookie() -> None:
 
 
 def test_login_maps_invalid_credentials_to_generic_unauthorized() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     service.login_error = InvalidCredentials("invalid email or password")
 
     with pytest.raises(HTTPException) as exc_info:
@@ -158,8 +172,32 @@ def test_login_maps_invalid_credentials_to_generic_unauthorized() -> None:
     assert exc_info.value.detail == "Authentication required"
 
 
+@pytest.mark.parametrize(
+    ("schema", "values"),
+    [
+        (
+            LoginRequest,
+            {"email": "admin@example.com", "password": "invalid password"},
+        ),
+        (
+            ManagerUserCreate,
+            {
+                "role_id": "role-12345678",
+                "email": "admin@example.com",
+                "password": "invalid\tpassword",
+                "full_name": "Admin",
+            },
+        ),
+        (ManagerUserUpdate, {"password": "invalid\npassword"}),
+    ],
+)
+def test_identity_password_schemas_reject_whitespace(schema, values) -> None:
+    with pytest.raises(ValidationError, match="password must not contain whitespace"):
+        schema(**values)
+
+
 def test_refresh_rotates_cookie_without_exposing_refresh_token() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     response = Response()
 
     result = refresh_access_token(
@@ -176,7 +214,7 @@ def test_refresh_rotates_cookie_without_exposing_refresh_token() -> None:
 
 
 def test_logout_revokes_session_and_deletes_cookie() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     response = Response()
 
     logout(
@@ -193,7 +231,7 @@ def test_logout_revokes_session_and_deletes_cookie() -> None:
 
 
 def test_me_and_bearer_dependency_only_return_public_user() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     credentials = HTTPAuthorizationCredentials(
         scheme="Bearer",
         credentials="signed-access-token",
@@ -209,7 +247,7 @@ def test_me_and_bearer_dependency_only_return_public_user() -> None:
 
 def test_missing_bearer_token_is_unauthorized() -> None:
     with pytest.raises(HTTPException) as exc_info:
-        get_current_identity(None, IdentityServiceStub())
+        get_current_identity(None, AuthenticationServiceStub())
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.headers == {"WWW-Authenticate": "Bearer"}
@@ -254,8 +292,28 @@ def test_manager_user_creation_passes_plaintext_only_to_service() -> None:
     assert "password_hash" not in result.model_dump()
 
 
+def test_manager_user_update_passes_password_value_to_service() -> None:
+    service = ManagerUserServiceStub()
+    identity = SimpleNamespace(manager_user=_manager_user())
+
+    result = update_manager_user(
+        "user-281026-12345678",
+        ManagerUserUpdate(
+            full_name="Updated Admin",
+            password="replacement-password",
+        ),
+        identity,
+        service,
+    )
+
+    assert result.id == "user-281026-12345678"
+    assert service.updated_values is not None
+    assert service.updated_values["password"] == "replacement-password"
+    assert "password_hash" not in result.model_dump()
+
+
 def test_user_management_dependency_returns_403_without_permission() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     service.has_permission = lambda *args, **kwargs: False
     identity = SimpleNamespace(manager_user=_manager_user())
 
@@ -271,7 +329,6 @@ def test_manager_user_and_role_routes_are_registered() -> None:
     expected_methods = {
         "/api/v1/identity/manager-users": {"get", "post"},
         "/api/v1/identity/manager-users/{user_id}": {"get", "patch"},
-        "/api/v1/identity/manager-users/{user_id}/password": {"put"},
         "/api/v1/identity/roles": {"get", "post"},
         "/api/v1/identity/roles/{role_id}": {"get", "patch"},
         "/api/v1/identity/roles/{role_id}/permissions": {"get", "put"},

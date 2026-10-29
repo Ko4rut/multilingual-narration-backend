@@ -163,13 +163,17 @@ app/
   db.py                   Compatibility facade for migrations and seed
 ```
 
-Each domain keeps one shared router and service named after the domain, under
-`routers/<domain>.py` and `services/<domain>.py`. Its `models/`, `schemas/`, and
+Each domain keeps its HTTP router under `routers/<domain>.py`; services may be
+split by cohesive use case under `services/`. Identity uses separate modules for
+authentication/session, manager users, and roles. Its `models/`, `schemas/`, and
 `repositories/` packages contain one module per database table. A domain may use
 `utils/<domain>.py` for small domain-specific helpers that do not belong to the
 HTTP, persistence, or security layers; repository modules without an implemented
 use case remain placeholders. The Identity layout and dependency rules are
 documented in [app/domains/identity/README.md](app/domains/identity/README.md).
+Identity additionally keeps password hashing, JWT signing and Refresh Token
+generation in its `security/` package; services receive these components through
+constructor injection.
 
 Implemented HTTP endpoints:
 
@@ -179,8 +183,8 @@ Implemented HTTP endpoints:
 - `POST /api/v1/identity/logout`
 - `GET /api/v1/identity/me` with a Bearer Access Token
 - `GET|POST /api/v1/identity/manager-users`
-- `GET|PATCH /api/v1/identity/manager-users/{user_id}`
-- `PUT /api/v1/identity/manager-users/{user_id}/password`
+- `GET|PATCH /api/v1/identity/manager-users/{user_id}`; PATCH có thể đổi mật
+  khẩu, khi đó backend băm Argon2id và thu hồi toàn bộ session của tài khoản
 - `GET|POST /api/v1/identity/roles`
 - `GET|PATCH /api/v1/identity/roles/{role_id}`
 - `GET|PUT /api/v1/identity/roles/{role_id}/permissions`
@@ -191,7 +195,7 @@ Implemented HTTP endpoints:
 
 POI reads return only records with `poi_status = 'active'`. Identity models,
 repositories and management services exist. Passwords are hashed and verified
-with Argon2id inside the Identity service, and RS256 Access Tokens can be signed
+with Argon2id in the Identity security layer, and RS256 Access Tokens can be signed
 and verified with keys injected from configuration. Login, refresh, logout and
 current-user endpoints are available. Login persists a session, stores only the
 SHA-256 Refresh Token hash, returns the opaque token in a secure HttpOnly cookie,
