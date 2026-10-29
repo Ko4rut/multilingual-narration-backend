@@ -179,8 +179,8 @@ Implemented HTTP endpoints:
 - `POST /api/v1/identity/logout`
 - `GET /api/v1/identity/me` with a Bearer Access Token
 - `GET|POST /api/v1/identity/manager-users`
-- `GET|PATCH /api/v1/identity/manager-users/{user_id}`
-- `PUT /api/v1/identity/manager-users/{user_id}/password`
+- `GET|PATCH /api/v1/identity/manager-users/{user_id}`; PATCH có thể đổi mật
+  khẩu, khi đó backend băm Argon2id và thu hồi toàn bộ session của tài khoản
 - `GET|POST /api/v1/identity/roles`
 - `GET|PATCH /api/v1/identity/roles/{role_id}`
 - `GET|PUT /api/v1/identity/roles/{role_id}/permissions`

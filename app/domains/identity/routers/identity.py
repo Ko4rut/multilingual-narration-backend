@@ -43,7 +43,6 @@ from app.domains.identity.schemas.authentication import (
 )
 from app.domains.identity.schemas.manager_user import (
     ManagerUserCreate,
-    ManagerUserPasswordUpdate,
     ManagerUserRead,
     ManagerUserUpdate,
 )
@@ -244,25 +243,17 @@ def update_manager_user(
             email=payload.email,
             full_name=payload.full_name,
             user_status=payload.user_status,
+            password=(
+                payload.password.get_secret_value()
+                if payload.password is not None
+                else None
+            ),
         )
     except ManagerUserEmailAlreadyExists as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return ManagerUserRead.model_validate(user)
-
-
-@router.put("/manager-users/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
-def change_manager_user_password(
-    user_id: Annotated[str, Path(min_length=1, max_length=50)],
-    payload: ManagerUserPasswordUpdate,
-    _identity: UserManagementUpdate,
-    service: Annotated[ManagerUserService, Depends(get_manager_user_service)],
-) -> None:
-    try:
-        service.change_password(user_id, payload.password.get_secret_value())
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/roles", response_model=list[RoleRead])

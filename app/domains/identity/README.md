@@ -66,8 +66,7 @@ Tất cả route dưới đây yêu cầu Bearer token hợp lệ và permission
 | GET | `/manager-users` | `read` | Danh sách có phân trang |
 | POST | `/manager-users` | `create` | Tạo tài khoản, băm mật khẩu |
 | GET | `/manager-users/{user_id}` | `read` | Chi tiết tài khoản |
-| PATCH | `/manager-users/{user_id}` | `update` | Sửa role, email, tên hoặc trạng thái |
-| PUT | `/manager-users/{user_id}/password` | `update` | Đổi mật khẩu và thu hồi mọi session |
+| PATCH | `/manager-users/{user_id}` | `update` | Sửa role, email, tên, trạng thái hoặc mật khẩu; đổi mật khẩu sẽ thu hồi mọi session |
 | GET | `/roles` | `read` | Danh sách role |
 | POST | `/roles` | `create` | Tạo role cùng tập quyền ban đầu |
 | GET | `/roles/{role_id}` | `read` | Chi tiết role |

@@ -694,15 +694,16 @@ class ManagerUserService:
         email: str | None = None,
         full_name: str | None = None,
         user_status: str | ManagerUserStatus | None = None,
+        password: str | None = None,
     ) -> ManagerUserModel:
-        """Cập nhật người dùng và thu hồi phiên khi tài khoản bị vô hiệu hóa."""
+        """Cập nhật người dùng, băm mật khẩu mới và thu hồi phiên khi cần."""
 
         now = self.clock()
         try:
             with self.session.begin():
                 manager_user = self._require_manager_user(user_id)
                 changed = False
-                status_changed_to_inactive = False
+                must_revoke_sessions = False
 
                 if role_id is not None and role_id != manager_user.role_id:
                     self._require_role(role_id)
@@ -723,14 +724,22 @@ class ManagerUserService:
                     normalized_status = self._normalize_user_status(user_status)
                     if normalized_status != manager_user.user_status:
                         manager_user.user_status = normalized_status
-                        status_changed_to_inactive = (
+                        must_revoke_sessions = (
                             normalized_status != ACTIVE_USER_STATUS
                         )
                         changed = True
+                if password is not None:
+                    # PATCH nhận plaintext ở HTTP boundary nhưng entity chỉ giữ
+                    # Argon2 hash. Đổi mật khẩu luôn vô hiệu hóa các phiên cũ.
+                    manager_user.password_hash = (
+                        self.password_hasher.hash_password(password)
+                    )
+                    must_revoke_sessions = True
+                    changed = True
 
                 if changed:
                     manager_user.last_updated_at = now
-                    if status_changed_to_inactive:
+                    if must_revoke_sessions:
                         self.user_session_repository.revoke_all_active_for_user(
                             manager_user.id,
                             now,
@@ -739,26 +748,6 @@ class ManagerUserService:
         except IntegrityError as exc:
             self._translate_manager_user_integrity_error(exc)
 
-        return manager_user
-
-    def change_password(
-        self,
-        user_id: str,
-        password: str,
-    ) -> ManagerUserModel:
-        """Băm mật khẩu mới và thu hồi toàn bộ phiên đang hoạt động."""
-
-        password_hash = self.password_hasher.hash_password(password)
-        now = self.clock()
-        with self.session.begin():
-            manager_user = self._require_manager_user(user_id)
-            manager_user.password_hash = password_hash
-            manager_user.last_updated_at = now
-            self.user_session_repository.revoke_all_active_for_user(
-                user_id,
-                now,
-            )
-            self.session.flush()
         return manager_user
 
     def _require_role(self, role_id: str) -> None:

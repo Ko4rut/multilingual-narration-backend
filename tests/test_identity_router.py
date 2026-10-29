@@ -20,9 +20,13 @@ from app.domains.identity.routers.identity import (
     login,
     logout,
     refresh_access_token,
+    update_manager_user,
 )
 from app.domains.identity.schemas.authentication import LoginRequest
-from app.domains.identity.schemas.manager_user import ManagerUserCreate
+from app.domains.identity.schemas.manager_user import (
+    ManagerUserCreate,
+    ManagerUserUpdate,
+)
 from app.main import create_app
 
 
@@ -114,9 +118,18 @@ class IdentityServiceStub:
 class ManagerUserServiceStub:
     def __init__(self) -> None:
         self.password: str | None = None
+        self.updated_values: dict[str, object] | None = None
 
     def create_manager_user(self, **values: object) -> SimpleNamespace:
         self.password = str(values["password"])
+        return _manager_user()
+
+    def update_manager_user(
+        self,
+        _user_id: str,
+        **values: object,
+    ) -> SimpleNamespace:
+        self.updated_values = values
         return _manager_user()
 
 
@@ -254,6 +267,26 @@ def test_manager_user_creation_passes_plaintext_only_to_service() -> None:
     assert "password_hash" not in result.model_dump()
 
 
+def test_manager_user_update_passes_password_value_to_service() -> None:
+    service = ManagerUserServiceStub()
+    identity = SimpleNamespace(manager_user=_manager_user())
+
+    result = update_manager_user(
+        "user-281026-12345678",
+        ManagerUserUpdate(
+            full_name="Updated Admin",
+            password="replacement-password",
+        ),
+        identity,
+        service,
+    )
+
+    assert result.id == "user-281026-12345678"
+    assert service.updated_values is not None
+    assert service.updated_values["password"] == "replacement-password"
+    assert "password_hash" not in result.model_dump()
+
+
 def test_user_management_dependency_returns_403_without_permission() -> None:
     service = IdentityServiceStub()
     service.has_permission = lambda *args, **kwargs: False
@@ -271,7 +304,6 @@ def test_manager_user_and_role_routes_are_registered() -> None:
     expected_methods = {
         "/api/v1/identity/manager-users": {"get", "post"},
         "/api/v1/identity/manager-users/{user_id}": {"get", "patch"},
-        "/api/v1/identity/manager-users/{user_id}/password": {"put"},
         "/api/v1/identity/roles": {"get", "post"},
         "/api/v1/identity/roles/{role_id}": {"get", "patch"},
         "/api/v1/identity/roles/{role_id}/permissions": {"get", "put"},

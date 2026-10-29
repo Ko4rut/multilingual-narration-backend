@@ -483,12 +483,15 @@ def test_deactivating_user_revokes_active_sessions():
     session.flush.assert_called_once_with()
 
 
-def test_change_password_hashes_value_and_revokes_active_sessions():
+def test_update_manager_user_hashes_password_and_revokes_active_sessions():
     service, session, users, _roles, user_sessions = build_manager_user_service()
     manager_user = build_user()
     users.get_by_id.return_value = manager_user
 
-    result = service.change_password(USER_ID, "new-secure-password")
+    result = service.update_manager_user(
+        USER_ID,
+        password="new-secure-password",
+    )
 
     assert result.password_hash == "hashed:new-secure-password"
     service.password_hasher.hash_password.assert_called_once_with(
