@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException, Response
 from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import ValidationError
 from starlette.requests import Request
 
 from app.core.config import Settings
@@ -169,6 +170,30 @@ def test_login_maps_invalid_credentials_to_generic_unauthorized() -> None:
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == "Authentication required"
+
+
+@pytest.mark.parametrize(
+    ("schema", "values"),
+    [
+        (
+            LoginRequest,
+            {"email": "admin@example.com", "password": "invalid password"},
+        ),
+        (
+            ManagerUserCreate,
+            {
+                "role_id": "role-12345678",
+                "email": "admin@example.com",
+                "password": "invalid\tpassword",
+                "full_name": "Admin",
+            },
+        ),
+        (ManagerUserUpdate, {"password": "invalid\npassword"}),
+    ],
+)
+def test_identity_password_schemas_reject_whitespace(schema, values) -> None:
+    with pytest.raises(ValidationError, match="password must not contain whitespace"):
+        schema(**values)
 
 
 def test_refresh_rotates_cookie_without_exposing_refresh_token() -> None:

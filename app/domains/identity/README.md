@@ -25,7 +25,8 @@ identity/
 
 `ManagerUserService` nhận mật khẩu plaintext khi tạo hoặc đổi tài khoản, băm bằng
 Argon2id rồi chỉ gán hash vào model trước khi lưu. Plaintext không được chuyển
-cho repository hoặc ghi xuống database.
+cho repository hoặc ghi xuống database. Mật khẩu không được chứa dấu cách, tab,
+ký tự xuống dòng hoặc bất kỳ ký tự khoảng trắng Unicode nào.
 
 Các thuật toán bảo mật nằm trong `security/` và được inject vào service. Thư mục
 này không quản lý transaction, không truy vấn database và không phụ thuộc HTTP.

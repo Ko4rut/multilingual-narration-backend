@@ -29,6 +29,27 @@ def test_argon2_password_hasher_hashes_and_verifies_plaintext():
     assert not password_hasher.verify_password("correct-password", None)
 
 
+@pytest.mark.parametrize(
+    "password",
+    [
+        " leading-space",
+        "trailing-space ",
+        "two words",
+        "tab\tpassword",
+        "line\nbreak",
+        "unicode\u00a0space",
+    ],
+)
+def test_argon2_password_hasher_rejects_whitespace(password: str):
+    password_hasher = Argon2PasswordHasher()
+    valid_hash = password_hasher.hash_password("valid-password")
+
+    with pytest.raises(ValueError, match="must not contain whitespace"):
+        password_hasher.hash_password(password)
+
+    assert not password_hasher.verify_password(password, valid_hash)
+
+
 def test_refresh_token_manager_only_persists_sha256_hash():
     manager = SecureRefreshTokenManager(
         token_factory=lambda token_bytes: f"refresh-token-{token_bytes}"

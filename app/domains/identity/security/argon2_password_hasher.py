@@ -23,21 +23,28 @@ class Argon2PasswordHasher:
 
     def __init__(self, password_hash: PasswordHash | None = None):
         self._password_hash = password_hash or PasswordHash((Argon2Hasher(),))
-        # Hash giả được dùng khi email không tồn tại. Việc vẫn chạy Argon2 giúp
-        # giảm chênh lệch thời gian phản hồi giữa email đúng và email sai.
+        # Hash giả được dùng khi email không tồn tại. Việc vẫn chạy Argon2 giúp giảm chênh lệch thời gian phản hồi giữa email đúng và email sai.
         self._dummy_hash = self._password_hash.hash("dummy-password-not-used")
 
     def hash_password(self, plain_password: str) -> str:
         """Tạo hash Argon2id có salt riêng để lưu thay cho mật khẩu gốc."""
         self._require_valid_password(plain_password)
-        # Không strip mật khẩu vì khoảng trắng có thể là một phần mật khẩu mà
-        # người dùng chủ động chọn. Argon2 tự sinh salt mới cho từng lần hash.
+        # Mật khẩu được băm nguyên trạng sau khi đã vượt qua chính sách đầu vào;
+        # Argon2 tự sinh salt mới cho từng lần hash.
         return self._password_hash.hash(plain_password)
 
-    def verify_password(self, plain_password: str, encoded_hash: str | None,) -> bool:
+    def verify_password(
+        self,
+        plain_password: str,
+        encoded_hash: str | None,
+    ) -> bool:
         """Đối chiếu mật khẩu nhập vào với hash đã lưu trong cơ sở dữ liệu."""
 
-        if not plain_password or len(plain_password) > MAX_PASSWORD_LENGTH:
+        if (
+            not plain_password
+            or len(plain_password) > MAX_PASSWORD_LENGTH
+            or self._contains_whitespace(plain_password)
+        ):
             return False
 
         # Không băm lại rồi so sánh hai chuỗi hash vì mỗi hash có salt riêng.
@@ -64,3 +71,10 @@ class Argon2PasswordHasher:
             raise ValueError(
                 f"password must not exceed {MAX_PASSWORD_LENGTH} characters"
             )
+        if Argon2PasswordHasher._contains_whitespace(plain_password):
+            raise ValueError("password must not contain whitespace")
+
+    @staticmethod
+    def _contains_whitespace(value: str) -> bool:
+        """Nhận diện dấu cách, tab, xuống dòng và khoảng trắng Unicode."""
+        return any(character.isspace() for character in value)

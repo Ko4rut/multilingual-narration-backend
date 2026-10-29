@@ -429,20 +429,20 @@ def test_create_manager_user_validates_role_and_normalizes_values():
     result = service.create_manager_user(
         role_id="role-12345678",
         email="  ADMIN@MNR.LOCAL ",
-        password=" secure-password ",
+        password="secure-password",
         full_name=" Administrator ",
         user_status=" ACTIVE ",
     )
 
     assert result.id == USER_ID
     assert result.email == "admin@mnr.local"
-    assert result.password_hash == "hashed: secure-password "
+    assert result.password_hash == "hashed:secure-password"
     assert result.user_status is ManagerUserStatus.ACTIVE
     assert result.created_at == NOW
     users.add.assert_called_once_with(result)
     session.flush.assert_called_once_with()
     service.password_hasher.hash_password.assert_called_once_with(
-        " secure-password "
+        "secure-password"
     )
 
 

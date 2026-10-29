@@ -2,9 +2,28 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 
 from app.domains.identity.models.manager_user import ManagerUserStatus
+
+
+def validate_password_without_whitespace(
+    password: SecretStr,
+) -> SecretStr:
+    """Từ chối mọi loại khoảng trắng nhưng không làm lộ giá trị mật khẩu."""
+
+    if any(
+        character.isspace() for character in password.get_secret_value()
+    ):
+        raise ValueError("password must not contain whitespace")
+    return password
 
 
 class ManagerUserRead(BaseModel):
@@ -31,6 +50,11 @@ class ManagerUserCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=200)
     user_status: ManagerUserStatus = ManagerUserStatus.ACTIVE
 
+    @field_validator("password")
+    @classmethod
+    def reject_password_whitespace(cls, password: SecretStr) -> SecretStr:
+        return validate_password_without_whitespace(password)
+
 
 class ManagerUserUpdate(BaseModel):
     # Model để cập nhật thông tin người dùng quản lý. 
@@ -40,6 +64,16 @@ class ManagerUserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
     user_status: ManagerUserStatus | None = None
     password: SecretStr | None = Field(default=None, min_length=1, max_length=1024)
+
+    @field_validator("password")
+    @classmethod
+    def reject_password_whitespace(
+        cls,
+        password: SecretStr | None,
+    ) -> SecretStr | None:
+        if password is None:
+            return None
+        return validate_password_without_whitespace(password)
 
     @model_validator(mode="after")
     def require_change(self) -> "ManagerUserUpdate":
