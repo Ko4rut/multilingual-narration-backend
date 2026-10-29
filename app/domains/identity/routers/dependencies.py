@@ -18,15 +18,17 @@ from app.domains.identity.routers.http import (
     AUTHENTICATION_ERRORS,
     raise_unauthorized,
 )
-from app.domains.identity.services.identity import (
+from app.domains.identity.security import (
     Argon2PasswordHasher,
-    AuthenticatedIdentity,
-    IdentityService,
     JwtAccessTokenSigner,
-    ManagerUserService,
-    RoleService,
     SecureRefreshTokenManager,
 )
+from app.domains.identity.services.authentication import (
+    AuthenticationService,
+    AuthenticatedIdentity,
+)
+from app.domains.identity.services.manager_user import ManagerUserService
+from app.domains.identity.services.role import RoleService
 from app.route.dependencies import get_session
 
 
@@ -76,7 +78,7 @@ def get_access_token_signer(
         ) from exc
 
 
-def get_identity_service(
+def get_authentication_service(
     session: Annotated[Session, Depends(get_session)],
     password_hasher: Annotated[
         Argon2PasswordHasher,
@@ -91,10 +93,10 @@ def get_identity_service(
         Depends(get_refresh_token_manager),
     ],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> IdentityService:
-    """Inject cùng Session vào các repository mà IdentityService sử dụng."""
+) -> AuthenticationService:
+    """Inject các dependency cần thiết cho AuthenticationService."""
 
-    return IdentityService(
+    return AuthenticationService(
         session=session,
         manager_user_repository=ManagerUserRepository(session),
         user_session_repository=UserSessionRepository(session),
@@ -113,7 +115,10 @@ def get_current_identity(
         HTTPAuthorizationCredentials | None,
         Depends(bearer_scheme),
     ],
-    service: Annotated[IdentityService, Depends(get_identity_service)],
+    service: Annotated[
+        AuthenticationService,
+        Depends(get_authentication_service),
+    ],
 ) -> AuthenticatedIdentity:
     """Đọc Bearer token rồi xác minh JWT và trạng thái tài khoản hiện tại."""
 
@@ -162,7 +167,10 @@ def require_user_management(action_name: str):
             AuthenticatedIdentity,
             Depends(get_current_identity),
         ],
-        service: Annotated[IdentityService, Depends(get_identity_service)],
+        service: Annotated[
+            AuthenticationService,
+            Depends(get_authentication_service),
+        ],
     ) -> AuthenticatedIdentity:
         if not service.has_permission(
             identity.manager_user.id,

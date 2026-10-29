@@ -2,12 +2,11 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy.orm import Session
 
 from app.domains.identity.exceptions import (
     InactiveManagerUser,
+    InvalidAccessToken,
     InvalidCredentials,
     ManagerUserEmailAlreadyExists,
     ManagerUserNotFound,
@@ -30,18 +29,17 @@ from app.domains.identity.repositories.permission import PermissionRepository
 from app.domains.identity.repositories.role import RoleRepository
 from app.domains.identity.repositories.role_permission import RolePermissionRepository
 from app.domains.identity.repositories.user_session import UserSessionRepository
-from app.domains.identity.services.identity import (
+from app.domains.identity.security import (
     AccessTokenClaims,
     Argon2PasswordHasher,
-    IdentityService,
-    InvalidAccessToken,
     IssuedAccessToken,
     IssuedRefreshToken,
     JwtAccessTokenSigner,
-    ManagerUserService,
-    RoleService,
     SecureRefreshTokenManager,
 )
+from app.domains.identity.services.authentication import AuthenticationService
+from app.domains.identity.services.manager_user import ManagerUserService
+from app.domains.identity.services.role import RoleService
 
 
 NOW = datetime(2026, 10, 26, 8, 30, tzinfo=timezone.utc)
@@ -103,7 +101,7 @@ def build_identity_service():
         token="rotated-refresh-token",
         token_hash=ROTATED_TOKEN_HASH,
     )
-    service = IdentityService(
+    service = AuthenticationService(
         session=session,
         manager_user_repository=user_repository,
         user_session_repository=user_session_repository,
@@ -627,70 +625,3 @@ def test_replace_role_permissions_adds_and_removes_atomically():
     assert role.last_updated_by == USER_ID
     assert role.last_updated_at == NOW
     session.flush.assert_called_once_with()
-
-
-def test_argon2_password_hasher_hashes_and_verifies_plaintext():
-    password_hasher = Argon2PasswordHasher()
-
-    encoded_hash = password_hasher.hash_password("correct-password")
-
-    assert encoded_hash.startswith("$argon2id$")
-    assert encoded_hash != "correct-password"
-    assert password_hasher.verify_password("correct-password", encoded_hash)
-    assert not password_hasher.verify_password("wrong-password", encoded_hash)
-    assert not password_hasher.verify_password("correct-password", None)
-
-
-def test_refresh_token_manager_only_persists_sha256_hash():
-    manager = SecureRefreshTokenManager(
-        token_factory=lambda token_bytes: f"refresh-token-{token_bytes}"
-    )
-
-    issued = manager.issue_refresh_token()
-
-    assert issued.token == "refresh-token-48"
-    assert len(issued.token_hash) == 64
-    assert issued.token not in repr(issued)
-    assert manager.hash_refresh_token(issued.token) == issued.token_hash
-
-
-def test_jwt_signer_issues_and_verifies_rs256_access_token():
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    private_pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    ).decode()
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
-    signer = JwtAccessTokenSigner(
-        private_key=private_pem,
-        public_keys={"key-1": public_pem},
-        active_key_id="key-1",
-        issuer="mnr-backend",
-        audience="mnr-admin-web",
-        access_token_ttl=timedelta(minutes=15),
-        leeway=timedelta(0),
-        clock=lambda: NOW,
-        token_id_factory=lambda: "token-id-12345678",
-    )
-
-    issued_token = signer.issue_access_token(
-        user_id=USER_ID,
-        session_id=SESSION_ID,
-        role_id="role-12345678",
-    )
-    claims = signer.decode_access_token(issued_token.token)
-
-    assert issued_token.expires_at == NOW + timedelta(minutes=15)
-    assert claims.user_id == USER_ID
-    assert claims.session_id == SESSION_ID
-    assert claims.role_id == "role-12345678"
-    assert claims.token_id == "token-id-12345678"
-    assert claims.expires_at == issued_token.expires_at
-
-    # Thay đổi chỉ một ký tự cũng làm chữ ký không còn hợp lệ.
-    with pytest.raises(InvalidAccessToken):
-        signer.decode_access_token(f"{issued_token.token}x")

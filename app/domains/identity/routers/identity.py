@@ -22,7 +22,7 @@ from app.domains.identity.exceptions import (
 )
 from app.domains.identity.routers.dependencies import (
     get_current_identity,
-    get_identity_service,
+    get_authentication_service,
     get_manager_user_service,
     get_role_service,
     require_user_management_create,
@@ -53,12 +53,12 @@ from app.domains.identity.schemas.role import (
     RoleRead,
     RoleUpdate,
 )
-from app.domains.identity.services.identity import (
+from app.domains.identity.services.authentication import (
+    AuthenticationService,
     AuthenticatedIdentity,
-    IdentityService,
-    ManagerUserService,
-    RoleService,
 )
+from app.domains.identity.services.manager_user import ManagerUserService
+from app.domains.identity.services.role import RoleService
 
 
 router = APIRouter(prefix="/identity", tags=["Identity"])
@@ -81,7 +81,10 @@ UserManagementUpdate = Annotated[
 def login(
     payload: LoginRequest,
     response: Response,
-    service: Annotated[IdentityService, Depends(get_identity_service)],
+    service: Annotated[
+        AuthenticationService,
+        Depends(get_authentication_service),
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> LoginResponse:
     """Tạo session, trả Access Token và đặt Refresh Token HttpOnly."""
@@ -121,7 +124,10 @@ def login(
 def refresh_access_token(
     request: Request,
     response: Response,
-    service: Annotated[IdentityService, Depends(get_identity_service)],
+    service: Annotated[
+        AuthenticationService,
+        Depends(get_authentication_service),
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AccessTokenResponse:
     """Xoay Refresh Token cookie và cấp Access Token mới."""
@@ -155,7 +161,10 @@ def refresh_access_token(
 def logout(
     request: Request,
     response: Response,
-    service: Annotated[IdentityService, Depends(get_identity_service)],
+    service: Annotated[
+        AuthenticationService,
+        Depends(get_authentication_service),
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> None:
     """Thu hồi session hiện tại và luôn xóa Refresh Token cookie."""

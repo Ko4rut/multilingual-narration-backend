@@ -66,7 +66,7 @@ def _request(cookie: str | None = None) -> Request:
     )
 
 
-class IdentityServiceStub:
+class AuthenticationServiceStub:
     def __init__(self) -> None:
         self.login_arguments: tuple[str, str] | None = None
         self.refreshed_token: str | None = None
@@ -134,7 +134,7 @@ class ManagerUserServiceStub:
 
 
 def test_login_returns_token_and_sets_secure_httponly_cookie() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     response = Response()
 
     result = login(
@@ -156,7 +156,7 @@ def test_login_returns_token_and_sets_secure_httponly_cookie() -> None:
 
 
 def test_login_maps_invalid_credentials_to_generic_unauthorized() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     service.login_error = InvalidCredentials("invalid email or password")
 
     with pytest.raises(HTTPException) as exc_info:
@@ -172,7 +172,7 @@ def test_login_maps_invalid_credentials_to_generic_unauthorized() -> None:
 
 
 def test_refresh_rotates_cookie_without_exposing_refresh_token() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     response = Response()
 
     result = refresh_access_token(
@@ -189,7 +189,7 @@ def test_refresh_rotates_cookie_without_exposing_refresh_token() -> None:
 
 
 def test_logout_revokes_session_and_deletes_cookie() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     response = Response()
 
     logout(
@@ -206,7 +206,7 @@ def test_logout_revokes_session_and_deletes_cookie() -> None:
 
 
 def test_me_and_bearer_dependency_only_return_public_user() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     credentials = HTTPAuthorizationCredentials(
         scheme="Bearer",
         credentials="signed-access-token",
@@ -222,7 +222,7 @@ def test_me_and_bearer_dependency_only_return_public_user() -> None:
 
 def test_missing_bearer_token_is_unauthorized() -> None:
     with pytest.raises(HTTPException) as exc_info:
-        get_current_identity(None, IdentityServiceStub())
+        get_current_identity(None, AuthenticationServiceStub())
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.headers == {"WWW-Authenticate": "Bearer"}
@@ -288,7 +288,7 @@ def test_manager_user_update_passes_password_value_to_service() -> None:
 
 
 def test_user_management_dependency_returns_403_without_permission() -> None:
-    service = IdentityServiceStub()
+    service = AuthenticationServiceStub()
     service.has_permission = lambda *args, **kwargs: False
     identity = SimpleNamespace(manager_user=_manager_user())
 
