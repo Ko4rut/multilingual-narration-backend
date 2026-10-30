@@ -83,7 +83,7 @@ def login(
     """Tạo session, trả Access Token và đặt Refresh Token HttpOnly."""
 
     try:
-        result = service.authenticate_and_issue_access_token(
+        result = service.login(
             email=payload.email,
             password=payload.password.get_secret_value(),
         )

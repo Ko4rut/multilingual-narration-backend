@@ -244,14 +244,14 @@ def test_authenticate_credentials_rejects_invalid_login(
     )
 
 
-def test_authenticate_and_issue_access_token_signs_for_valid_user():
+def test_login_signs_for_valid_user():
     service, users, _permissions, _password_hasher, signer = (
         build_identity_service()
     )
     manager_user = build_user()
     users.get_by_email.return_value = manager_user
 
-    result = service.authenticate_and_issue_access_token(
+    result = service.login(
         email="admin@mnr.local",
         password="correct-password",
     )

@@ -99,7 +99,7 @@ class AuthenticationService:
         self.clock = clock
         self.id_factory = id_factory
 
-    def authenticate_and_issue_access_token(self, *, email: str, password: str) -> CredentialLoginResult:
+    def login(self, *, email: str, password: str) -> CredentialLoginResult:
         """Xác minh credential, tạo session rồi cấp cặp token."""
 
         # 1. Chuẩn hoá email và tìm user theo email đã chuẩn hoá.
