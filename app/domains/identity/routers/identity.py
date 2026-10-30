@@ -61,30 +61,23 @@ from app.domains.identity.services.manager_user import ManagerUserService
 from app.domains.identity.services.role import RoleService
 
 
-router = APIRouter(prefix="/identity", tags=["Identity"])
+auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
+manager_user_router = APIRouter(prefix="/manager-users", tags=["Manager Users"])
+role_router = APIRouter(prefix="/roles", tags=["Roles & Permissions"])
 
-UserManagementRead = Annotated[
-    AuthenticatedIdentity,
-    Depends(require_user_management_read),
-]
-UserManagementCreate = Annotated[
-    AuthenticatedIdentity,
-    Depends(require_user_management_create),
-]
-UserManagementUpdate = Annotated[
-    AuthenticatedIdentity,
-    Depends(require_user_management_update),
-]
+UserManagementRead = Annotated[AuthenticatedIdentity, Depends(require_user_management_read)]
+UserManagementCreate = Annotated[AuthenticatedIdentity, Depends(require_user_management_create)]
+UserManagementUpdate = Annotated[AuthenticatedIdentity, Depends(require_user_management_update)]
 
+# ==============================================================================================================
+# Các endpoint thuộc về AuthenticationService.
+# ==============================================================================================================
 
-@router.post("/login", response_model=LoginResponse)
+@auth_router.post("/login", response_model=LoginResponse)
 def login(
     payload: LoginRequest,
     response: Response,
-    service: Annotated[
-        AuthenticationService,
-        Depends(get_authentication_service),
-    ],
+    service: Annotated[AuthenticationService, Depends(get_authentication_service)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> LoginResponse:
     """Tạo session, trả Access Token và đặt Refresh Token HttpOnly."""
@@ -120,14 +113,11 @@ def login(
     )
 
 
-@router.post("/refresh", response_model=AccessTokenResponse)
+@auth_router.post("/refresh", response_model=AccessTokenResponse)
 def refresh_access_token(
     request: Request,
     response: Response,
-    service: Annotated[
-        AuthenticationService,
-        Depends(get_authentication_service),
-    ],
+    service: Annotated[AuthenticationService, Depends(get_authentication_service)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AccessTokenResponse:
     """Xoay Refresh Token cookie và cấp Access Token mới."""
@@ -157,14 +147,11 @@ def refresh_access_token(
     )
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@auth_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
     request: Request,
     response: Response,
-    service: Annotated[
-        AuthenticationService,
-        Depends(get_authentication_service),
-    ],
+    service: Annotated[AuthenticationService, Depends(get_authentication_service)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> None:
     """Thu hồi session hiện tại và luôn xóa Refresh Token cookie."""
@@ -179,19 +166,16 @@ def logout(
     delete_refresh_cookie(response, settings)
 
 
-@router.get("/me", response_model=ManagerUserRead)
-def get_me(
-    identity: Annotated[
-        AuthenticatedIdentity,
-        Depends(get_current_identity),
-    ],
-) -> ManagerUserRead:
-    """Trả thông tin công khai của chủ sở hữu Access Token hiện tại."""
 
+@auth_router.get("/me", response_model=ManagerUserRead)
+def get_me(identity: Annotated[AuthenticatedIdentity, Depends(get_current_identity)]) -> ManagerUserRead:
     return ManagerUserRead.model_validate(identity.manager_user)
 
+# ==============================================================================================================
+# Các endpoint thuộc về ManagerUserService.
+# ==============================================================================================================
 
-@router.get("/manager-users", response_model=list[ManagerUserRead])
+@manager_user_router.get("", response_model=list[ManagerUserRead])
 def list_manager_users(
     _identity: UserManagementRead,
     service: Annotated[ManagerUserService, Depends(get_manager_user_service)],
@@ -204,11 +188,7 @@ def list_manager_users(
     ]
 
 
-@router.post(
-    "/manager-users",
-    response_model=ManagerUserRead,
-    status_code=status.HTTP_201_CREATED,
-)
+@manager_user_router.post("", response_model=ManagerUserRead, status_code=status.HTTP_201_CREATED)
 def create_manager_user(
     payload: ManagerUserCreate,
     _identity: UserManagementCreate,
@@ -229,7 +209,7 @@ def create_manager_user(
     return ManagerUserRead.model_validate(user)
 
 
-@router.get("/manager-users/{user_id}", response_model=ManagerUserRead)
+@manager_user_router.get("/{user_id}", response_model=ManagerUserRead)
 def get_manager_user(
     user_id: Annotated[str, Path(min_length=1, max_length=50)],
     _identity: UserManagementRead,
@@ -238,7 +218,7 @@ def get_manager_user(
     return ManagerUserRead.model_validate(service.get_manager_user(user_id))
 
 
-@router.patch("/manager-users/{user_id}", response_model=ManagerUserRead)
+@manager_user_router.patch("/{user_id}", response_model=ManagerUserRead)
 def update_manager_user(
     user_id: Annotated[str, Path(min_length=1, max_length=50)],
     payload: ManagerUserUpdate,
@@ -265,7 +245,11 @@ def update_manager_user(
     return ManagerUserRead.model_validate(user)
 
 
-@router.get("/roles", response_model=list[RoleRead])
+# ==============================================================================================================
+# Các endpoint thuộc về RoleService.
+# ==============================================================================================================
+
+@role_router.get("", response_model=list[RoleRead])
 def list_roles(
     _identity: UserManagementRead,
     service: Annotated[RoleService, Depends(get_role_service)],
@@ -273,11 +257,7 @@ def list_roles(
     return [RoleRead.model_validate(role) for role in service.list_roles()]
 
 
-@router.post(
-    "/roles",
-    response_model=RoleRead,
-    status_code=status.HTTP_201_CREATED,
-)
+@role_router.post("", response_model=RoleRead, status_code=status.HTTP_201_CREATED)
 def create_role(
     payload: RoleCreate,
     identity: UserManagementCreate,
@@ -296,8 +276,17 @@ def create_role(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return RoleRead.model_validate(role)
 
+@role_router.get("/permissions", response_model=list[PermissionRead])
+def list_permissions(
+    _identity: UserManagementRead,
+    service: Annotated[RoleService, Depends(get_role_service)],
+) -> list[PermissionRead]:
+    return [
+        PermissionRead.model_validate(permission)
+        for permission in service.list_permissions()
+    ]
 
-@router.get("/roles/{role_id}", response_model=RoleRead)
+@role_router.get("/{role_id}", response_model=RoleRead)
 def get_role(
     role_id: Annotated[str, Path(min_length=1, max_length=50)],
     _identity: UserManagementRead,
@@ -306,7 +295,7 @@ def get_role(
     return RoleRead.model_validate(service.get_role(role_id))
 
 
-@router.patch("/roles/{role_id}", response_model=RoleRead)
+@role_router.patch("/{role_id}", response_model=RoleRead)
 def update_role(
     role_id: Annotated[str, Path(min_length=1, max_length=50)],
     payload: RoleUpdate,
@@ -328,7 +317,7 @@ def update_role(
     return RoleRead.model_validate(role)
 
 
-@router.get("/roles/{role_id}/permissions", response_model=list[PermissionRead])
+@role_router.get("/{role_id}/permissions", response_model=list[PermissionRead])
 def list_role_permissions(
     role_id: Annotated[str, Path(min_length=1, max_length=50)],
     _identity: UserManagementRead,
@@ -340,7 +329,7 @@ def list_role_permissions(
     ]
 
 
-@router.put("/roles/{role_id}/permissions", response_model=list[PermissionRead])
+@role_router.put("/{role_id}/permissions", response_model=list[PermissionRead])
 def replace_role_permissions(
     role_id: Annotated[str, Path(min_length=1, max_length=50)],
     payload: RolePermissionsUpdate,
@@ -353,14 +342,3 @@ def replace_role_permissions(
         actor_user_id=identity.manager_user.id,
     )
     return [PermissionRead.model_validate(permission) for permission in permissions]
-
-
-@router.get("/permissions", response_model=list[PermissionRead])
-def list_permissions(
-    _identity: UserManagementRead,
-    service: Annotated[RoleService, Depends(get_role_service)],
-) -> list[PermissionRead]:
-    return [
-        PermissionRead.model_validate(permission)
-        for permission in service.list_permissions()
-    ]
