@@ -38,20 +38,16 @@ bearer_scheme = HTTPBearer(auto_error=False)
 @lru_cache
 def get_password_hasher() -> Argon2PasswordHasher:
     """Dùng lại cấu hình Argon2 và dummy hash giữa các request."""
-
     return Argon2PasswordHasher()
 
 
 @lru_cache
 def get_refresh_token_manager() -> SecureRefreshTokenManager:
     """Dùng bộ sinh Refresh Token entropy cao cho mọi request."""
-
     return SecureRefreshTokenManager()
 
 
-def get_access_token_signer(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> JwtAccessTokenSigner:
+def get_access_token_signer(settings: Annotated[Settings, Depends(get_settings)]) -> JwtAccessTokenSigner:
     """Dựng bộ ký JWT từ khóa được inject qua cấu hình triển khai."""
 
     if settings.jwt_private_key is None or not settings.jwt_public_keys:
@@ -80,18 +76,9 @@ def get_access_token_signer(
 
 def get_authentication_service(
     session: Annotated[Session, Depends(get_session)],
-    password_hasher: Annotated[
-        Argon2PasswordHasher,
-        Depends(get_password_hasher),
-    ],
-    access_token_signer: Annotated[
-        JwtAccessTokenSigner,
-        Depends(get_access_token_signer),
-    ],
-    refresh_token_manager: Annotated[
-        SecureRefreshTokenManager,
-        Depends(get_refresh_token_manager),
-    ],
+    password_hasher: Annotated[Argon2PasswordHasher, Depends(get_password_hasher)],
+    access_token_signer: Annotated[JwtAccessTokenSigner, Depends(get_access_token_signer)],
+    refresh_token_manager: Annotated[SecureRefreshTokenManager, Depends(get_refresh_token_manager)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AuthenticationService:
     """Inject các dependency cần thiết cho AuthenticationService."""
@@ -111,14 +98,8 @@ def get_authentication_service(
 
 
 def get_current_identity(
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None,
-        Depends(bearer_scheme),
-    ],
-    service: Annotated[
-        AuthenticationService,
-        Depends(get_authentication_service),
-    ],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    service: Annotated[AuthenticationService, Depends(get_authentication_service)],
 ) -> AuthenticatedIdentity:
     """Đọc Bearer token rồi xác minh JWT và trạng thái tài khoản hiện tại."""
 
@@ -134,10 +115,7 @@ def get_manager_user_service(
     # Session nghiệp vụ tách khỏi Session đã dùng để xác thực/RBAC, tránh
     # transaction ngầm của truy vấn auth bao lấy write transaction.
     session: Annotated[Session, Depends(get_session, use_cache=False)],
-    password_hasher: Annotated[
-        Argon2PasswordHasher,
-        Depends(get_password_hasher),
-    ],
+    password_hasher: Annotated[Argon2PasswordHasher, Depends(get_password_hasher)],
 ) -> ManagerUserService:
     return ManagerUserService(
         session=session,
@@ -148,9 +126,7 @@ def get_manager_user_service(
     )
 
 
-def get_role_service(
-    session: Annotated[Session, Depends(get_session, use_cache=False)],
-) -> RoleService:
+def get_role_service(session: Annotated[Session, Depends(get_session, use_cache=False)]) -> RoleService:
     return RoleService(
         role_repository=RoleRepository(session),
         permission_repository=PermissionRepository(session),
@@ -163,14 +139,8 @@ def require_user_management(action_name: str):
     """Tạo dependency RBAC cho một hành động thuộc User Management."""
 
     def check_permission(
-        identity: Annotated[
-            AuthenticatedIdentity,
-            Depends(get_current_identity),
-        ],
-        service: Annotated[
-            AuthenticationService,
-            Depends(get_authentication_service),
-        ],
+        identity: Annotated[AuthenticatedIdentity, Depends(get_current_identity)],
+        service: Annotated[AuthenticationService, Depends(get_authentication_service)],
     ) -> AuthenticatedIdentity:
         if not service.has_permission(
             identity.manager_user.id,
@@ -182,7 +152,6 @@ def require_user_management(action_name: str):
                 detail="Insufficient permission",
             )
         return identity
-
     return check_permission
 
 

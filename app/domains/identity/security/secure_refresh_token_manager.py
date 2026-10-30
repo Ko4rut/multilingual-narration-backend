@@ -38,6 +38,7 @@ class SecureRefreshTokenManager:
         self.token_factory = token_factory
 
     def issue_refresh_token(self) -> IssuedRefreshToken:
+        # Sinh refresh token ngẫu nhiên và hash SHA-256 để lưu trong database.
         token = self.token_factory(self.token_bytes)
         if not token:
             raise ValueError("token_factory returned an empty refresh token")
@@ -48,6 +49,7 @@ class SecureRefreshTokenManager:
 
     @staticmethod
     def hash_refresh_token(token: str) -> str:
+        # Mã hóa SHA-256 của refresh token để lưu trong database. Không lưu token gốc.
         if not token:
             raise ValueError("refresh token must not be empty")
         return sha256(token.encode("utf-8")).hexdigest()

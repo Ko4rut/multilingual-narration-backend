@@ -33,11 +33,7 @@ class Argon2PasswordHasher:
         # Argon2 tự sinh salt mới cho từng lần hash.
         return self._password_hash.hash(plain_password)
 
-    def verify_password(
-        self,
-        plain_password: str,
-        encoded_hash: str | None,
-    ) -> bool:
+    def verify_password(self, plain_password: str, encoded_hash: str | None) -> bool:
         """Đối chiếu mật khẩu nhập vào với hash đã lưu trong cơ sở dữ liệu."""
 
         if (
@@ -76,5 +72,5 @@ class Argon2PasswordHasher:
 
     @staticmethod
     def _contains_whitespace(value: str) -> bool:
-        """Nhận diện dấu cách, tab, xuống dòng và khoảng trắng Unicode."""
+        # Nhận diện dấu cách, tab, xuống dòng và khoảng trắng Unicode.
         return any(character.isspace() for character in value)
