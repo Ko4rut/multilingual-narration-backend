@@ -16,7 +16,7 @@ from app.domains.identity.repositories.permission import PermissionRepository
 from app.domains.identity.repositories.role import RoleRepository
 from app.domains.identity.repositories.role_permission import RolePermissionRepository
 from app.domains.identity.utils.identity import (
-    generate_reference_identifier,
+    generate_dated_identifier,
     required_text,
     utc_now,
 )
@@ -33,7 +33,7 @@ class RoleService:
         role_permission_repository: RolePermissionRepository | None = None,
         *,
         clock: Callable[[], datetime] = utc_now,
-        id_factory: Callable[[str], str] = generate_reference_identifier,
+        id_factory: Callable[[str, datetime], str] = generate_dated_identifier,
     ):
         self.role_repository = role_repository
         self.permission_repository = permission_repository
@@ -87,7 +87,7 @@ class RoleService:
                     raise RoleNameAlreadyExists("Role name already exists")
                 self._require_permissions(unique_permission_ids)
                 role = RoleModel(
-                    id=self.id_factory("role"),
+                    id=self.id_factory("role", now),
                     name=normalized_name,
                     description=normalized_description,
                     created_by=actor_user_id,
