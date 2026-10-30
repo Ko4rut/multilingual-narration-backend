@@ -140,8 +140,7 @@ class JwtAccessTokenSigner:
         """Xác minh chữ ký, issuer, audience, loại token và thời hạn."""
 
         try:
-            # Header chưa xác minh chỉ được dùng để chọn public key. Payload chỉ
-            # được tin cậy sau khi jwt.decode xác minh chữ ký bên dưới.
+            # Header chưa xác minh chỉ được dùng để chọn public key. Payload chỉ được tin cậy sau khi jwt.decode xác minh chữ ký bên dưới.
             header = jwt.get_unverified_header(token)
             if header.get("alg") != JWT_ALGORITHM:
                 raise InvalidAccessToken("Access token algorithm is not allowed")
