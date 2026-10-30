@@ -75,7 +75,7 @@ class AuthenticationServiceStub:
         self.access_token: str | None = None
         self.login_error: Exception | None = None
 
-    def authenticate_and_issue_access_token(
+    def login(
         self,
         *,
         email: str,
