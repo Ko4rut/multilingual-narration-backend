@@ -18,6 +18,8 @@ from app.domains.identity.routers.dependencies import (
 from app.domains.identity.routers.identity import (
     create_manager_user,
     get_me,
+    list_manager_users,
+    list_roles,
     login,
     logout,
     refresh_access_token,
@@ -48,6 +50,18 @@ def _manager_user() -> SimpleNamespace:
         created_at=NOW,
         last_updated_at=NOW,
         last_login_at=NOW,
+    )
+
+
+def _role() -> SimpleNamespace:
+    return SimpleNamespace(
+        id="role-12345678",
+        name="Content Editor",
+        description="Manages narration content",
+        created_by="user-281026-12345678",
+        last_updated_by="user-281026-12345678",
+        created_at=NOW,
+        last_updated_at=NOW,
     )
 
 
@@ -119,7 +133,12 @@ class AuthenticationServiceStub:
 class ManagerUserServiceStub:
     def __init__(self) -> None:
         self.password: str | None = None
+        self.list_filters: dict[str, object] | None = None
         self.updated_values: dict[str, object] | None = None
+
+    def list_manager_users(self, **filters: object) -> list[SimpleNamespace]:
+        self.list_filters = filters
+        return [_manager_user()]
 
     def create_manager_user(self, **values: object) -> SimpleNamespace:
         self.password = str(values["password"])
@@ -132,6 +151,15 @@ class ManagerUserServiceStub:
     ) -> SimpleNamespace:
         self.updated_values = values
         return _manager_user()
+
+
+class RoleServiceStub:
+    def __init__(self) -> None:
+        self.search: str | None = None
+
+    def list_roles(self, *, search: str | None = None) -> list[SimpleNamespace]:
+        self.search = search
+        return [_role()]
 
 
 def test_login_returns_token_and_sets_secure_httponly_cookie() -> None:
@@ -263,11 +291,11 @@ def test_missing_jwt_keys_reports_service_unavailable() -> None:
 def test_all_authentication_routes_are_registered() -> None:
     paths = create_app().openapi()["paths"]
 
-    assert "post" in paths["/api/v1/identity/login"]
-    assert "post" in paths["/api/v1/identity/refresh"]
-    assert "post" in paths["/api/v1/identity/logout"]
-    assert "get" in paths["/api/v1/identity/me"]
-    assert paths["/api/v1/identity/me"]["get"]["security"] == [
+    assert "post" in paths["/api/v1/auth/login"]
+    assert "post" in paths["/api/v1/auth/refresh"]
+    assert "post" in paths["/api/v1/auth/logout"]
+    assert "get" in paths["/api/v1/auth/me"]
+    assert paths["/api/v1/auth/me"]["get"]["security"] == [
         {"HTTPBearer": []}
     ]
 
@@ -292,6 +320,28 @@ def test_manager_user_creation_passes_plaintext_only_to_service() -> None:
     assert "password_hash" not in result.model_dump()
 
 
+def test_manager_user_list_passes_search_status_and_pagination() -> None:
+    service = ManagerUserServiceStub()
+    identity = SimpleNamespace(manager_user=_manager_user())
+
+    result = list_manager_users(
+        identity,
+        service,
+        offset=20,
+        limit=10,
+        search="admin",
+        user_status=ManagerUserStatus.ACTIVE,
+    )
+
+    assert [user.id for user in result] == ["user-281026-12345678"]
+    assert service.list_filters == {
+        "offset": 20,
+        "limit": 10,
+        "search": "admin",
+        "user_status": ManagerUserStatus.ACTIVE,
+    }
+
+
 def test_manager_user_update_passes_password_value_to_service() -> None:
     service = ManagerUserServiceStub()
     identity = SimpleNamespace(manager_user=_manager_user())
@@ -312,6 +362,16 @@ def test_manager_user_update_passes_password_value_to_service() -> None:
     assert "password_hash" not in result.model_dump()
 
 
+def test_role_list_passes_search_to_service() -> None:
+    service = RoleServiceStub()
+    identity = SimpleNamespace(manager_user=_manager_user())
+
+    result = list_roles(identity, service, search="content")
+
+    assert [role.id for role in result] == ["role-12345678"]
+    assert service.search == "content"
+
+
 def test_user_management_dependency_returns_403_without_permission() -> None:
     service = AuthenticationServiceStub()
     service.has_permission = lambda *args, **kwargs: False
@@ -327,12 +387,12 @@ def test_manager_user_and_role_routes_are_registered() -> None:
     paths = create_app().openapi()["paths"]
 
     expected_methods = {
-        "/api/v1/identity/manager-users": {"get", "post"},
-        "/api/v1/identity/manager-users/{user_id}": {"get", "patch"},
-        "/api/v1/identity/roles": {"get", "post"},
-        "/api/v1/identity/roles/{role_id}": {"get", "patch"},
-        "/api/v1/identity/roles/{role_id}/permissions": {"get", "put"},
-        "/api/v1/identity/permissions": {"get"},
+        "/api/v1/manager-users": {"get", "post"},
+        "/api/v1/manager-users/{user_id}": {"get", "patch"},
+        "/api/v1/roles": {"get", "post"},
+        "/api/v1/roles/{role_id}": {"get", "patch"},
+        "/api/v1/roles/{role_id}/permissions": {"get", "put"},
+        "/api/v1/roles/permissions": {"get"},
     }
     for path, methods in expected_methods.items():
         assert set(paths[path]) >= methods

@@ -50,10 +50,17 @@ class RoleService:
             raise RoleNotFound("Role not found")
         return role
 
-    def list_roles(self) -> list[RoleModel]:
-        """Liệt kê toàn bộ vai trò."""
+    def list_roles(self, *, search: str | None = None) -> list[RoleModel]:
+        """Liệt kê vai trò, có thể lọc bằng từ khóa."""
 
-        return self.role_repository.get_all()
+        normalized_search = None
+        if search is not None:
+            normalized_search = search.strip()
+            if not normalized_search:
+                raise ValueError("search must not be empty")
+            if len(normalized_search) > 255:
+                raise ValueError("search must not exceed 255 characters")
+        return self.role_repository.get_all(search=normalized_search)
 
     def list_role_permissions(self, role_id: str) -> list[PermissionModel]:
         """Liệt kê quyền của một vai trò đã tồn tại."""

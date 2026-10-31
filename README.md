@@ -178,17 +178,18 @@ constructor injection.
 Implemented HTTP endpoints:
 
 - `GET /health`
-- `POST /api/v1/identity/login`
-- `POST /api/v1/identity/refresh` using the HttpOnly Refresh Token cookie
-- `POST /api/v1/identity/logout`
-- `GET /api/v1/identity/me` with a Bearer Access Token
-- `GET|POST /api/v1/identity/manager-users`
-- `GET|PATCH /api/v1/identity/manager-users/{user_id}`; PATCH có thể đổi mật
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh` using the HttpOnly Refresh Token cookie
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/me` with a Bearer Access Token
+- `GET|POST /api/v1/manager-users`; GET hỗ trợ `search`,
+  `user_status=ACTIVE|INACTIVE`, `offset` và `limit`
+- `GET|PATCH /api/v1/manager-users/{user_id}`; PATCH có thể đổi mật
   khẩu, khi đó backend băm Argon2id và thu hồi toàn bộ session của tài khoản
-- `GET|POST /api/v1/identity/roles`
-- `GET|PATCH /api/v1/identity/roles/{role_id}`
-- `GET|PUT /api/v1/identity/roles/{role_id}/permissions`
-- `GET /api/v1/identity/permissions`
+- `GET|POST /api/v1/roles`; GET hỗ trợ `search` theo ID, tên hoặc mô tả
+- `GET|PATCH /api/v1/roles/{role_id}`
+- `GET|PUT /api/v1/roles/{role_id}/permissions`
+- `GET /api/v1/roles/permissions`
 - `GET /api/v1/pois?offset=0&limit=20`
 - `GET /api/v1/pois/{poi_id}` where `poi_id` is a string such as
   `poi-010926-951c03a1`
