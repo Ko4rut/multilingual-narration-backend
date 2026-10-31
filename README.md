@@ -91,10 +91,12 @@ Copy-Item .env.example .env
 .\venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
-The default local `DATABASE_URL` uses PostgreSQL on host port `5433`. Inside
-Docker, services connect to `postgres:5432`. Identity login additionally requires
-`JWT_PRIVATE_KEY` and `JWT_PUBLIC_KEYS`; real keys must come from the deployment
-secret store and must not be committed to `.env` or source control.
+`DATABASE_URL`, `JWT_ACTIVE_KEY_ID`, `JWT_ISSUER` and `JWT_AUDIENCE` are required
+settings; `.env.example` provides local development values. The local database URL
+uses PostgreSQL on host port `5433`; inside Docker, services connect to
+`postgres:5432`. Identity login additionally requires `JWT_PRIVATE_KEY` and
+`JWT_PUBLIC_KEYS`; real keys must come from the deployment secret store and must
+not be committed to `.env` or source control.
 
 Schema changes are applied explicitly with Alembic and are never run at API startup.
 
