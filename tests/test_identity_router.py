@@ -37,7 +37,15 @@ NOW = datetime.now(timezone.utc)
 
 
 def _settings(**overrides: object) -> Settings:
-    return Settings(_env_file=None, auth_cookie_secure=True, **overrides)
+    required_settings = {
+        "database_url": "postgresql+psycopg://test:test@localhost:5433/test",
+        "jwt_active_key_id": "test-key-1",
+        "jwt_issuer": "test-issuer",
+        "jwt_audience": "test-audience",
+        "auth_cookie_secure": True,
+    }
+    required_settings.update(overrides)
+    return Settings(_env_file=None, **required_settings)
 
 
 def _manager_user() -> SimpleNamespace:
@@ -181,7 +189,7 @@ def test_login_returns_token_and_sets_secure_httponly_cookie() -> None:
     assert "HttpOnly" in cookie
     assert "Secure" in cookie
     assert "SameSite=strict" in cookie
-    assert "Path=/api/v1/identity" in cookie
+    assert "Path=/api/v1/auth" in cookie
 
 
 def test_login_maps_invalid_credentials_to_generic_unauthorized() -> None:
