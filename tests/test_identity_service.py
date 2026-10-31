@@ -159,7 +159,7 @@ def build_role_service():
         session=session,
         role_permission_repository=role_permissions,
         clock=lambda: NOW,
-        id_factory=lambda _prefix: "role-12345678",
+        id_factory=lambda _prefix, _created_at: "role-12345678",
     )
     return service, session, roles, permissions, role_permissions
 
@@ -520,6 +520,36 @@ def test_list_manager_users_rejects_invalid_pagination(offset, limit):
     users.get_all.assert_not_called()
 
 
+def test_list_manager_users_normalizes_search_and_status():
+    service, _session, users, _roles, _user_sessions = build_manager_user_service()
+    users.get_all.return_value = []
+
+    result = service.list_manager_users(
+        offset=10,
+        limit=25,
+        search="  Admin@MNR.Local  ",
+        user_status=" active ",
+    )
+
+    assert result == []
+    users.get_all.assert_called_once_with(
+        offset=10,
+        limit=25,
+        search="Admin@MNR.Local",
+        user_status=ManagerUserStatus.ACTIVE,
+    )
+
+
+@pytest.mark.parametrize("search", ["", "   ", "x" * 256])
+def test_list_manager_users_rejects_invalid_search(search):
+    service, _session, users, _roles, _user_sessions = build_manager_user_service()
+
+    with pytest.raises(ValueError):
+        service.list_manager_users(search=search)
+
+    users.get_all.assert_not_called()
+
+
 def test_role_service_gets_role_and_permissions():
     roles = MagicMock(spec=RoleRepository)
     permissions = MagicMock(spec=PermissionRepository)
@@ -531,6 +561,28 @@ def test_role_service_gets_role_and_permissions():
 
     assert service.get_role("role-12345678") is expected_role
     assert service.list_role_permissions("role-12345678") == expected_permissions
+
+
+def test_role_service_normalizes_search():
+    roles = MagicMock(spec=RoleRepository)
+    permissions = MagicMock(spec=PermissionRepository)
+    roles.get_all.return_value = []
+    service = RoleService(roles, permissions)
+
+    assert service.list_roles(search="  Content Editor  ") == []
+    roles.get_all.assert_called_once_with(search="Content Editor")
+
+
+@pytest.mark.parametrize("search", ["", "   ", "x" * 256])
+def test_role_service_rejects_invalid_search(search):
+    roles = MagicMock(spec=RoleRepository)
+    permissions = MagicMock(spec=PermissionRepository)
+    service = RoleService(roles, permissions)
+
+    with pytest.raises(ValueError):
+        service.list_roles(search=search)
+
+    roles.get_all.assert_not_called()
 
 
 def test_role_service_raises_domain_error_when_missing():

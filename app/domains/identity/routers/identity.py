@@ -20,6 +20,7 @@ from app.domains.identity.exceptions import (
     RoleNameAlreadyExists,
     UserSessionNotFound,
 )
+from app.domains.identity.models.manager_user import ManagerUserStatus
 from app.domains.identity.routers.dependencies import (
     get_current_identity,
     get_authentication_service,
@@ -181,10 +182,17 @@ def list_manager_users(
     service: Annotated[ManagerUserService, Depends(get_manager_user_service)],
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    search: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
+    user_status: Annotated[ManagerUserStatus | None, Query()] = None,
 ) -> list[ManagerUserRead]:
     return [
         ManagerUserRead.model_validate(user)
-        for user in service.list_manager_users(offset=offset, limit=limit)
+        for user in service.list_manager_users(
+            offset=offset,
+            limit=limit,
+            search=search,
+            user_status=user_status,
+        )
     ]
 
 
@@ -253,8 +261,12 @@ def update_manager_user(
 def list_roles(
     _identity: UserManagementRead,
     service: Annotated[RoleService, Depends(get_role_service)],
+    search: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
 ) -> list[RoleRead]:
-    return [RoleRead.model_validate(role) for role in service.list_roles()]
+    return [
+        RoleRead.model_validate(role)
+        for role in service.list_roles(search=search)
+    ]
 
 
 @role_router.post("", response_model=RoleRead, status_code=status.HTTP_201_CREATED)
