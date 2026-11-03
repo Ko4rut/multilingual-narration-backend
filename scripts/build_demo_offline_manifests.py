@@ -165,19 +165,58 @@ def main() -> None:
             "status": "PREPARED_NOT_PUBLISHED",
         }))
     index_path = args.output_dir / "manifest-index-v1.json"
-    if index_path.exists() or any(path.exists() for path, _, _ in outputs):
-        raise FileExistsError("Refusing to overwrite an immutable v1 manifest")
+    target_paths = [path for path, _, _ in outputs]
+    existing = [path for path in [*target_paths, index_path] if path.exists()]
+    if existing:
+        # Compose may rerun the one-shot init job. Reuse v1 only if every
+        # persisted manifest still matches the current POI/content/audio bytes
+        # and serving URL; never overwrite an immutable published URL.
+        if len(existing) != len(target_paths) + 1:
+            raise FileExistsError(
+                "Incomplete v1 fixture output; move the incomplete generated "
+                "directory aside before retrying. Existing: "
+                + ", ".join(map(str, existing))
+            )
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        by_key = {entry["package_key"]: entry for entry in index}
+        if len(by_key) != len(outputs):
+            raise ValueError("Existing manifest index is incomplete or duplicated")
+        for path, _, expected in outputs:
+            stored_bytes = path.read_bytes()
+            stored = json.loads(stored_bytes)
+            current = next(
+                manifest for manifest in manifests
+                if manifest["package_key"] == expected["package_key"]
+            )
+            # generated_at is informational; it may differ on a restart.
+            current = {k: v for k, v in current.items() if k != "generated_at"}
+            stored = {k: v for k, v in stored.items() if k != "generated_at"}
+            entry = by_key.get(expected["package_key"])
+            if (
+                stored != current
+                or entry is None
+                or entry.get("manifest_checksum_sha256")
+                != hashlib.sha256(stored_bytes).hexdigest()
+                or entry.get("total_audio_size") != expected["total_audio_size"]
+                or entry.get("status") != "PREPARED_NOT_PUBLISHED"
+            ):
+                raise FileExistsError(
+                    f"Immutable v1 fixture no longer matches source assets: {path}. "
+                    "Prepare a new package version; do not replace an existing v1."
+                )
+        print("Existing v1 manifests verified and reused (no files overwritten).")
+    else:
+        for path, payload, _ in outputs:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+        index_path.write_text(
+            json.dumps([data for _, _, data in outputs], ensure_ascii=False, indent=2)
+            + "\\n",
+            encoding="utf-8",
+        )
+        print("New v1 manifest fixtures created.")
 
-    for path, payload, _ in outputs:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(payload)
-    index_path.write_text(
-        json.dumps([data for _, _, data in outputs], ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    for _, _, data in outputs:
-        print(f"{data['package_key']}: SHA-256 {data['manifest_checksum_sha256']}")
-    print("Manifest fixtures created, NOT published. Reconcile ContentAudio and storage first.")
+    print("Manifest fixtures only, NOT published. Reconcile ContentAudio and storage first.")
 
 
 if __name__ == "__main__":

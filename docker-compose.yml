@@ -75,5 +75,34 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+
+  offline-manifest-init:
+    <<: *backend
+    # Match the host user's UID/GID for write access to the bind-mounted fixtures.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    volumes:
+      - ./fixtures:/app/fixtures
+    command:
+      - python
+      - -m
+      - scripts.build_demo_offline_manifests
+      - --media-base-url
+      - ${MEDIA_BASE_URL:-http://localhost:9000}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  media:
+    image: nginx:alpine
+    ports:
+      - "${MEDIA_PORT:-9000}:80"
+    volumes:
+      - ./fixtures/offline:/usr/share/nginx/html:ro
+    depends_on:
+      offline-manifest-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
 volumes:
   postgres-data:

@@ -58,20 +58,40 @@ Compose starts the services in dependency order:
 1. `postgres` becomes healthy.
 2. `migrate` upgrades the schema, checks ORM/migration drift, and runs the
    idempotent seed.
-3. `api` starts only after migration and seed succeed.
+3. `offline-manifest-init` reads the four MP3s in
+   `fixtures/offline/audio/` and prepares two Hanoi manifest fixtures.
+4. `media` (Nginx) serves the audio and generated manifest files after
+   initialization succeeds. `api` starts after migration/seed succeeds.
+
+All services are enabled by default; no Compose profile is required. Place
+the four MP3s in `fixtures/offline/audio/` **before starting the stack**.
+Without them the manifest init job fails and `media` does not start.
+See [the Hanoi fixture guide](fixtures/offline/README.md).
 
 Default endpoints:
 
 - API: http://localhost:8000
 - Swagger UI: http://localhost:8000/docs
 - Health check: http://localhost:8000/health
+- Media: http://localhost:9000/audio/han-van-mieu-vi.mp3
+- Manifest: http://localhost:9000/generated/region-HAN-lang-vi/v1/manifest.json
 - PostgreSQL host port: `5433`
+
+The `media` service bind-mounts `fixtures/offline` read-only; its MP3s are
+**not embedded into the backend image**. The init job writes generated JSON
+to the same host directory. For non-default host ports, set both `MEDIA_PORT`
+and `MEDIA_BASE_URL`. On Linux, set `HOST_UID`/`HOST_GID` if your user is
+not 1000:1000. For access from a phone use a reachable LAN IP, not localhost.
+The manifest fixtures do **not** mark database packages as PUBLISHED or
+update the seed's placeholder ContentAudio metadata.
 
 Useful commands:
 
 ```bash
 docker compose ps
 docker compose logs migrate
+docker compose logs offline-manifest-init
+docker compose logs media
 docker compose logs api
 docker compose down
 ```
