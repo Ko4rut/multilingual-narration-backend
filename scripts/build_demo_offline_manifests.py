@@ -211,7 +211,7 @@ def main() -> None:
             path.write_bytes(payload)
         index_path.write_text(
             json.dumps([data for _, _, data in outputs], ensure_ascii=False, indent=2)
-            + "\\n",
+            + "\n",
             encoding="utf-8",
         )
         print("New v1 manifest fixtures created.")
