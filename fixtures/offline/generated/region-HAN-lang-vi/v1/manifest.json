@@ -1,0 +1,42 @@
+{
+  "package_key": "region:HAN|lang:vi",
+  "package_version": 1,
+  "schema_version": 1,
+  "region_code": "HAN",
+  "language_code": "vi",
+  "generated_at": "2026-11-03T11:22:10.195648Z",
+  "items": [
+    {
+      "poi_id": "poi-010926-00000001",
+      "poi_name": "Văn Miếu - Quốc Tử Giám",
+      "poi_location": "58 Quốc Tử Giám, Đống Đa, Hà Nội",
+      "latitude": "21.029369",
+      "longitude": "105.835432",
+      "trigger_radius_meter": "80.00",
+      "narration_id": "cont-010926-00000001",
+      "content_version": 1,
+      "narration_title": "Khám phá Văn Miếu - Quốc Tử Giám",
+      "narration_script": "Văn Miếu - Quốc Tử Giám là một điểm đến tiêu biểu tại 58 Quốc Tử Giám, Đống Đa, Hà Nội. Bản thuyết minh mẫu này cung cấp thông tin khái quát để kiểm thử trải nghiệm nghe tại điểm.",
+      "audio_id": "audio-010926-00000001",
+      "audio_url": "http://localhost:9000/audio/han-van-mieu-vi.mp3",
+      "audio_checksum": "48bcb3aed9db35239603978d91468ba8988e2439fb3c1cc4c5dfd92895e4a69f",
+      "audio_size": 183528
+    },
+    {
+      "poi_id": "poi-010926-00000002",
+      "poi_name": "Hồ Hoàn Kiếm",
+      "poi_location": "Phố Đinh Tiên Hoàng, Hoàn Kiếm, Hà Nội",
+      "latitude": "21.028779",
+      "longitude": "105.852448",
+      "trigger_radius_meter": "120.00",
+      "narration_id": "cont-020926-00000004",
+      "content_version": 1,
+      "narration_title": "Khám phá Hồ Hoàn Kiếm",
+      "narration_script": "Hồ Hoàn Kiếm là một điểm đến tiêu biểu tại Phố Đinh Tiên Hoàng, Hoàn Kiếm, Hà Nội. Bản thuyết minh mẫu này cung cấp thông tin khái quát để kiểm thử trải nghiệm nghe tại điểm.",
+      "audio_id": "audio-020926-00000004",
+      "audio_url": "http://localhost:9000/audio/han-ho-guom-vi.mp3",
+      "audio_checksum": "2191d92c8bdc71827b33bedf6ff8617ffd86778389b19f2a474a4d40e11969b4",
+      "audio_size": 166391
+    }
+  ]
+}

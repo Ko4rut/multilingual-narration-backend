@@ -1,0 +1,42 @@
+{
+  "package_key": "region:HAN|lang:en",
+  "package_version": 1,
+  "schema_version": 1,
+  "region_code": "HAN",
+  "language_code": "en",
+  "generated_at": "2026-11-03T11:22:10.195648Z",
+  "items": [
+    {
+      "poi_id": "poi-010926-00000001",
+      "poi_name": "Văn Miếu - Quốc Tử Giám",
+      "poi_location": "58 Quốc Tử Giám, Đống Đa, Hà Nội",
+      "latitude": "21.029369",
+      "longitude": "105.835432",
+      "trigger_radius_meter": "80.00",
+      "narration_id": "cont-010926-00000002",
+      "content_version": 1,
+      "narration_title": "Discover Văn Miếu - Quốc Tử Giám",
+      "narration_script": "Văn Miếu - Quốc Tử Giám is a representative destination at 58 Quốc Tử Giám, Đống Đa, Hà Nội. This sample narration provides an overview for testing the on-site listening experience.",
+      "audio_id": "audio-010926-00000002",
+      "audio_url": "http://localhost:9000/audio/han-van-mieu-en.mp3",
+      "audio_checksum": "05268193dc1eb7372fa47344f5c67d085d3b9cad4ba0ddd9d28b70e0b2ab7fd7",
+      "audio_size": 215711
+    },
+    {
+      "poi_id": "poi-010926-00000002",
+      "poi_name": "Hồ Hoàn Kiếm",
+      "poi_location": "Phố Đinh Tiên Hoàng, Hoàn Kiếm, Hà Nội",
+      "latitude": "21.028779",
+      "longitude": "105.852448",
+      "trigger_radius_meter": "120.00",
+      "narration_id": "cont-020926-00000005",
+      "content_version": 1,
+      "narration_title": "Discover Hồ Hoàn Kiếm",
+      "narration_script": "Hồ Hoàn Kiếm is a representative destination at Phố Đinh Tiên Hoàng, Hoàn Kiếm, Hà Nội. This sample narration provides an overview for testing the on-site listening experience.",
+      "audio_id": "audio-020926-00000005",
+      "audio_url": "http://localhost:9000/audio/han-ho-guom-en.mp3",
+      "audio_checksum": "15f7cbc703240d46f240a24073c49d4aa99ea9ca15fab11ec4f62f7d3a55fff1",
+      "audio_size": 196066
+    }
+  ]
+}

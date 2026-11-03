@@ -1,0 +1,16 @@
+[
+  {
+    "package_key": "region:HAN|lang:vi",
+    "manifest_path": "/app/fixtures/offline/generated/region-HAN-lang-vi/v1/manifest.json",
+    "manifest_checksum_sha256": "9ca642482bdcfd9c337198c93fddee92c5138a954c8a475eb12b57307e9631c2",
+    "total_audio_size": 349919,
+    "status": "PREPARED_NOT_PUBLISHED"
+  },
+  {
+    "package_key": "region:HAN|lang:en",
+    "manifest_path": "/app/fixtures/offline/generated/region-HAN-lang-en/v1/manifest.json",
+    "manifest_checksum_sha256": "e390a8a3f347e00e6ade79d3fb5e8c2504a45bbd93c1a5cf1dc7df58c2c1b2dc",
+    "total_audio_size": 411777,
+    "status": "PREPARED_NOT_PUBLISHED"
+  }
+]
