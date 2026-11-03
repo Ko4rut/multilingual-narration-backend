@@ -9,6 +9,9 @@ from app.domains.catalog.routers import router as catalog_router
 from app.domains.listening.routers import router as listening_router
 from app.domains.offline.routers import router as offline_router
 from app.domains.poi.routers import router as poi_router
+from app.domains.poi.routers import admin_router as poi_admin_router
+from app.domains.poi.routers import audio_router as poi_audio_router
+from app.domains.poi.routers import content_router as poi_content_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -25,6 +28,9 @@ api_router.include_router(catalog_router)
 
 # Domain POI
 api_router.include_router(poi_router)
+api_router.include_router(poi_admin_router)
+api_router.include_router(poi_content_router)
+api_router.include_router(poi_audio_router)
 
 # Domain Listening
 api_router.include_router(listening_router)

@@ -16,4 +16,5 @@ class PoiCategoryMapping(Base):
         String(50),
         ForeignKey("poi_category.id", ondelete="CASCADE"),
         primary_key=True,
+        index=True,
     )
