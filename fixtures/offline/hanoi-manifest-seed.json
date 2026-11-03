@@ -1,0 +1,35 @@
+{
+  "description": "Input recipe, not a published manifest. Real audio checksums and sizes are calculated when MP3 files exist.",
+  "region_code": "HAN",
+  "schema_version": 1,
+  "packages": [
+    {
+      "package_key": "region:HAN|lang:vi",
+      "language_code": "vi",
+      "items": [
+        {
+          "poi_qr_code": "HAN-VAN-MIEU",
+          "audio_file": "han-van-mieu-vi.mp3"
+        },
+        {
+          "poi_qr_code": "HAN-HO-GUOM",
+          "audio_file": "han-ho-guom-vi.mp3"
+        }
+      ]
+    },
+    {
+      "package_key": "region:HAN|lang:en",
+      "language_code": "en",
+      "items": [
+        {
+          "poi_qr_code": "HAN-VAN-MIEU",
+          "audio_file": "han-van-mieu-en.mp3"
+        },
+        {
+          "poi_qr_code": "HAN-HO-GUOM",
+          "audio_file": "han-ho-guom-en.mp3"
+        }
+      ]
+    }
+  ]
+}
