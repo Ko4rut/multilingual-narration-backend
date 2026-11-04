@@ -102,37 +102,25 @@ class AuthenticationService:
     def login(self, *, email: str, password: str) -> CredentialLoginResult:
         """Xác minh credential, tạo session rồi cấp cặp token."""
 
-        # 1. Chuẩn hoá email và tìm user theo email đã chuẩn hoá.
         normalized_email = normalize_email(email)
-        manager_user = self.manager_user_repository.get_by_email(normalized_email)
-
-        # 2. Verify password NGOÀI transaction để login sai không tốn transaction/connection.
-        #    - user tồn tại: verify với password_hash thật.
-        #    - user không tồn tại: truyền None → hasher dùng dummy hash để thời gian verify tương đương khi có user để chống dò timing attack.
-        is_valid_password = self.password_hasher.verify_password(
-            password,
-            manager_user.password_hash if manager_user is not None else None,
-        )
-
-        # 3. Kiểm tra User có tồn tại? và password có đúng không? để hiện thông báo chung tránh enumeration
-        if manager_user is None or not is_valid_password:
-            raise InvalidCredentials("Invalid email or password")
-
-        # 4. Kiểm tra trạng thái tài khoản.
-        if manager_user.user_status != ACTIVE_USER_STATUS:
-            raise InactiveManagerUser("Manager user is inactive")
-
-        # 5. Lấy thời điểm hiện tại (inject được để test).
-        #    Dùng cùng một created_at cho session, last_login_at và expires_at
-        #    để đảm bảo tính nhất quán trong một lần đăng nhập.
         created_at = self.clock()
-
-        # 6. Mở transaction CHỈ cho phần ghi dữ liệu (tạo session, cập nhật last_login_at).
-        # Verify đã xong ở trên nên transaction không bị mở cho các lần login sai.
         try:
             with self.session.begin():
+                # Login là một write use case: transaction bắt đầu trước query
+                # đầu tiên và bao trọn việc xác minh user, tạo session và cập
+                # nhật thời điểm đăng nhập.
+                manager_user = self.manager_user_repository.get_by_email(
+                    normalized_email
+                )
+                is_valid_password = self.password_hasher.verify_password(
+                    password,
+                    manager_user.password_hash if manager_user is not None else None,
+                )
+                if manager_user is None or not is_valid_password:
+                    raise InvalidCredentials("Invalid email or password")
+                if manager_user.user_status != ACTIVE_USER_STATUS:
+                    raise InactiveManagerUser("Manager user is inactive")
 
-                # 7. Sinh refresh token ngẫu nhiên (plaintext trả về client qua cookie) và tạo session.
                 issued_refresh_token = self.refresh_token_manager.issue_refresh_token()
                 user_session = UserSessionModel(
                     id=self.id_factory("sess", created_at),             
@@ -143,30 +131,18 @@ class AuthenticationService:
                     revoked_at=None,                                                         
                 )
 
-                # 8. Cập nhật last_login_at trên user.
                 manager_user.last_login_at = created_at
-
-                # 9. Đưa session mới vào persistence layer và flush để SQLAlchemy gửi INSERT xuống DB.
                 self.user_session_repository.add(user_session)
                 self.session.flush()
-
-                # 10. Ký access token JWT với:
-                #     - sub: user id
-                #     - sid: session id (vừa có sau flush)
-                #     - role_id: để RBAC kiểm tra nhanh mà không cần query DB Access token KHÔNG được lưu DB — chỉ ký và trả về client.
                 access_token = self.access_token_signer.issue_access_token(
                     user_id=manager_user.id,
                     session_id=user_session.id,
                     role_id=manager_user.role_id,
                 )
 
-        # 11. Bắt IntegrityError (vi phạm unique/FK) — ví dụ race condition khi
-        #     hai request cùng tạo session trùng id, hoặc user bị xoá giữa chừng.
-        #     Chuyển thành exception nghiệp vụ phù hợp thay vì để lộ lỗi DB (500).
         except IntegrityError as exc:
             self._translate_session_integrity_error(exc)
 
-        # 12. Trả về kết quả cho tầng HTTP:
         return CredentialLoginResult(
             manager_user=manager_user,                  # manager_user: để router lấy thông tin (email, full_name, ...)
             user_session=user_session,                  # user_session: để router biết expires_at (tính expires_in)
