@@ -189,6 +189,10 @@ Implemented HTTP endpoints:
 - `GET|PATCH /api/v1/identity/roles/{role_id}`
 - `GET|PUT /api/v1/identity/roles/{role_id}/permissions`
 - `GET /api/v1/identity/permissions`
+- `GET /api/v1/catalog/regions` returns all regions ordered by ID
+- `GET /api/v1/catalog/categories` returns all POI categories ordered by ID
+- `GET /api/v1/catalog/languages` returns supported languages ordered by ID
+- `/api/v1/admin/catalog/languages` provides permission-protected language list/create/update/delete operations
 
 Language codes retain a database format check for two or three lowercase letters.
 The backend additionally validates that submitted codes really belong to ISO
