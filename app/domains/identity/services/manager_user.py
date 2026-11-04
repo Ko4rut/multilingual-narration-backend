@@ -56,15 +56,39 @@ class ManagerUserService:
         return self._require_manager_user(user_id)
 
     def list_manager_users(
-        self, *, offset: int = 0, limit: int = 20
+        self,
+        *,
+        offset: int = 0,
+        limit: int = 20,
+        search: str | None = None,
+        user_status: str | ManagerUserStatus | None = None,
     ) -> list[ManagerUserModel]:
-        """Liệt kê người dùng theo phân trang có giới hạn an toàn."""
+        """Liệt kê người dùng theo từ khóa, trạng thái và phân trang."""
 
         if offset < 0:
             raise ValueError("offset must be greater than or equal to 0")
         if not 1 <= limit <= 100:
             raise ValueError("limit must be between 1 and 100")
-        return self.manager_user_repository.get_all(offset=offset, limit=limit)
+
+        normalized_search = None
+        if search is not None:
+            normalized_search = search.strip()
+            if not normalized_search:
+                raise ValueError("search must not be empty")
+            if len(normalized_search) > 255:
+                raise ValueError("search must not exceed 255 characters")
+
+        normalized_status = (
+            self._normalize_user_status(user_status)
+            if user_status is not None
+            else None
+        )
+        return self.manager_user_repository.get_all(
+            offset=offset,
+            limit=limit,
+            search=normalized_search,
+            user_status=normalized_status,
+        )
 
     def create_manager_user(
         self,

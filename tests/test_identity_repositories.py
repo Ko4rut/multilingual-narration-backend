@@ -5,10 +5,29 @@ from sqlalchemy.orm import Session
 
 from app.domains.identity.models.user_session import UserSessionModel
 from app.domains.identity.repositories.permission import PermissionRepository
+from app.domains.identity.repositories.role import RoleRepository
 from app.domains.identity.repositories.user_session import UserSessionRepository
 
 
 NOW = datetime(2026, 10, 26, 8, 30, tzinfo=timezone.utc)
+
+
+def test_role_list_searches_identity_fields_and_escapes_wildcards():
+    session = MagicMock(spec=Session)
+    session.scalars.return_value = []
+    repository = RoleRepository(session)
+
+    result = repository.get_all(search="content%_")
+
+    assert result == []
+    statement = session.scalars.call_args.args[0]
+    statement_text = str(statement)
+    parameters = statement.compile().params
+    assert "role.id" in statement_text
+    assert "role.name" in statement_text
+    assert "role.description" in statement_text
+    assert "%content\\%\\_%" in parameters.values()
+    assert "ORDER BY role.name, role.id" in statement_text
 
 
 def test_permission_lookup_joins_role_function_and_action():

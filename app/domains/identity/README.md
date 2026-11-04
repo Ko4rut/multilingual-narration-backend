@@ -74,15 +74,15 @@ khoản sẽ làm Access Token mất hiệu lực ngay cả khi chữ ký JWT c�
 ## Route quản trị và RBAC
 
 Tất cả route dưới đây yêu cầu Bearer token hợp lệ và permission thuộc chức năng
-`User Management`; các path đều có prefix `/api/v1/identity`:
+`User Management`; các path đều có prefix `/api/v1`:
 
 | Method | Path | Permission | Mục đích |
 | --- | --- | --- | --- |
-| GET | `/manager-users` | `read` | Danh sách có phân trang |
+| GET | `/manager-users` | `read` | Danh sách có phân trang; `search` tìm theo ID/email/họ tên và `user_status` lọc `ACTIVE`/`INACTIVE` |
 | POST | `/manager-users` | `create` | Tạo tài khoản, băm mật khẩu |
 | GET | `/manager-users/{user_id}` | `read` | Chi tiết tài khoản |
 | PATCH | `/manager-users/{user_id}` | `update` | Sửa role, email, tên, trạng thái hoặc mật khẩu; đổi mật khẩu sẽ thu hồi mọi session |
-| GET | `/roles` | `read` | Danh sách role |
+| GET | `/roles` | `read` | Danh sách role; `search` tìm theo ID, tên hoặc mô tả |
 | POST | `/roles` | `create` | Tạo role cùng tập quyền ban đầu |
 | GET | `/roles/{role_id}` | `read` | Chi tiết role |
 | PATCH | `/roles/{role_id}` | `update` | Sửa tên hoặc mô tả role |

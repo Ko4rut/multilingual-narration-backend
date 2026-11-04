@@ -91,10 +91,12 @@ Copy-Item .env.example .env
 .\venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
-The default local `DATABASE_URL` uses PostgreSQL on host port `5433`. Inside
-Docker, services connect to `postgres:5432`. Identity login additionally requires
-`JWT_PRIVATE_KEY` and `JWT_PUBLIC_KEYS`; real keys must come from the deployment
-secret store and must not be committed to `.env` or source control.
+`DATABASE_URL`, `JWT_ACTIVE_KEY_ID`, `JWT_ISSUER` and `JWT_AUDIENCE` are required
+settings; `.env.example` provides local development values. The local database URL
+uses PostgreSQL on host port `5433`; inside Docker, services connect to
+`postgres:5432`. Identity login additionally requires `JWT_PRIVATE_KEY` and
+`JWT_PUBLIC_KEYS`; real keys must come from the deployment secret store and must
+not be committed to `.env` or source control.
 
 Schema changes are applied explicitly with Alembic and are never run at API startup.
 
@@ -178,12 +180,13 @@ constructor injection.
 Implemented HTTP endpoints:
 
 - `GET /health`
-- `POST /api/v1/identity/login`
-- `POST /api/v1/identity/refresh` using the HttpOnly Refresh Token cookie
-- `POST /api/v1/identity/logout`
-- `GET /api/v1/identity/me` with a Bearer Access Token
-- `GET|POST /api/v1/identity/manager-users`
-- `GET|PATCH /api/v1/identity/manager-users/{user_id}`; PATCH có thể đổi mật
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh` using the HttpOnly Refresh Token cookie
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/me` with a Bearer Access Token
+- `GET|POST /api/v1/manager-users`; GET hỗ trợ `search`,
+  `user_status=ACTIVE|INACTIVE`, `offset` và `limit`
+- `GET|PATCH /api/v1/manager-users/{user_id}`; PATCH có thể đổi mật
   khẩu, khi đó backend băm Argon2id và thu hồi toàn bộ session của tài khoản
 - `GET|POST /api/v1/identity/roles`
 - `GET|PATCH /api/v1/identity/roles/{role_id}`
