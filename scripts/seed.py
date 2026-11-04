@@ -132,6 +132,7 @@ def seed_identity(session: Session):
             "Build and publish downloadable offline content packages.",
         ),
         ("Listening Analytics", "Review listening activity and analytics."),
+        ("Language Management", "Manage the supported language catalog."),
     ]
     functions = {}
     for name, description in function_specs:
@@ -184,6 +185,7 @@ def seed_identity(session: Session):
         "User Management": ["create", "read", "update", "delete"],
         "Offline Package Management": ["create", "read", "update", "delete", "publish"],
         "Listening Analytics": ["read"],
+        "Language Management": ["read", "create", "update", "delete"],
     }
     permissions = {}
     for function_name, action_names in permission_matrix.items():
@@ -198,7 +200,11 @@ def seed_identity(session: Session):
             )
 
     role_grants = {
-        "System Administrator": list(permissions),
+        # Language permissions are provisioned as catalog entries only. Role
+        # assignment remains an explicit administrative decision.
+        "System Administrator": [
+            key for key in permissions if key[0] != "Language Management"
+        ],
         "Content Editor": [
             ("POI Management", "create"),
             ("POI Management", "read"),
@@ -321,11 +327,11 @@ def seed_identity(session: Session):
 
 def seed_catalog(session: Session):
     language_specs = [
-        ("vi", "Tiếng Việt", "active"),
-        ("en", "English", "active"),
-        ("ja", "日本語", "active"),
-        ("fr", "Français", "active"),
-        ("ko", "한국어", "active"),
+        ("vi", "Tiếng Việt", "SUPPORTED"),
+        ("en", "English", "SUPPORTED"),
+        ("ja", "日本語", "SUPPORTED"),
+        ("fr", "Français", "SUPPORTED"),
+        ("ko", "한국어", "SUPPORTED"),
     ]
     languages = {
         code: get_or_create(
