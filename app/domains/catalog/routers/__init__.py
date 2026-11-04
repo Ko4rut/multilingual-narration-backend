@@ -1,3 +1,3 @@
-from app.domains.catalog.routers.catalog import router
+from app.domains.catalog.routers.catalog import admin_router, get_catalog_service, router
 
-__all__ = ["router"]
+__all__ = ["admin_router", "get_catalog_service", "router"]

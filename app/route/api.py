@@ -5,6 +5,7 @@ from app.domains.identity.routers.identity import (
     role_router,
 )
 from app.domains.audit.routers import router as audit_router
+from app.domains.catalog.routers import admin_router as admin_catalog_router
 from app.domains.catalog.routers import router as catalog_router
 from app.domains.listening.routers import router as listening_router
 from app.domains.offline.routers import router as offline_router
@@ -22,6 +23,7 @@ api_router.include_router(audit_router)
 
 # Domain Catalog
 api_router.include_router(catalog_router)
+api_router.include_router(admin_catalog_router)
 
 # Domain POI
 api_router.include_router(poi_router)

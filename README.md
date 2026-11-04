@@ -188,10 +188,18 @@ Implemented HTTP endpoints:
   `user_status=ACTIVE|INACTIVE`, `offset` và `limit`
 - `GET|PATCH /api/v1/manager-users/{user_id}`; PATCH có thể đổi mật
   khẩu, khi đó backend băm Argon2id và thu hồi toàn bộ session của tài khoản
-- `GET|POST /api/v1/roles`; GET hỗ trợ `search` theo ID, tên hoặc mô tả
-- `GET|PATCH /api/v1/roles/{role_id}`
-- `GET|PUT /api/v1/roles/{role_id}/permissions`
-- `GET /api/v1/roles/permissions`
+- `GET|POST /api/v1/identity/roles`
+- `GET|PATCH /api/v1/identity/roles/{role_id}`
+- `GET|PUT /api/v1/identity/roles/{role_id}/permissions`
+- `GET /api/v1/identity/permissions`
+- `GET /api/v1/catalog/regions` returns all regions ordered by ID
+- `GET /api/v1/catalog/categories` returns all POI categories ordered by ID
+- `GET /api/v1/catalog/languages` returns supported languages ordered by ID
+- `/api/v1/admin/catalog/languages` provides permission-protected language list/create/update/delete operations
+
+Language codes retain a database format check for two or three lowercase letters.
+The backend additionally validates that submitted codes really belong to ISO
+639-1 or ISO 639-2 (including bibliographic and terminology variants).
 - `GET /api/v1/pois?offset=0&limit=20`
 - `GET /api/v1/pois/{poi_id}` where `poi_id` is a string such as
   `poi-010926-951c03a1`

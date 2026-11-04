@@ -135,8 +135,8 @@ def get_role_service(session: Annotated[Session, Depends(get_session, use_cache=
     )
 
 
-def require_user_management(action_name: str):
-    """Tạo dependency RBAC cho một hành động thuộc User Management."""
+def require_permission(function_name: str, action_name: str):
+    """Tạo dependency RBAC động cho một chức năng và hành động."""
 
     def check_permission(
         identity: Annotated[AuthenticatedIdentity, Depends(get_current_identity)],
@@ -144,7 +144,7 @@ def require_user_management(action_name: str):
     ) -> AuthenticatedIdentity:
         if not service.has_permission(
             identity.manager_user.id,
-            function_name="User Management",
+            function_name=function_name,
             action_name=action_name,
         ):
             raise HTTPException(
@@ -153,6 +153,12 @@ def require_user_management(action_name: str):
             )
         return identity
     return check_permission
+
+
+def require_user_management(action_name: str):
+    """Tạo dependency RBAC cho một hành động thuộc User Management."""
+
+    return require_permission("User Management", action_name)
 
 
 require_user_management_read = require_user_management("read")
