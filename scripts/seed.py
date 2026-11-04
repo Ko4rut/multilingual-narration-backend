@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import session_scope
+from app.domains.offline.utils.offline import make_package_key
 from app.models import (
     Action,
     AuditLog,
@@ -741,74 +742,43 @@ def seed_offline_packages(
     content_map,
     audio_map,
 ):
+    # Demonstration metadata only: example.local has no real audio/manifest.
+    # Real packages can be published only by the future verified build pipeline.
     package_specs = [
-        (
-            "hanoi-vi",
-            "HAN",
-            "vi",
-            None,
-            "published",
-            ["HAN-VAN-MIEU", "HAN-HO-GUOM"],
-        ),
-        (
-            "ninh-binh-en",
-            "NBI",
-            "en",
-            "NATURE",
-            "published",
-            ["NBI-TRANG-AN"],
-        ),
-        (
-            "hue-fr",
-            "HUE",
-            "fr",
-            "HISTORICAL",
-            "published",
-            ["HUE-DAI-NOI"],
-        ),
-        (
-            "da-nang-fr",
-            "DAD",
-            "fr",
-            None,
-            "published",
-            ["DAD-NGU-HANH-SON"],
-        ),
-        (
-            "ho-chi-minh-en",
-            "HCM",
-            "en",
-            "MUSEUM",
-            "published",
-            ["HCM-WAR-MUSEUM"],
-        ),
-        (
-            "can-tho-ko",
-            "CTO",
-            "ko",
-            "CULTURAL",
-            "building",
-            ["CTO-BINH-THUY"],
-        ),
+        ("HAN", "vi", None, "PUBLISHED", ["HAN-VAN-MIEU", "HAN-HO-GUOM"]),
+        ("NBI", "en", "NATURE", "PUBLISHED", ["NBI-TRANG-AN"]),
+        ("HUE", "fr", "HISTORICAL", "PUBLISHED", ["HUE-DAI-NOI"]),
+        ("DAD", "fr", None, "PUBLISHED", ["DAD-NGU-HANH-SON"]),
+        ("HCM", "en", "MUSEUM", "PUBLISHED", ["HCM-WAR-MUSEUM"]),
+        ("CTO", "ko", "CULTURAL", "BUILDING", ["CTO-BINH-THUY"]),
     ]
 
     for index, (
-        key,
         region_code,
         language_code,
         category_code,
         status,
         package_poi_codes,
     ) in enumerate(package_specs, start=1):
+        key = make_package_key(
+            region_code=regions[region_code].region_code,
+            language_code=languages[language_code].language_code,
+            category_code=(
+                categories[category_code].category_code if category_code else None
+            ),
+        )
         item_keys = [
             (poi_code, language_code, 1) for poi_code in package_poi_codes
         ]
-        total_size = sum(audio_map[item_key].audio_size for item_key in item_keys)
-        package_url = f"https://cdn.example.local/packages/{key}-v1.zip"
+        is_published = status == "PUBLISHED"
+        package_url = (
+            f"https://cdn.example.local/packages/{digest(key)[:16]}/v1/manifest.json"
+            if is_published else None
+        )
         package = get_or_create(
             session,
             OfflinePackage,
-            {"package_key": key, "package_version": 1},
+            {"package_key": key},
             {
                 "category_id": (
                     categories[category_code].id if category_code else None
@@ -817,16 +787,21 @@ def seed_offline_packages(
                 "language_id": languages[language_code].id,
                 "package_name": f"Gói ngoại tuyến {key}",
                 "package_url": package_url,
-                "total_size": total_size,
-                "package_checksum_sha256": digest(package_url),
+                "package_version": 1,
+                "total_size": (
+                    sum(audio_map[item_key].audio_size for item_key in item_keys)
+                    if is_published else None
+                ),
+                "package_checksum_sha256": (
+                    digest(package_url) if package_url else None
+                ),
                 "package_status": status,
                 "schema_version": 1,
                 "created_at": SEED_TIME + timedelta(days=45 + index),
                 "last_updated_at": SEED_TIME + timedelta(days=45 + index),
                 "published_at": (
                     SEED_TIME + timedelta(days=45 + index, hours=2)
-                    if status == "published"
-                    else None
+                    if is_published else None
                 ),
             },
         )
@@ -840,11 +815,11 @@ def seed_offline_packages(
                 OfflinePackageItem,
                 {
                     "package_id": package.id,
-                    "poi_id": pois[poi_code].id,
                     "poi_content_id": content.id,
-                    "audio_id": audio.id,
                 },
                 {
+                    "poi_id": pois[poi_code].id,
+                    "audio_id": audio.id,
                     "content_version": content_version,
                     "created_at": package.created_at,
                     "last_updated_at": package.last_updated_at,

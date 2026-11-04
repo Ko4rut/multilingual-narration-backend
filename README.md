@@ -44,6 +44,16 @@ PostgreSQL enum `manager_user_status` with `ACTIVE`/`INACTIVE` values, enforces
 session timestamp invariants, and adds indexes for session expiration and
 role-permission lookups.
 
+Revision `0006_offline_contract` aligns Group 3 with the database-design
+contract: one logical package per canonical filter key, nullable manifest
+metadata while building, BIGINT total size, package status enum, and
+package-item uniqueness by content. Migration preserves package/item IDs and
+existing URLs, normalizes legacy keys and status values, and fails if
+duplicate filters or content memberships require manual reconciliation.
+**Previously published manifests using legacy keys/ZIP URLs must be rebuilt
+and verified before being offered to mobile.** Seed URLs under
+`cdn.example.local` remain placeholders, not downloadable assets.
+
 ## Docker setup
 
 Copy the non-secret development defaults and start the complete stack:

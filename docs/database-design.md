@@ -884,6 +884,22 @@ Nhờ tách 3 tầng như vậy:
     - Dễ dàng cache, CDN, và kiểm tra toàn vẹn.
 ```
 
+[4.7] Điều kiện POI được đưa vào bản package phát hành
+
+```
+- Chỉ chọn POI có poi_status = active và thuộc đúng region/category của bộ filter.
+- Chỉ chọn phiên bản Poi_Content đang published theo language của package.
+- Content phải có Content_Audio tham chiếu đúng poi_content_id, với URL,
+  MIME type, kích thước, thời lượng và checksum hợp lệ; asset thực tế phải
+  truy cập được và được xác minh trước khi release.
+- Không đưa POI/content/audio không đạt điều kiện vào manifest PUBLISHED.
+- Package chỉ được PUBLISHED sau khi manifest và các asset được kiểm tra;
+  nếu rebuild thất bại, giữ nguyên bản PUBLISHED cũ.
+- Đây là cổng kiểm tra cho Group 3; Group 2 chịu trách nhiệm publish content
+  và cung cấp audio. Chế độ offline không tự động fallback sang tiếng Anh
+  khi không có nội dung đúng ngôn ngữ trong package.
+```
+
 ### 2.3.2 Offline_Package_Items
 
 **_[1] Ý nghĩa bảng (Description)_**
