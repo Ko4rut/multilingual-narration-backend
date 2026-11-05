@@ -75,6 +75,18 @@ duplicate filters or content memberships require manual reconciliation.
 and verified before being offered to mobile.** Seed URLs under
 `cdn.example.local` remain placeholders, not downloadable assets.
 
+Revision `0007_poi_schema_alignment` adds missing POI/Content/Audio constraints and
+indexes required by the merged POI management models: coordinate/radius and
+content status/version checks, the single PUBLISHED version per POI and
+language, the single audio per content, and audio BIGINT sizing. The migration
+refuses duplicate or otherwise invalid legacy data **before** schema changes
+instead of dropping records. For an existing database, back up and inspect
+any reported conflicting records; no volume reset is required.
+
+The narration query compares the `LanguageStatus.SUPPORTED` enum directly
+rather than applying `lower()` to a PostgreSQL enum. Language preflight uses
+SQL `trim()` so SQLite-based unit tests and PostgreSQL agree.
+
 ## Docker setup
 
 Copy the non-secret development defaults and start the complete stack:

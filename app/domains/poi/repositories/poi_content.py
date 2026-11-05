@@ -1,7 +1,7 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.domains.catalog.models.language import Language
+from app.domains.catalog.models.language import Language, LanguageStatus
 from app.domains.listening.models.listening_history import ListeningHistory
 from app.domains.offline.models.offline_package_item import OfflinePackageItem
 from app.domains.poi.models.poi_content import PoiContent
@@ -86,7 +86,7 @@ class PoiContentRepository:
             select(PoiContent).join(Language, Language.id == PoiContent.language_id).where(
                 PoiContent.poi_id == poi_id,
                 func.lower(Language.language_code) == language_code,
-                func.lower(Language.language_status).in_(("active", "supported")),
+                Language.language_status == LanguageStatus.SUPPORTED,
                 func.upper(PoiContent.content_status) == "PUBLISHED",
             ).order_by(PoiContent.content_version.desc(), PoiContent.id)
         ))
