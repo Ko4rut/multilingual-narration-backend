@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import argparse
+
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from hashlib import sha256
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.db import session_scope
+from app.domains.catalog.models.language import LanguageStatus
 from app.domains.offline.utils.offline import make_package_key
 from app.models import (
     Action,
@@ -326,13 +329,59 @@ def seed_identity(session: Session):
     return users
 
 
+def reconcile_legacy_language_statuses(session: Session) -> int:
+    """Explicit, pre-0005 migration repair for legacy language VARCHAR statuses.
+
+    Only known values are mapped: active/supported -> SUPPORTED and
+    unsupported -> UNSUPPORTED (case and surrounding whitespace ignored).
+    Unknown statuses are rejected rather than guessed. This uses Core SQL
+    because ORM Enum loading rejects old values such as 'active'.
+    Run via --reconcile-language-statuses BEFORE Alembic upgrade.
+    """
+    statuses = session.execute(
+        text("SELECT DISTINCT language_status FROM language")
+    ).scalars().all()
+    allowed = {"active", "supported", "unsupported"}
+    unknown = [
+        value for value in statuses
+        if value is None or value.strip().lower() not in allowed
+    ]
+    if unknown:
+        raise ValueError(
+            "Unknown language_status values: "
+            + ", ".join(repr(value) for value in unknown)
+            + ". Review these rows before retrying."
+        )
+    result = session.execute(
+        text(
+            """
+            UPDATE language
+            SET language_status = CASE
+                WHEN lower(btrim(language_status)) IN ('active', 'supported')
+                    THEN 'SUPPORTED'
+                ELSE 'UNSUPPORTED'
+            END
+            WHERE language_status <> CASE
+                WHEN lower(btrim(language_status)) IN ('active', 'supported')
+                    THEN 'SUPPORTED'
+                ELSE 'UNSUPPORTED'
+            END
+            """
+        )
+    )
+    return result.rowcount
+
+
 def seed_catalog(session: Session):
+    # Use the canonical LanguageStatus enum; avoid legacy "active" statuses.
+    # Existing supported/unsupported values are intentionally not overwritten:
+    # an administrator may have disabled a language after the initial seed.
     language_specs = [
-        ("vi", "Tiếng Việt", "SUPPORTED"),
-        ("en", "English", "SUPPORTED"),
-        ("ja", "日本語", "SUPPORTED"),
-        ("fr", "Français", "SUPPORTED"),
-        ("ko", "한국어", "SUPPORTED"),
+        ("vi", "Tiếng Việt", LanguageStatus.SUPPORTED),
+        ("en", "English", LanguageStatus.SUPPORTED),
+        ("ja", "日本語", LanguageStatus.SUPPORTED),
+        ("fr", "Français", LanguageStatus.SUPPORTED),
+        ("ko", "한국어", LanguageStatus.SUPPORTED),
     ]
     languages = {
         code: get_or_create(
@@ -929,5 +978,17 @@ def run_seed() -> None:
 
 
 if __name__ == "__main__":
-    run_seed()
-    print("Seed completed successfully.")
+    parser = argparse.ArgumentParser(description="Seed example narration data")
+    parser.add_argument(
+        "--reconcile-language-statuses",
+        action="store_true",
+        help="Convert known legacy language statuses before Alembic 0005; do not seed",
+    )
+    args = parser.parse_args()
+    if args.reconcile_language_statuses:
+        with session_scope() as session:
+            updated = reconcile_legacy_language_statuses(session)
+        print(f"Normalized {updated} legacy language rows.")
+    else:
+        run_seed()
+        print("Seed completed successfully.")
