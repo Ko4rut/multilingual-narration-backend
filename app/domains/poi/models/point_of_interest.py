@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -11,6 +11,13 @@ from app.core.database import Base
 
 class PointOfInterest(Base):
     __tablename__ = "point_of_interest"
+    __table_args__ = (
+        UniqueConstraint("poi_location", name="uq_point_of_interest_location"),
+        CheckConstraint("latitude BETWEEN -90 AND 90", name="ck_poi_latitude"),
+        CheckConstraint("longitude BETWEEN -180 AND 180", name="ck_poi_longitude"),
+        CheckConstraint("trigger_radius_meter > 0", name="ck_poi_radius"),
+        Index("ix_point_of_interest_coordinates", "latitude", "longitude"),
+    )
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     region_id: Mapped[str] = mapped_column(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -16,6 +16,21 @@ class PoiContent(Base):
             "language_id",
             "content_version",
             name="uq_poi_content_poi_language_version",
+        ),
+        CheckConstraint("content_version >= 1", name="ck_poi_content_version"),
+        CheckConstraint(
+            "upper(content_status) IN ('DRAFT', 'WAITING_APPROVAL', 'REJECTED', 'APPROVED', 'PUBLISHED', 'ARCHIVED')",
+            name="ck_poi_content_status",
+        ),
+        CheckConstraint("approved_at IS NULL OR approved_at >= created_at", name="ck_poi_content_approved_at"),
+        CheckConstraint(
+            "published_at IS NULL OR approved_at IS NULL OR published_at >= approved_at",
+            name="ck_poi_content_published_at",
+        ),
+        Index("ix_poi_content_distribution", "poi_id", "language_id", "content_status"),
+        Index(
+            "uq_poi_content_published_language", "poi_id", "language_id", unique=True,
+            postgresql_where=text("upper(content_status) = 'PUBLISHED'"),
         ),
     )
 

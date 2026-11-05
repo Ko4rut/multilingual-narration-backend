@@ -204,6 +204,18 @@ The backend additionally validates that submitted codes really belong to ISO
 - `GET /api/v1/pois/{poi_id}` where `poi_id` is a string such as
   `poi-010926-951c03a1`
 
+POI management endpoints are available under `/api/v1/admin/pois` with
+`POI Management` permissions. They support list/detail, create/update/status,
+guarded deletion, and region/category form options. Apply migration
+`0005_poi_management` before administrative writes. Contracts, architecture,
+GROUP 2 compatibility decisions and integration limits are documented in
+[the POI domain guide](app/domains/poi/README.md). Narration version/workflow APIs
+are available under `/api/v1/admin/poi-contents`, audio metadata under
+`/api/v1/admin/audios`, and online narration selection with English fallback at
+`GET /api/v1/pois/{poi_id}/narration`. Apply `0006_poi_content_audio` for narration
+and audio constraints. Storage/TTS, offline rebuild and audit integration remain
+pending. Frontend and other domains are unchanged.
+
 POI reads return only records with `poi_status = 'active'`. Identity models,
 repositories and management services exist. Passwords are hashed and verified
 with Argon2id in the Identity security layer, and RS256 Access Tokens can be signed
@@ -214,7 +226,7 @@ and binds the Access Token to the session through its `sid` claim. Refresh rotat
 logout revokes the session so its Access Tokens stop working immediately.
 Manager-user and role routes require the matching `User Management` permission
 (`read`, `create`, or `update`). Accounts are deactivated through `user_status`
-instead of hard-deleted. Nearby search, QR activation, narration selection, TTS,
+instead of hard-deleted. Nearby search, QR activation, TTS,
 listening ingestion, and offline package generation remain future use cases.
 
 ## Verification
