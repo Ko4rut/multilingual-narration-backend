@@ -99,27 +99,35 @@ class AuthenticationService:
         self.clock = clock
         self.id_factory = id_factory
 
+    def authenticate_credentials(
+        self, *, email: str, password: str
+    ) -> ManagerUserModel:
+        """Validate credentials without creating or mutating a session."""
+
+        manager_user = self.manager_user_repository.get_by_email(
+            normalize_email(email)
+        )
+        is_valid_password = self.password_hasher.verify_password(
+            password,
+            manager_user.password_hash if manager_user is not None else None,
+        )
+        if manager_user is None or not is_valid_password:
+            raise InvalidCredentials("Invalid email or password")
+        if manager_user.user_status != ACTIVE_USER_STATUS:
+            raise InactiveManagerUser("Manager user is inactive")
+        return manager_user
+
     def login(self, *, email: str, password: str) -> CredentialLoginResult:
         """Xác minh credential, tạo session rồi cấp cặp token."""
 
-        normalized_email = normalize_email(email)
         created_at = self.clock()
         try:
             with self.session.begin():
-                # Login là một write use case: transaction bắt đầu trước query
-                # đầu tiên và bao trọn việc xác minh user, tạo session và cập
-                # nhật thời điểm đăng nhập.
-                manager_user = self.manager_user_repository.get_by_email(
-                    normalized_email
+                # Login owns the transaction, including credential lookup and
+                # session persistence. Do not commit from authenticate_credentials.
+                manager_user = self.authenticate_credentials(
+                    email=email, password=password
                 )
-                is_valid_password = self.password_hasher.verify_password(
-                    password,
-                    manager_user.password_hash if manager_user is not None else None,
-                )
-                if manager_user is None or not is_valid_password:
-                    raise InvalidCredentials("Invalid email or password")
-                if manager_user.user_status != ACTIVE_USER_STATUS:
-                    raise InactiveManagerUser("Manager user is inactive")
 
                 issued_refresh_token = self.refresh_token_manager.issue_refresh_token()
                 user_session = UserSessionModel(
