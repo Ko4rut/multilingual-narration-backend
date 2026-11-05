@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -11,10 +11,12 @@ class OfflinePackageItem(Base):
     __table_args__ = (
         UniqueConstraint(
             "package_id",
-            "poi_id",
             "poi_content_id",
-            "audio_id",
-            name="uq_offline_package_item_payload",
+            name="uq_offline_package_item_package_content",
+        ),
+        CheckConstraint(
+            "content_version >= 1",
+            name="ck_offline_package_item_content_version_positive",
         ),
     )
 

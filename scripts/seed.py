@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import argparse
+
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from hashlib import sha256
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import select
+from sqlalchemy import Enum as SqlEnum, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.db import session_scope
+from app.domains.catalog.models.language import LanguageStatus
+from app.domains.offline.utils.offline import make_package_key
 from app.models import (
     Action,
     AuditLog,
@@ -325,13 +329,74 @@ def seed_identity(session: Session):
     return users
 
 
+def reconcile_legacy_language_statuses(session: Session) -> int:
+    """Explicit, pre-0005 migration repair for legacy language VARCHAR statuses.
+
+    Only known values are mapped: active/supported -> SUPPORTED and
+    unsupported -> UNSUPPORTED (case and surrounding whitespace ignored).
+    Unknown statuses are rejected rather than guessed. This uses Core SQL
+    because ORM Enum loading rejects old values such as 'active'.
+    Run via --reconcile-language-statuses BEFORE Alembic upgrade.
+    """
+    # Compose runs this before Alembic even on a completely empty volume.
+    # A missing table is expected until migration 0001 has created it.
+    inspector = inspect(session.get_bind())
+    if not inspector.has_table("language"):
+        return 0
+
+    # Migrations >=0005 already use the PostgreSQL enum. No legacy VARCHAR
+    # status can remain there; skip SQL designed for the pre-0005 schema.
+    status_column = next(
+        column for column in inspector.get_columns("language")
+        if column["name"] == "language_status"
+    )
+    if isinstance(status_column["type"], SqlEnum):
+        return 0
+
+    statuses = session.execute(
+        text("SELECT DISTINCT language_status FROM language")
+    ).scalars().all()
+    allowed = {"active", "supported", "unsupported"}
+    unknown = [
+        value for value in statuses
+        if value is None or value.strip().lower() not in allowed
+    ]
+    if unknown:
+        raise ValueError(
+            "Unknown language_status values: "
+            + ", ".join(repr(value) for value in unknown)
+            + ". Review these rows before retrying."
+        )
+    result = session.execute(
+        text(
+            """
+            UPDATE language
+            SET language_status = CASE
+                WHEN lower(btrim(language_status)) IN ('active', 'supported')
+                    THEN 'SUPPORTED'
+                ELSE 'UNSUPPORTED'
+            END
+            WHERE language_status <> CASE
+                WHEN lower(btrim(language_status)) IN ('active', 'supported')
+                    THEN 'SUPPORTED'
+                ELSE 'UNSUPPORTED'
+            END
+            """
+        )
+    )
+    return result.rowcount
+
+
 def seed_catalog(session: Session):
+    # Use the canonical LanguageStatus enum; avoid legacy "active" statuses.
+    # Existing supported/unsupported values are intentionally not overwritten:
+    # an administrator may have disabled a language after the initial seed.
     language_specs = [
-        ("vi", "Tiếng Việt", "SUPPORTED"),
-        ("en", "English", "SUPPORTED"),
-        ("ja", "日本語", "SUPPORTED"),
-        ("fr", "Français", "SUPPORTED"),
-        ("ko", "한국어", "SUPPORTED"),
+        ("vi", "Tiếng Việt", LanguageStatus.SUPPORTED),
+        ("en", "English", LanguageStatus.SUPPORTED),
+        ("ja", "日本語", LanguageStatus.SUPPORTED),
+        ("fr", "Français", LanguageStatus.SUPPORTED),
+        ("ko", "한국어", LanguageStatus.SUPPORTED),
     ]
     languages = {
         code: get_or_create(
@@ -741,74 +806,43 @@ def seed_offline_packages(
     content_map,
     audio_map,
 ):
+    # Demonstration metadata only: example.local has no real audio/manifest.
+    # Real packages can be published only by the future verified build pipeline.
     package_specs = [
-        (
-            "hanoi-vi",
-            "HAN",
-            "vi",
-            None,
-            "published",
-            ["HAN-VAN-MIEU", "HAN-HO-GUOM"],
-        ),
-        (
-            "ninh-binh-en",
-            "NBI",
-            "en",
-            "NATURE",
-            "published",
-            ["NBI-TRANG-AN"],
-        ),
-        (
-            "hue-fr",
-            "HUE",
-            "fr",
-            "HISTORICAL",
-            "published",
-            ["HUE-DAI-NOI"],
-        ),
-        (
-            "da-nang-fr",
-            "DAD",
-            "fr",
-            None,
-            "published",
-            ["DAD-NGU-HANH-SON"],
-        ),
-        (
-            "ho-chi-minh-en",
-            "HCM",
-            "en",
-            "MUSEUM",
-            "published",
-            ["HCM-WAR-MUSEUM"],
-        ),
-        (
-            "can-tho-ko",
-            "CTO",
-            "ko",
-            "CULTURAL",
-            "building",
-            ["CTO-BINH-THUY"],
-        ),
+        ("HAN", "vi", None, "PUBLISHED", ["HAN-VAN-MIEU", "HAN-HO-GUOM"]),
+        ("NBI", "en", "NATURE", "PUBLISHED", ["NBI-TRANG-AN"]),
+        ("HUE", "fr", "HISTORICAL", "PUBLISHED", ["HUE-DAI-NOI"]),
+        ("DAD", "fr", None, "PUBLISHED", ["DAD-NGU-HANH-SON"]),
+        ("HCM", "en", "MUSEUM", "PUBLISHED", ["HCM-WAR-MUSEUM"]),
+        ("CTO", "ko", "CULTURAL", "BUILDING", ["CTO-BINH-THUY"]),
     ]
 
     for index, (
-        key,
         region_code,
         language_code,
         category_code,
         status,
         package_poi_codes,
     ) in enumerate(package_specs, start=1):
+        key = make_package_key(
+            region_code=regions[region_code].region_code,
+            language_code=languages[language_code].language_code,
+            category_code=(
+                categories[category_code].category_code if category_code else None
+            ),
+        )
         item_keys = [
             (poi_code, language_code, 1) for poi_code in package_poi_codes
         ]
-        total_size = sum(audio_map[item_key].audio_size for item_key in item_keys)
-        package_url = f"https://cdn.example.local/packages/{key}-v1.zip"
+        is_published = status == "PUBLISHED"
+        package_url = (
+            f"https://cdn.example.local/packages/{digest(key)[:16]}/v1/manifest.json"
+            if is_published else None
+        )
         package = get_or_create(
             session,
             OfflinePackage,
-            {"package_key": key, "package_version": 1},
+            {"package_key": key},
             {
                 "category_id": (
                     categories[category_code].id if category_code else None
@@ -817,16 +851,21 @@ def seed_offline_packages(
                 "language_id": languages[language_code].id,
                 "package_name": f"Gói ngoại tuyến {key}",
                 "package_url": package_url,
-                "total_size": total_size,
-                "package_checksum_sha256": digest(package_url),
+                "package_version": 1,
+                "total_size": (
+                    sum(audio_map[item_key].audio_size for item_key in item_keys)
+                    if is_published else None
+                ),
+                "package_checksum_sha256": (
+                    digest(package_url) if package_url else None
+                ),
                 "package_status": status,
                 "schema_version": 1,
                 "created_at": SEED_TIME + timedelta(days=45 + index),
                 "last_updated_at": SEED_TIME + timedelta(days=45 + index),
                 "published_at": (
                     SEED_TIME + timedelta(days=45 + index, hours=2)
-                    if status == "published"
-                    else None
+                    if is_published else None
                 ),
             },
         )
@@ -840,11 +879,11 @@ def seed_offline_packages(
                 OfflinePackageItem,
                 {
                     "package_id": package.id,
-                    "poi_id": pois[poi_code].id,
                     "poi_content_id": content.id,
-                    "audio_id": audio.id,
                 },
                 {
+                    "poi_id": pois[poi_code].id,
+                    "audio_id": audio.id,
                     "content_version": content_version,
                     "created_at": package.created_at,
                     "last_updated_at": package.last_updated_at,
@@ -954,5 +993,17 @@ def run_seed() -> None:
 
 
 if __name__ == "__main__":
-    run_seed()
-    print("Seed completed successfully.")
+    parser = argparse.ArgumentParser(description="Seed example narration data")
+    parser.add_argument(
+        "--reconcile-language-statuses",
+        action="store_true",
+        help="Convert known legacy language statuses before Alembic 0005; do not seed",
+    )
+    args = parser.parse_args()
+    if args.reconcile_language_statuses:
+        with session_scope() as session:
+            updated = reconcile_legacy_language_statuses(session)
+        print(f"Normalized {updated} legacy language rows.")
+    else:
+        run_seed()
+        print("Seed completed successfully.")

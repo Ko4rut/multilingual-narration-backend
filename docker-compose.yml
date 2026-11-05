@@ -43,12 +43,16 @@ services:
 
   migrate:
     <<: *backend
+    # One-shot initialization: pre-0005 legacy statuses are normalized first.
+    # On a fresh volume the reconciliation step is a no-op (no language table).
     command:
-      [
-        "sh",
-        "-c",
-        "alembic upgrade head && alembic check && python -m scripts.seed",
-      ]
+      - sh
+      - -ec
+      - |
+        python -m scripts.seed --reconcile-language-statuses
+        alembic upgrade head
+        alembic check
+        python -m scripts.seed
     depends_on:
       postgres:
         condition: service_healthy
