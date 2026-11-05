@@ -87,8 +87,10 @@ docker compose up --build -d
 Compose starts the services in dependency order:
 
 1. `postgres` becomes healthy.
-2. `migrate` upgrades the schema, checks ORM/migration drift, and runs the
-   idempotent seed.
+2. `migrate` first reconciles known legacy Language status values when
+   the old VARCHAR column exists (no-op on an empty database or after
+   migration 0005), upgrades to Alembic head, checks ORM/migration drift,
+   then runs the idempotent seed.
 3. `api` starts only after migration and seed succeed.
 
 Default endpoints:
@@ -97,6 +99,23 @@ Default endpoints:
 - Swagger UI: http://localhost:8000/docs
 - Health check: http://localhost:8000/health
 - PostgreSQL host port: `5433`
+
+For a disposable **development** database, a full reset can be performed with:
+
+```bash
+docker compose down -v
+docker compose up --build -d
+docker compose ps
+docker compose logs --no-log-prefix migrate
+```
+
+`down -v` **permanently deletes the PostgreSQL named volume** and all
+previously stored data; do not use it for databases containing valuable
+records. For a normal code/schema update, only use
+`docker compose up --build -d`; the migration service upgrades the existing
+database in place. The seed populates **demo DB rows only**: audio and offline
+manifest URLs at `cdn.example.local` are not real uploaded media, and this
+workflow does not run offline package build/publish.
 
 Useful commands:
 
