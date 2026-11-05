@@ -43,7 +43,8 @@ STRING_ID_PREFIXES = {
     ManagementFunction: "func",
     Permission: "perm",
     PoiCategory: "cat",
-    Region: "region"
+    Region: "region",
+    Role: "role",
 }
 DATED_ID_PREFIXES = {
     ContentAudio: "audio",
@@ -54,7 +55,6 @@ DATED_ID_PREFIXES = {
     PoiContent: "cont",
     PointOfInterest: "poi",
     UserSession: "sess",
-    Role: "role"
 }
 
 
