@@ -17,6 +17,12 @@ def make_language_session():
     return engine
 
 
+def test_reconciliation_on_empty_docker_database_is_noop():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with Session(engine) as session:
+        assert reconcile_legacy_language_statuses(session) == 0
+
+
 def test_reconciliation_normalizes_known_legacy_values_and_is_idempotent():
     engine = make_language_session()
     with Session(engine) as session, session.begin():
