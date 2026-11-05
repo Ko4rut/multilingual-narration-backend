@@ -8,7 +8,7 @@ from hashlib import sha256
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import select, text
+from sqlalchemy import Enum as SqlEnum, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.db import session_scope
@@ -338,6 +338,21 @@ def reconcile_legacy_language_statuses(session: Session) -> int:
     because ORM Enum loading rejects old values such as 'active'.
     Run via --reconcile-language-statuses BEFORE Alembic upgrade.
     """
+    # Compose runs this before Alembic even on a completely empty volume.
+    # A missing table is expected until migration 0001 has created it.
+    inspector = inspect(session.get_bind())
+    if not inspector.has_table("language"):
+        return 0
+
+    # Migrations >=0005 already use the PostgreSQL enum. No legacy VARCHAR
+    # status can remain there; skip SQL designed for the pre-0005 schema.
+    status_column = next(
+        column for column in inspector.get_columns("language")
+        if column["name"] == "language_status"
+    )
+    if isinstance(status_column["type"], SqlEnum):
+        return 0
+
     statuses = session.execute(
         text("SELECT DISTINCT language_status FROM language")
     ).scalars().all()
