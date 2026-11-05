@@ -340,7 +340,7 @@ def reconcile_legacy_language_statuses(session: Session) -> int:
     """
     # Compose runs this before Alembic even on a completely empty volume.
     # A missing table is expected until migration 0001 has created it.
-    inspector = inspect(session.get_bind())
+    inspector = inspect(session.connection())
     if not inspector.has_table("language"):
         return 0
 
@@ -372,12 +372,12 @@ def reconcile_legacy_language_statuses(session: Session) -> int:
             """
             UPDATE language
             SET language_status = CASE
-                WHEN lower(btrim(language_status)) IN ('active', 'supported')
+                WHEN lower(trim(language_status)) IN ('active', 'supported')
                     THEN 'SUPPORTED'
                 ELSE 'UNSUPPORTED'
             END
             WHERE language_status <> CASE
-                WHEN lower(btrim(language_status)) IN ('active', 'supported')
+                WHEN lower(trim(language_status)) IN ('active', 'supported')
                     THEN 'SUPPORTED'
                 ELSE 'UNSUPPORTED'
             END
