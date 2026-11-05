@@ -44,6 +44,27 @@ PostgreSQL enum `manager_user_status` with `ACTIVE`/`INACTIVE` values, enforces
 session timestamp invariants, and adds indexes for session expiration and
 role-permission lookups.
 
+### Legacy Language status migration preparation
+
+For an existing pre-`0005` development database that still contains
+`language.language_status = 'active'`, inspect the statuses and back up the
+database first. With the correct database configured, run:
+
+```powershell
+python -m scripts.seed --reconcile-language-statuses
+python -m alembic upgrade head
+python -m scripts.seed
+```
+
+The explicit reconciliation command converts only recognized legacy values
+(`active`/`supported` → `SUPPORTED`, `unsupported` → `UNSUPPORTED`)
+without creating any seed records. Unknown statuses raise an error and require
+manual review. Do not use `alembic stamp head` to bypass migration checks.
+Normal seeding uses the `LanguageStatus` enum, preserves existing language
+statuses (including manually disabled languages), and only defaults
+new records to `SUPPORTED`. Ensure these commands point to the intended
+development/test database, not production.
+
 Revision `0006_offline_contract` aligns Group 3 with the database-design
 contract: one logical package per canonical filter key, nullable manifest
 metadata while building, BIGINT total size, package status enum, and
