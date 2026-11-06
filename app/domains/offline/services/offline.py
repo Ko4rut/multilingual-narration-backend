@@ -42,6 +42,10 @@ class OfflineRebuildPlan:
         return self.changes.changed
 
 
+class OfflinePackageNotFound(LookupError):
+    """The requested offline package is not visible or does not exist."""
+
+
 class OfflinePackageService:
     def __init__(
         self, session: Session, packages: OfflinePackageRepository,
@@ -275,3 +279,37 @@ class OfflinePackageService:
             package.total_size = None
             self.session.flush()
         return package
+
+    def list_published_packages(
+        self, *, region_id: str | None = None, language_id: str | None = None,
+        category_id: str | None = None, offset: int = 0, limit: int = 20,
+    ) -> list[OfflinePackage]:
+        """Public mobile catalog: only packages with published manifests."""
+        return self.packages.list_published(
+            region_id=region_id, language_id=language_id,
+            category_id=category_id, offset=offset, limit=limit,
+        )
+
+    def get_published_package(self, package_id: str) -> OfflinePackage:
+        package = self.packages.get_by_id(package_id)
+        if (
+            package is None
+            or package.package_status is not OfflinePackageStatus.PUBLISHED
+            or not package.package_url
+            or not package.package_checksum_sha256
+        ):
+            raise OfflinePackageNotFound("Offline package not found")
+        return package
+
+    def list_admin_packages(self, *, offset: int = 0, limit: int = 20) -> list[OfflinePackage]:
+        return self.packages.list_all(offset=offset, limit=limit)
+
+    def get_admin_package(self, package_id: str) -> OfflinePackage:
+        package = self.packages.get_by_id(package_id)
+        if package is None:
+            raise OfflinePackageNotFound("Offline package not found")
+        return package
+
+    def get_admin_package_items(self, package_id: str) -> list[OfflinePackageItem]:
+        self.get_admin_package(package_id)
+        return self.items.list_by_package(package_id)

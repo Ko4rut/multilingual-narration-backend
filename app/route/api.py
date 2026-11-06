@@ -8,6 +8,7 @@ from app.domains.audit.routers import router as audit_router
 from app.domains.catalog.routers import admin_router as admin_catalog_router
 from app.domains.catalog.routers import router as catalog_router
 from app.domains.listening.routers import router as listening_router
+from app.domains.offline.routers import admin_router as offline_admin_router
 from app.domains.offline.routers import router as offline_router
 from app.domains.poi.routers import router as poi_router
 from app.domains.poi.routers import admin_router as poi_admin_router
@@ -39,4 +40,5 @@ api_router.include_router(listening_router)
 
 # Domain Offline
 api_router.include_router(offline_router)
+api_router.include_router(offline_admin_router)
 

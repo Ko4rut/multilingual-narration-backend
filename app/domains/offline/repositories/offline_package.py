@@ -46,3 +46,13 @@ class OfflinePackageRepository:
 
     def add(self, package: OfflinePackage) -> None:
         self.session.add(package)
+
+    def list_all(self, *, offset: int = 0, limit: int = 20) -> list[OfflinePackage]:
+        """Admin-only listing; authorization happens at the HTTP boundary."""
+        if offset < 0 or not 1 <= limit <= 100:
+            raise ValueError("Invalid package pagination")
+        return list(self.session.scalars(
+            select(OfflinePackage)
+            .order_by(OfflinePackage.package_key, OfflinePackage.id)
+            .offset(offset).limit(limit)
+        ))
