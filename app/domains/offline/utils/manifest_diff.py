@@ -165,3 +165,14 @@ def compare_manifests(
                 continue
             missing.append(asset)
     return ManifestChanges(added, removed, updated, tuple(missing), metadata_changed)
+
+def manifest_assets(document: dict[str, Any]) -> tuple[AssetDownload, ...]:
+    """All distinct assets in a proposed snapshot, for release-time verification."""
+    seen: set[tuple[str, str]] = set()
+    result: list[AssetDownload] = []
+    for asset in _asset_refs(document):
+        identity = (asset.kind, asset.sha256 or asset.url)
+        if identity not in seen:
+            seen.add(identity)
+            result.append(asset)
+    return tuple(result)
