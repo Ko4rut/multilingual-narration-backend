@@ -79,3 +79,50 @@ class OfflinePackageItemRepository:
         if len({item.poi_content_id for item in items}) != len(items):
             raise ValueError("Duplicate content membership in offline package")
         self.session.add_all(items)
+
+    def sync_membership(
+        self, *, package_id: str, candidates: list[OfflineCandidate],
+        updated_at,
+    ) -> None:
+        """Synchronize current package membership, preserving unchanged item IDs.
+
+        Call only after the complete new manifest and assets have been
+        externally verified, inside the service's locked publication transaction.
+        Never delete the referenced POI, Content, Audio or physical asset.
+        """
+        existing = {item.poi_content_id: item for item in self.list_by_package(package_id)}
+        selected = {candidate.content.id: candidate for candidate in candidates}
+        if len(selected) != len(candidates):
+            raise ValueError("Duplicate content in package candidates")
+        if len({candidate.poi.id for candidate in candidates}) != len(candidates):
+            raise ValueError("Duplicate POI in package candidates")
+        for content_id, item in existing.items():
+            if content_id not in selected:
+                self.session.delete(item)
+        for content_id, candidate in selected.items():
+            item = existing.get(content_id)
+            if item is None:
+                from datetime import datetime
+                from secrets import token_hex
+
+                item = OfflinePackageItem(
+                    id=f"pack-item-{updated_at:%d%m%y}-{token_hex(4)}",
+                    package_id=package_id,
+                    poi_id=candidate.poi.id,
+                    poi_content_id=content_id,
+                    audio_id=candidate.audio.id,
+                    content_version=candidate.content.content_version,
+                    created_at=updated_at,
+                    last_updated_at=updated_at,
+                )
+                self.session.add(item)
+                continue
+            if (
+                item.poi_id != candidate.poi.id
+                or item.audio_id != candidate.audio.id
+                or item.content_version != candidate.content.content_version
+            ):
+                item.poi_id = candidate.poi.id
+                item.audio_id = candidate.audio.id
+                item.content_version = candidate.content.content_version
+                item.last_updated_at = updated_at
