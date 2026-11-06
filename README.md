@@ -335,13 +335,28 @@ audio URL/checksum, or POI eligibility is detected even when item IDs are
 unchanged. An unchanged snapshot produces no manifest and no version bump.
 No extra SHA columns or database tables are needed.
 
-**This is comparison/planning only**: it does not update package membership,
-publish a manifest, verify remote asset bytes, or automatically trigger on
-POI changes. A later publish service must upload and verify the new immutable
-manifest and referenced assets, recheck version/data to prevent stale writes,
-and swap membership/version/URL in one transaction. Old PUBLISHED snapshots
-must remain available during rebuild. Passing the current ORM rows as the
-baseline would miss mutations in place.
+The rebuild workflow is split into two explicit phases:
+
+1. `plan_rebuild(...)` compares current database rows to previously published,
+   SHA-verified manifest bytes without changing the database. If unchanged,
+   it returns `manifest=None`, no version increment, and no downloads.
+2. Upload the new manifest to an immutable URL and verify actual audio/image
+   bytes in external storage. After successful checks,
+   `publish_verified_rebuild(plan=..., published_manifest=...,
+   manifest_url=..., verify_manifest=..., verify_asset=...)` validates all
+   asset checksums, reloads/locks the package, checks its expected version,
+   reconstructs the snapshot from current rows, rejects stale plans, and
+   synchronizes membership while updating URL/checksum/version in **one DB
+   transaction**. Unchanged item IDs/timestamps are preserved.
+
+**Storage verification and automatic scheduling are not implemented**.
+Trusted server-side verifier callbacks must be supplied by a later storage
+integration; neither user input nor a successful upload alone proves
+manifest/resource integrity. PostgreSQL/source changes occurring during
+publication still require transaction/concurrency integration tests and
+possibly stronger source locking. Keep old immutable manifest URLs and assets
+accessible to clients already on the previous version. This design needs
+no additional fingerprint columns or tables.
 
 ## Verification
 
