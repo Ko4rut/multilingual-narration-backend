@@ -358,6 +358,37 @@ possibly stronger source locking. Keep old immutable manifest URLs and assets
 accessible to clients already on the previous version. This design needs
 no additional fingerprint columns or tables.
 
+## Group 3 HTTP endpoints (visible in Swagger)
+
+The Offline routers are registered under `/api/v1`. After pulling this branch
+and rebuilding the API image, open `http://localhost:8000/docs` and expand
+**Offline Packages** or **Offline Package Management**.
+
+| Method | Path | Access | Contract |
+| --- | --- | --- | --- |
+| GET | `/api/v1/offline/packages` | Public | Published package list (filter by region/language/category IDs; paginate) |
+| GET | `/api/v1/offline/packages/{package_id}` | Public | Published package metadata including manifest URL/checksum |
+| GET | `/api/v1/admin/offline/packages` | Offline Package Management: read | All statuses |
+| GET | `/api/v1/admin/offline/packages/{package_id}` | Offline Package Management: read | Package detail |
+| GET | `/api/v1/admin/offline/packages/{package_id}/items` | Offline Package Management: read | Stored package memberships |
+| POST | `/api/v1/admin/offline/packages/prepare` | Offline Package Management: create | Create BUILDING package and return a **nonpublished** manifest preview |
+| POST | `/api/v1/admin/offline/packages/{package_id}/rebuild/preview` | Offline Package Management: update | Compare against exact UTF-8 published manifest text, checksum-validated against the DB; read-only |
+
+All administrative endpoints require a valid Bearer JWT and matching RBAC
+permission, seeded under `Offline Package Management`. The public endpoints
+never expose BUILDING or FAILED packages. No `publish` API is exposed yet:
+real asset/manifest storage and integrity-verification adapters must be added
+first; client-provided flags must not bypass publication checks. Current
+`cdn.example.local` seed URLs are placeholders and not real downloadable
+assets. The preview endpoint receives exact JSON text rather than a parsed
+object so its published SHA-256 can be validated against stored bytes.
+
+Run the route tests without touching PostgreSQL:
+
+```powershell
+python -m pytest tests/test_offline_api.py -q -p no:cacheprovider
+```
+
 ## Verification
 
 ```powershell
