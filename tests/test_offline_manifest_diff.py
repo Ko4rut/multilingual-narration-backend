@@ -205,3 +205,113 @@ def test_plan_rebuild_refuses_unpublished_or_untrusted_baseline():
     with pytest.raises(InvalidOfflineManifest, match="SHA-256"):
         service.plan_rebuild(package_id="pack-1", published_manifest=baseline + b" ")
     items.select_candidates.assert_not_called()
+
+def test_verified_publish_updates_snapshot_only_after_verification():
+    old_candidate = sample_candidate()
+    new_candidate = sample_candidate()
+    new_candidate.content.narration_script = "Updated narration"
+    service, packages, items, baseline = plan_service([new_candidate])
+    proposed = service.plan_rebuild(package_id="pack-1", published_manifest=baseline)
+    assert proposed.needs_rebuild
+
+    package = packages.get_by_id.return_value
+    package.last_updated_at = NOW
+    package.published_at = NOW
+    package.total_size = 2048
+
+    verified_urls = []
+    def verify_asset(asset):
+        verified_urls.append(asset.url)
+        return True
+
+    result = service.publish_verified_rebuild(
+        plan=proposed,
+        published_manifest=baseline,
+        manifest_url="https://storage.example.local/region-HAN/vi/v2/manifest.json",
+        verify_manifest=lambda url, payload: bool(url) and payload == proposed.manifest,
+        verify_asset=verify_asset,
+    )
+    assert result.package_version == 2
+    assert result.package_status is OfflinePackageStatus.PUBLISHED
+    assert result.package_checksum_sha256 == sha256(proposed.manifest).hexdigest()
+    assert result.package_url.endswith("/v2/manifest.json")
+    assert result.total_size is None
+    assert len(verified_urls) == 2
+    items.sync_membership.assert_called_once()
+    assert items.sync_membership.call_args.kwargs["package_id"] == "pack-1"
+
+
+def test_failed_asset_verification_keeps_published_version_and_membership():
+    candidate = sample_candidate()
+    candidate.content.narration_script = "Different"
+    service, packages, items, baseline = plan_service([candidate])
+    proposed = service.plan_rebuild(package_id="pack-1", published_manifest=baseline)
+    package = packages.get_by_id.return_value
+    with pytest.raises(OfflinePackagePreparationError, match="Asset verification"):
+        service.publish_verified_rebuild(
+            plan=proposed, published_manifest=baseline,
+            manifest_url="https://storage.example.local/v2/manifest.json",
+            verify_manifest=lambda *_: True,
+            verify_asset=lambda asset: False,
+        )
+    assert package.package_version == 1
+    items.sync_membership.assert_not_called()
+
+
+def test_stale_published_version_rejected_after_verified_upload():
+    candidate = sample_candidate()
+    candidate.content.narration_script = "Different"
+    service, packages, items, baseline = plan_service([candidate])
+    proposed = service.plan_rebuild(package_id="pack-1", published_manifest=baseline)
+    packages.get_by_id.return_value.package_version = 2
+    with pytest.raises(OfflinePackagePreparationError, match="changed"):
+        service.publish_verified_rebuild(
+            plan=proposed, published_manifest=baseline,
+            manifest_url="https://storage.example.local/v2/manifest.json",
+            verify_manifest=lambda *_: True, verify_asset=lambda _: True,
+        )
+    items.sync_membership.assert_not_called()
+
+
+def test_stale_source_rejected_after_verified_upload():
+    candidate = sample_candidate()
+    candidate.content.narration_script = "Different"
+    service, packages, items, baseline = plan_service([candidate])
+    proposed = service.plan_rebuild(package_id="pack-1", published_manifest=baseline)
+    candidate.content.narration_script = "Changed again while uploading"
+    with pytest.raises(OfflinePackagePreparationError, match="Source data changed"):
+        service.publish_verified_rebuild(
+            plan=proposed, published_manifest=baseline,
+            manifest_url="https://storage.example.local/v2/manifest.json",
+            verify_manifest=lambda *_: True, verify_asset=lambda _: True,
+        )
+    assert packages.get_by_id.return_value.package_version == 1
+    items.sync_membership.assert_not_called()
+
+
+def test_sync_membership_keeps_unchanged_rows_and_removes_stale_rows():
+    from app.domains.offline.repositories.offline_package_item import (
+        OfflinePackageItemRepository,
+    )
+    session = MagicMock(spec=Session)
+    changed = SimpleNamespace(
+        id="item-1", package_id="pack-1", poi_id="poi-1",
+        poi_content_id="cont-1", audio_id="old-audio",
+        content_version=1, last_updated_at=NOW,
+    )
+    removed = SimpleNamespace(
+        id="item-2", package_id="pack-1", poi_id="poi-2",
+        poi_content_id="cont-2", audio_id="audio-cont-2",
+        content_version=2, last_updated_at=NOW,
+    )
+    repository = OfflinePackageItemRepository(session)
+    repository.list_by_package = lambda _: [changed, removed]
+    repository.sync_membership(
+        package_id="pack-1", candidates=[sample_candidate()],
+        updated_at=NOW,
+    )
+    assert changed.id == "item-1"
+    assert changed.audio_id == "audio-cont-1"
+    assert changed.content_version == 2
+    session.delete.assert_called_once_with(removed)
+    session.add.assert_not_called()
