@@ -1,5 +1,6 @@
 """Initial offline-package staging use case (no publication or file upload)."""
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from secrets import token_hex
 
@@ -14,10 +15,28 @@ from app.domains.offline.repositories.offline_package import OfflinePackageRepos
 from app.domains.offline.repositories.offline_package_item import OfflinePackageItemRepository
 from app.domains.offline.utils.offline import make_package_key
 from app.domains.offline.utils.manifest import manifest_bytes
+from app.domains.offline.utils.manifest_diff import (
+    ManifestChanges, compare_manifests, load_manifest,
+    validate_published_manifest,
+)
 
 
 class OfflinePackagePreparationError(ValueError):
     """Filters are unknown, unsupported or already staged/published."""
+
+
+@dataclass(frozen=True)
+class OfflineRebuildPlan:
+    """A read-only proposed next snapshot: nothing was published or overwritten."""
+    package_id: str
+    expected_version: int
+    expected_checksum: str
+    manifest: bytes | None
+    changes: ManifestChanges
+
+    @property
+    def needs_rebuild(self) -> bool:
+        return self.changes.changed
 
 
 class OfflinePackageService:
@@ -105,3 +124,59 @@ class OfflinePackageService:
                 candidates=candidates, generated_at=now,
             )
         return package, manifest
+
+    def plan_rebuild(
+        self, *, package_id: str, published_manifest: bytes,
+    ) -> OfflineRebuildPlan:
+        """Compare an immutable published snapshot to the current database.
+
+        Does not mutate package or items. Callers must fetch manifest bytes from
+        trusted storage using package_url; checking the stored SHA-256 prevents
+        a changed/forged baseline. generated_at/version are intentionally
+        excluded from change detection. Asset URLs are not fetched here.
+        """
+        with self.session.begin():
+            package = self.packages.get_by_id(package_id)
+            if package is None or package.package_status is not OfflinePackageStatus.PUBLISHED:
+                raise OfflinePackagePreparationError("Only published packages can be compared")
+            if not package.package_url or not package.package_checksum_sha256:
+                raise OfflinePackagePreparationError("Published package lacks manifest metadata")
+            region = self.session.get(Region, package.region_id)
+            language = self.session.get(Language, package.language_id)
+            category = self.session.get(PoiCategory, package.category_id) if package.category_id else None
+            if region is None or language is None or (package.category_id and category is None):
+                raise OfflinePackagePreparationError("Package has invalid filter references")
+            if language.language_status is not LanguageStatus.SUPPORTED:
+                raise OfflinePackagePreparationError("Language must be SUPPORTED")
+
+            old_manifest = validate_published_manifest(
+                published_manifest,
+                expected_checksum=package.package_checksum_sha256,
+                expected_key=package.package_key,
+                expected_version=package.package_version,
+                expected_schema_version=package.schema_version,
+            )
+            candidates = self.items.select_candidates(
+                region_id=package.region_id,
+                language_id=package.language_id,
+                category_id=package.category_id,
+            )
+            # Empty results are valid for a rebuild: deleting/deactivating
+            # the last POI must cause a removal, not preserve stale content.
+            new_bytes = manifest_bytes(
+                package_key=package.package_key,
+                package_version=package.package_version + 1,
+                region_code=region.region_code,
+                language_code=language.language_code,
+                category_code=category.category_code if category else None,
+                candidates=candidates,
+                generated_at=datetime.now(timezone.utc),
+            )
+            changes = compare_manifests(old_manifest, load_manifest(new_bytes))
+            return OfflineRebuildPlan(
+                package_id=package.id,
+                expected_version=package.package_version,
+                expected_checksum=package.package_checksum_sha256,
+                manifest=new_bytes if changes.changed else None,
+                changes=changes,
+            )
