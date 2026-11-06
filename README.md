@@ -322,6 +322,27 @@ local snapshot. No English fallback is applied inside an offline package.
 python -m pytest tests/test_offline_repository.py -q -p no:cacheprovider
 ```
 
+### Comparing a published manifest to current POI data
+
+`OfflinePackageService.plan_rebuild(package_id=..., published_manifest=...)`
+reads and validates the **immutable published manifest bytes** against
+`offline_package.package_checksum_sha256`, then queries the current
+POI/content/audio data for the same filters. It compares canonical item
+contents, excluding only `generated_at` and `package_version`, and
+returns POI IDs added/removed/updated plus asset URLs whose checksums are
+not present in the previous manifest. Changing coordinates, title, script,
+audio URL/checksum, or POI eligibility is detected even when item IDs are
+unchanged. An unchanged snapshot produces no manifest and no version bump.
+No extra SHA columns or database tables are needed.
+
+**This is comparison/planning only**: it does not update package membership,
+publish a manifest, verify remote asset bytes, or automatically trigger on
+POI changes. A later publish service must upload and verify the new immutable
+manifest and referenced assets, recheck version/data to prevent stale writes,
+and swap membership/version/URL in one transaction. Old PUBLISHED snapshots
+must remain available during rebuild. Passing the current ORM rows as the
+baseline would miss mutations in place.
+
 ## Verification
 
 ```powershell
