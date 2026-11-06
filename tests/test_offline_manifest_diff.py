@@ -1,7 +1,6 @@
 """Change detection tests: no extra hashes, DB migrations, or external storage."""
 
 import json
-from dataclasses import replace
 from hashlib import sha256
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -20,7 +19,33 @@ from app.domains.offline.utils.manifest_diff import (
     InvalidOfflineManifest, compare_manifests, load_manifest,
     validate_published_manifest,
 )
-from tests.test_offline_repository import NOW, sample_candidate
+from datetime import datetime, timezone
+from decimal import Decimal
+
+NOW = datetime(2026, 11, 6, 10, 0, tzinfo=timezone.utc)
+
+
+def sample_candidate(*, poi_id="poi-1", content_id="cont-1"):
+    poi = SimpleNamespace(
+        id=poi_id, region_id="region-1", poi_name="Hồ Gươm",
+        poi_location="Hà Nội", latitude=Decimal("21.030000"),
+        longitude=Decimal("105.850000"),
+        trigger_radius_meter=Decimal("50.00"),
+        poi_image_url="https://cdn.example.local/img.jpg",
+        image_checksum_sha256="a" * 64,
+    )
+    content = SimpleNamespace(
+        id=content_id, poi_id=poi.id, language_id="lang-vi",
+        content_version=2, narration_title="Hồ Gươm",
+        narration_script="Giới thiệu hồ Gươm",
+    )
+    audio = SimpleNamespace(
+        id="audio-" + content_id, poi_content_id=content.id,
+        audio_url="https://cdn.example.local/audio.mp3",
+        audio_size=2048, audio_duration_sec=15,
+        audio_mime_type="audio/mpeg", audio_checksum_sha256="b" * 64,
+    )
+    return OfflineCandidate(poi=poi, content=content, audio=audio)
 
 
 def manifest(candidates, *, version=1):
