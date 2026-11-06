@@ -23,11 +23,13 @@ def manifest_bytes(
 
     items = []
     seen_content_ids: set[str] = set()
+    seen_poi_ids: set[str] = set()
     for candidate in sorted(candidates, key=lambda c: (c.poi.id, c.content.id)):
         poi, content, audio = candidate.poi, candidate.content, candidate.audio
-        if content.id in seen_content_ids:
-            raise ValueError("Duplicate content in manifest")
+        if content.id in seen_content_ids or poi.id in seen_poi_ids:
+            raise ValueError("Duplicate POI or content in manifest")
         seen_content_ids.add(content.id)
+        seen_poi_ids.add(poi.id)
         if content.poi_id != poi.id or audio.poi_content_id != content.id:
             raise ValueError("Inconsistent POI/content/audio references")
         if content.content_version < 1 or audio.audio_size <= 0:
