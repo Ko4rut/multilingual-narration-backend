@@ -291,6 +291,37 @@ Manager-user and role routes require the matching `User Management` permission
 instead of hard-deleted. Nearby search, QR activation, TTS,
 listening ingestion, and offline package generation remain future use cases.
 
+## Group 3 — first-build offline package staging
+
+The new `feature/group3-offline-package-manifest-20261106` branch introduces
+`OfflinePackageRepository` and `OfflinePackageItemRepository`, plus
+`OfflinePackageService.prepare_initial_package()`. It selects active POIs in
+the requested region and optional category, with exactly the requested
+SUPPORTED language, PUBLISHED narration and valid audio **metadata**.
+It inserts a new logical `offline_package` and its `offline_package_item`
+membership in **one service-owned transaction**. It returns deterministic
+UTF-8 manifest JSON bytes with POI/narration/audio/image metadata.
+
+This is an internal staging service, **not an HTTP API or a live download**.
+It intentionally leaves the package `BUILDING` with no manifest URL/checksum
+and no `published_at`. Before a package can be marked `PUBLISHED`, a later
+release workflow must validate actual asset bytes/URLs, write manifest bytes
+to immutable accessible storage, verify their SHA-256, and atomically
+commit URL/checksum/version/membership. Currently the schema does not store
+image sizes, so `total_size` stays NULL rather than claiming an incorrect
+byte count. Rebuilds must stage separately and keep previously published
+packages intact. The seed's `cdn.example.local` URLs are placeholders.
+
+The mobile flow after release will be:
+fetch published package metadata → GET immutable manifest URL → verify
+manifest checksum → compare each asset checksum to the device cache →
+download missing audio/images and validate SHA-256 → activate the new
+local snapshot. No English fallback is applied inside an offline package.
+
+```powershell
+python -m pytest tests/test_offline_repository.py -q -p no:cacheprovider
+```
+
 ## Verification
 
 ```powershell
