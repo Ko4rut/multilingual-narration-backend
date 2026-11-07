@@ -100,7 +100,7 @@ def test_read_detects_corrupt_bytes_and_missing_file(tmp_path):
 def test_storage_failure_aborts_staging_transaction():
     """The service writes within its transaction, before leaving the context."""
     from unittest.mock import MagicMock
-    from tests.test_offline_repository import make_service
+    from test_offline_repository import make_service
     storage = MagicMock()
     storage.save_staged.side_effect = OSError("disk full")
     service, session, _, _ = make_service()
