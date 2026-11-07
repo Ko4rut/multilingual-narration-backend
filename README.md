@@ -358,6 +358,54 @@ possibly stronger source locking. Keep old immutable manifest URLs and assets
 accessible to clients already on the previous version. This design needs
 no additional fingerprint columns or tables.
 
+### Persistent local manifest staging storage
+
+Calling `POST /api/v1/admin/offline/packages/prepare` now **also writes**
+the generated UTF-8 manifest to immutable local storage. The returned JSON
+preview is unchanged, and the package deliberately stays `BUILDING` with
+`package_url = NULL` and `package_checksum_sha256 = NULL` until actual assets
+and the uploaded manifest have been verified in the future publish workflow.
+
+Directory layout:
+
+```text
+offline-manifests/
+  staging/
+    pack-071126-1234abcd/
+      v1/
+        manifest.json
+```
+
+For Docker Compose the API service mounts a persistent named volume
+`offline-manifests` at `/var/lib/mnr/offline-manifests`. The Docker image
+creates that directory owned by the unprivileged `app` user. This storage is
+**not** PostgreSQL's `postgres-data` volume. To inspect after preparing a
+package:
+
+```powershell
+docker compose exec api ls -R /var/lib/mnr/offline-manifests/staging
+```
+
+For local Uvicorn, set `OFFLINE_MANIFEST_DIR` in `.env` (the example points
+to `var/offline/manifests` under the backend working directory). Generated
+local files are Git-ignored.
+
+The `FileSystemManifestStorage` adapter in
+`app/domains/offline/storage/manifest.py` validates manifest JSON/version,
+calculates SHA-256, writes through a temporary file and atomic no-overwrite
+link, supports idempotent retries of identical bytes, and provides an internal
+checksum-validating reader. Different bytes at the same package/version path
+are rejected. No staging directory is mounted publicly: these files are
+**not downloadable by mobile yet**. A future publish workflow will verify
+the real referenced audio/image URLs and expose only published snapshots,
+preserving older published versions. A DB failure after staging may leave
+an inaccessible/orphan staged file; never delete the volume to recover it.
+No migration or extra SHA column is required.
+
+```powershell
+python -m pytest tests/test_offline_manifest_storage.py -q -p no:cacheprovider
+```
+
 ## Group 3 HTTP endpoints (visible in Swagger)
 
 The Offline routers are registered under `/api/v1`. After pulling this branch

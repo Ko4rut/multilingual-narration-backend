@@ -1,0 +1,1 @@
+"""Offline manifest storage adapters."""

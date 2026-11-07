@@ -1,4 +1,4 @@
-"""Initial offline-package staging use case (no publication or file upload)."""
+"""Offline-package staging and guarded rebuild publication service."""
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -16,6 +16,7 @@ from app.domains.offline.models.offline_package import OfflinePackage, OfflinePa
 from app.domains.offline.models.offline_package_item import OfflinePackageItem
 from app.domains.offline.repositories.offline_package import OfflinePackageRepository
 from app.domains.offline.repositories.offline_package_item import OfflinePackageItemRepository
+from app.domains.offline.storage.manifest import FileSystemManifestStorage
 from app.domains.offline.utils.offline import make_package_key
 from app.domains.offline.utils.manifest import manifest_bytes
 from app.domains.offline.utils.manifest_diff import (
@@ -50,10 +51,12 @@ class OfflinePackageService:
     def __init__(
         self, session: Session, packages: OfflinePackageRepository,
         items: OfflinePackageItemRepository,
+        manifest_storage: FileSystemManifestStorage | None = None,
     ):
         self.session = session
         self.packages = packages
         self.items = items
+        self.manifest_storage = manifest_storage
 
     def prepare_initial_package(
         self, *, region_id: str, language_id: str, category_id: str | None = None,
@@ -130,6 +133,11 @@ class OfflinePackageService:
                 category_code=category.category_code if category else None,
                 candidates=candidates, generated_at=now,
             )
+            # Stage before committing the package. A filesystem failure rolls
+            # back the DB transaction; a failed DB commit may leave a private
+            # orphan manifest that can be cleaned up later.
+            if self.manifest_storage is not None:
+                self.manifest_storage.save_staged(package.id, package.package_version, manifest)
         return package, manifest
 
     def plan_rebuild(

@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     app_name: str = "Multilingual Narration API"
     database_url: SecretStr
+    # Local development storage. Docker overrides this to a named-volume mount.
+    offline_manifest_dir: Path = Path(__file__).resolve().parents[2] / "var" / "offline" / "manifests"
 
     # Không cung cấp khóa mặc định. Môi trường chạy API phải inject private key
     # và tập public key; nếu thiếu, endpoint đăng nhập sẽ trả HTTP 503.

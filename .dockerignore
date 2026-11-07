@@ -9,3 +9,5 @@ __pycache__
 pytest-cache-files-*
 *.log
 
+
+var/

@@ -17,6 +17,7 @@ x-backend: &backend
     AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
     AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
     AUTH_COOKIE_SAMESITE: ${AUTH_COOKIE_SAMESITE:-strict}
+    OFFLINE_MANIFEST_DIR: /var/lib/mnr/offline-manifests
 
 services:
   postgres:
@@ -60,6 +61,8 @@ services:
 
   api:
     <<: *backend
+    volumes:
+      - offline-manifests:/var/lib/mnr/offline-manifests
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
@@ -81,3 +84,4 @@ services:
 
 volumes:
   postgres-data:
+  offline-manifests:
