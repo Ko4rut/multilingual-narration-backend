@@ -18,3 +18,6 @@ dist/
 *.egg-info/
 .pytest_cache/
 postgres-data/
+
+# Generated local offline manifests are not source-controlled.
+/var/

@@ -291,6 +291,152 @@ Manager-user and role routes require the matching `User Management` permission
 instead of hard-deleted. Nearby search, QR activation, TTS,
 listening ingestion, and offline package generation remain future use cases.
 
+## Group 3 — first-build offline package staging
+
+The new `feature/group3-offline-package-manifest-20261106` branch introduces
+`OfflinePackageRepository` and `OfflinePackageItemRepository`, plus
+`OfflinePackageService.prepare_initial_package()`. It selects active POIs in
+the requested region and optional category, with exactly the requested
+SUPPORTED language, PUBLISHED narration and valid audio **metadata**.
+It inserts a new logical `offline_package` and its `offline_package_item`
+membership in **one service-owned transaction**. It returns deterministic
+UTF-8 manifest JSON bytes with POI/narration/audio/image metadata.
+
+This is an internal staging service, **not an HTTP API or a live download**.
+It intentionally leaves the package `BUILDING` with no manifest URL/checksum
+and no `published_at`. Before a package can be marked `PUBLISHED`, a later
+release workflow must validate actual asset bytes/URLs, write manifest bytes
+to immutable accessible storage, verify their SHA-256, and atomically
+commit URL/checksum/version/membership. Currently the schema does not store
+image sizes, so `total_size` stays NULL rather than claiming an incorrect
+byte count. Rebuilds must stage separately and keep previously published
+packages intact. The seed's `cdn.example.local` URLs are placeholders.
+
+The mobile flow after release will be:
+fetch published package metadata → GET immutable manifest URL → verify
+manifest checksum → compare each asset checksum to the device cache →
+download missing audio/images and validate SHA-256 → activate the new
+local snapshot. No English fallback is applied inside an offline package.
+
+```powershell
+python -m pytest tests/test_offline_repository.py -q -p no:cacheprovider
+```
+
+### Comparing a published manifest to current POI data
+
+`OfflinePackageService.plan_rebuild(package_id=..., published_manifest=...)`
+reads and validates the **immutable published manifest bytes** against
+`offline_package.package_checksum_sha256`, then queries the current
+POI/content/audio data for the same filters. It compares canonical item
+contents, excluding only `generated_at` and `package_version`, and
+returns POI IDs added/removed/updated plus asset URLs whose checksums are
+not present in the previous manifest. Changing coordinates, title, script,
+audio URL/checksum, or POI eligibility is detected even when item IDs are
+unchanged. An unchanged snapshot produces no manifest and no version bump.
+No extra SHA columns or database tables are needed.
+
+The rebuild workflow is split into two explicit phases:
+
+1. `plan_rebuild(...)` compares current database rows to previously published,
+   SHA-verified manifest bytes without changing the database. If unchanged,
+   it returns `manifest=None`, no version increment, and no downloads.
+2. Upload the new manifest to an immutable URL and verify actual audio/image
+   bytes in external storage. After successful checks,
+   `publish_verified_rebuild(plan=..., published_manifest=...,
+   manifest_url=..., verify_manifest=..., verify_asset=...)` validates all
+   asset checksums, reloads/locks the package, checks its expected version,
+   reconstructs the snapshot from current rows, rejects stale plans, and
+   synchronizes membership while updating URL/checksum/version in **one DB
+   transaction**. Unchanged item IDs/timestamps are preserved.
+
+**Storage verification and automatic scheduling are not implemented**.
+Trusted server-side verifier callbacks must be supplied by a later storage
+integration; neither user input nor a successful upload alone proves
+manifest/resource integrity. PostgreSQL/source changes occurring during
+publication still require transaction/concurrency integration tests and
+possibly stronger source locking. Keep old immutable manifest URLs and assets
+accessible to clients already on the previous version. This design needs
+no additional fingerprint columns or tables.
+
+### Persistent local manifest staging storage
+
+Calling `POST /api/v1/admin/offline/packages/prepare` now **also writes**
+the generated UTF-8 manifest to immutable local storage. The returned JSON
+preview is unchanged, and the package deliberately stays `BUILDING` with
+`package_url = NULL` and `package_checksum_sha256 = NULL` until actual assets
+and the uploaded manifest have been verified in the future publish workflow.
+
+Directory layout:
+
+```text
+offline-manifests/
+  staging/
+    pack-071126-1234abcd/
+      v1/
+        manifest.json
+```
+
+For Docker Compose the API service mounts a persistent named volume
+`offline-manifests` at `/var/lib/mnr/offline-manifests`. The Docker image
+creates that directory owned by the unprivileged `app` user. This storage is
+**not** PostgreSQL's `postgres-data` volume. To inspect after preparing a
+package:
+
+```powershell
+docker compose exec api ls -R /var/lib/mnr/offline-manifests/staging
+```
+
+For local Uvicorn, set `OFFLINE_MANIFEST_DIR` in `.env` (the example points
+to `var/offline/manifests` under the backend working directory). Generated
+local files are Git-ignored.
+
+The `FileSystemManifestStorage` adapter in
+`app/domains/offline/storage/manifest.py` validates manifest JSON/version,
+calculates SHA-256, writes through a temporary file and atomic no-overwrite
+link, supports idempotent retries of identical bytes, and provides an internal
+checksum-validating reader. Different bytes at the same package/version path
+are rejected. No staging directory is mounted publicly: these files are
+**not downloadable by mobile yet**. A future publish workflow will verify
+the real referenced audio/image URLs and expose only published snapshots,
+preserving older published versions. A DB failure after staging may leave
+an inaccessible/orphan staged file; never delete the volume to recover it.
+No migration or extra SHA column is required.
+
+```powershell
+python -m pytest tests/test_offline_manifest_storage.py -q -p no:cacheprovider
+```
+
+## Group 3 HTTP endpoints (visible in Swagger)
+
+The Offline routers are registered under `/api/v1`. After pulling this branch
+and rebuilding the API image, open `http://localhost:8000/docs` and expand
+**Offline Packages** or **Offline Package Management**.
+
+| Method | Path | Access | Contract |
+| --- | --- | --- | --- |
+| GET | `/api/v1/offline/packages` | Public | Published package list (filter by region/language/category IDs; paginate) |
+| GET | `/api/v1/offline/packages/{package_id}` | Public | Published package metadata including manifest URL/checksum |
+| GET | `/api/v1/admin/offline/packages` | Offline Package Management: read | All statuses |
+| GET | `/api/v1/admin/offline/packages/{package_id}` | Offline Package Management: read | Package detail |
+| GET | `/api/v1/admin/offline/packages/{package_id}/items` | Offline Package Management: read | Stored package memberships |
+| POST | `/api/v1/admin/offline/packages/prepare` | Offline Package Management: create | Create BUILDING package and return a **nonpublished** manifest preview |
+| POST | `/api/v1/admin/offline/packages/{package_id}/rebuild/preview` | Offline Package Management: update | Compare against exact UTF-8 published manifest text, checksum-validated against the DB; read-only |
+
+All administrative endpoints require a valid Bearer JWT and matching RBAC
+permission, seeded under `Offline Package Management`. The public endpoints
+never expose BUILDING or FAILED packages. No `publish` API is exposed yet:
+real asset/manifest storage and integrity-verification adapters must be added
+first; client-provided flags must not bypass publication checks. Current
+`cdn.example.local` seed URLs are placeholders and not real downloadable
+assets. The preview endpoint receives exact JSON text rather than a parsed
+object so its published SHA-256 can be validated against stored bytes.
+
+Run the route tests without touching PostgreSQL:
+
+```powershell
+python -m pytest tests/test_offline_api.py -q -p no:cacheprovider
+```
+
 ## Verification
 
 ```powershell

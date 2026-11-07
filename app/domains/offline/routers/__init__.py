@@ -1,3 +1,3 @@
-from app.domains.offline.routers.offline import router
+from app.domains.offline.routers.offline import admin_router, router
 
-__all__ = ["router"]
+__all__ = ["admin_router", "router"]
