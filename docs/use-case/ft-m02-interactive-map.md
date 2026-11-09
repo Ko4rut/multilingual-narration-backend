@@ -8,10 +8,11 @@
 | **Summary:** | Hiển thị các POI trên bản đồ tương tác, vị trí người dùng khi được phép và điều hướng từ marker sang chi tiết POI. Không yêu cầu tài khoản du khách. **Traceability:** Epic: EP-M01 — POI Discovery and Interactive Map; Feature / Requirement: FT-M02 / FR-M02; User Stories: US-M04, US-M05; Priority: P0 |  |
 | **Basic Course of Events:** | **Actor action** | **System response** |
 |  | 1\. Người dùng mở bản đồ. |  |
-|  |  | 2\. Ứng dụng tải dữ liệu POI ACTIVE khi online hoặc POI local thuộc package READY khi offline. |
-|  |  | 3\. Ứng dụng hiển thị marker theo `latitude`, `longitude` và tên POI. |
-|  |  | 4\. Nếu người dùng cho phép truy cập vị trí, ứng dụng nhận mẫu vị trí mới và hiển thị vị trí hiện tại. |
-|  | 5\. Người dùng chạm marker; ứng dụng hiển thị tóm tắt POI và tùy chọn xem chi tiết. |  |
+|  |  | 2\. Ứng dụng tải dữ liệu POI ACTIVE khi online hoặc POI local thuộc package READY khi offline. **A2, A3, E1, E2** |
+|  |  | 3\. Ứng dụng hiển thị marker theo `latitude`, `longitude` và tên POI. **E4** |
+|  |  | 4\. Nếu người dùng cho phép truy cập vị trí, ứng dụng nhận mẫu vị trí mới và hiển thị vị trí hiện tại. **A1, E3** |
+|  | 5\. Người dùng chạm marker POI. |  |
+|  |  | 5a\. Ứng dụng hiển thị tóm tắt POI và tùy chọn xem chi tiết. |
 |  | 6\. Khi người dùng chọn xem chi tiết, ứng dụng mở đúng màn hình POI của FT-M01; từ đó có thể phát narration tại FT-M03. |  |
 | **Alternative Paths:** | **A1 — Không có quyền GPS:** Vẫn hiển thị marker POI, không định vị thiết bị; cho phép truy cập POI qua marker.<br><br>**A2 — Offline có POI local READY và tile bản đồ đã cache:** Dùng snapshot POI và hiển thị tile đã có khi nhà cung cấp bản đồ hỗ trợ.<br><br>**A3 — Offline thiếu tile nhưng có POI local READY:** Cho chuyển sang danh sách POI local; không cam kết hiển thị bản đồ nền. |  |
 | **Exception Paths:** | **E1 — API POI lỗi hoặc hết thời gian chờ:** Thử lấy POI READY từ local; nếu không có dữ liệu, hiển thị lỗi/tùy chọn thử lại.<br><br>**E2 — Không có mạng, không có dữ liệu POI local:** Không có marker; hiển thị trạng thái thiếu dữ liệu và hướng dẫn tải gói khi online.<br><br>**E3 — GPS tắt, sample stale hoặc accuracy thấp:** Ẩn vị trí hiện tại/không tính khoảng cách; không định vị giả.<br><br>**E4 — POI không có tọa độ hợp lệ hoặc đã INACTIVE theo API:** Không tạo marker; không điều hướng tới POI không khả dụng. |  |
