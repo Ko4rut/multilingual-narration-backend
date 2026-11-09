@@ -7,13 +7,13 @@
 | **Maturity:** | Specification / Target behavior — chức năng được đặc tả theo PRD và database design; chưa xác nhận toàn bộ luồng mobile đã triển khai. |  |
 | **Summary:** | Hiển thị các POI trên bản đồ tương tác, vị trí người dùng khi được phép và điều hướng từ marker sang chi tiết POI. Không yêu cầu tài khoản du khách. **Traceability:** Epic: EP-M01 — POI Discovery and Interactive Map; Feature / Requirement: FT-M02 / FR-M02; User Stories: US-M04, US-M05; Priority: P0 |  |
 | **Basic Course of Events:** | **Actor action** | **System response** |
-|  | 1\. Người dùng mở bản đồ. |  |
-|  |  | 2\. Ứng dụng tải dữ liệu POI ACTIVE khi online hoặc POI local thuộc package READY khi offline. **A2, A3, E1, E2** |
-|  |  | 3\. Ứng dụng hiển thị marker theo `latitude`, `longitude` và tên POI. **E4** |
-|  |  | 4\. Nếu người dùng cho phép truy cập vị trí, ứng dụng nhận mẫu vị trí mới và hiển thị vị trí hiện tại. **A1, E3** |
-|  | 5\. Người dùng chạm marker POI. |  |
-|  |  | 5a\. Ứng dụng hiển thị tóm tắt POI và tùy chọn xem chi tiết. |
-|  | 6\. Khi người dùng chọn xem chi tiết, ứng dụng mở đúng màn hình POI của FT-M01; từ đó có thể phát narration tại FT-M03. |  |
+|  | 1\. Du khách mở Interactive Map. |  |
+|  |  | 2\. Ứng dụng lấy POI ACTIVE online hoặc snapshot local READY khi API thất bại. **A2, A3, E1, E2** |
+|  |  | 3\. Kiểm tra tọa độ và khả năng tải tiles; nếu thiếu basemap offline, cung cấp danh sách POI. **A3, E4** |
+|  |  | 4\. Hiển thị marker hợp lệ. |
+|  | 5\. Du khách chọn định vị bản thân hoặc chạm marker. |  |
+|  |  | 6\. Kiểm tra GPS và quyền vị trí; thiếu quyền vẫn xem được marker POI. **A1, E3** |
+|  |  | 7\. Hiển thị tóm tắt POI và điều hướng tới POI Detail khi được yêu cầu. |
 | **Alternative Paths:** | **A1 — Không có quyền GPS:** Vẫn hiển thị marker POI, không định vị thiết bị; cho phép truy cập POI qua marker.<br><br>**A2 — Offline có POI local READY và tile bản đồ đã cache:** Dùng snapshot POI và hiển thị tile đã có khi nhà cung cấp bản đồ hỗ trợ.<br><br>**A3 — Offline thiếu tile nhưng có POI local READY:** Cho chuyển sang danh sách POI local; không cam kết hiển thị bản đồ nền. |  |
 | **Exception Paths:** | **E1 — API POI lỗi hoặc hết thời gian chờ:** Thử lấy POI READY từ local; nếu không có dữ liệu, hiển thị lỗi/tùy chọn thử lại.<br><br>**E2 — Không có mạng, không có dữ liệu POI local:** Không có marker; hiển thị trạng thái thiếu dữ liệu và hướng dẫn tải gói khi online.<br><br>**E3 — GPS tắt, sample stale hoặc accuracy thấp:** Ẩn vị trí hiện tại/không tính khoảng cách; không định vị giả.<br><br>**E4 — POI không có tọa độ hợp lệ hoặc đã INACTIVE theo API:** Không tạo marker; không điều hướng tới POI không khả dụng. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
@@ -55,9 +55,12 @@ flowchart TD
 
 ## Traceability, Data and Implementation Notes
 
-- **Nguồn dữ liệu:** `Point_Of_Interests(latitude, longitude, poi_status, poi_name, trigger_radius_meter)`, `Local_POIs` (khi offline).
-- **Liên kết:** Dependencies / Notes
-- FT-M01 cung cấp danh sách/chi tiết POI; FT-M07 cung cấp metadata offline.
-- `trigger_radius_meter` phục vụ Geofence (FT-M05), không đồng nghĩa phạm vi hiển thị bản đồ.
-- Nguồn: PRD.md §2.3.1, §3.3–3.4; `docs/database-design.md` §2.2, §3.
-- **Nguồn tham khảo:** PRD.md (§2.3, §3.3–3.4); `docs/database-design.md`; mẫu bố cục `docs/usecase/authentication-session.md`.
+- **Dependencies:** FT-M01/07; map tiles không nằm trong cam kết offline package.
+- **Sources:** `PRD.md` (Feature/Requirement/User Story), `docs/database-design.md` (database contract), template `docs/usecase/authentication-session.md`.
+- **Maturity:** Target behavior / đặc tả, không khẳng định tính năng đã chạy trên client và backend.
+
+## Exception Acceptance Scenarios
+
+- **AT-FT01**: Offline có POI nhưng tile chưa cache: không hứa bản đồ nền.
+- **AT-FT02**: API lỗi + READY hợp lệ: vẫn hiển thị POI/marker.
+- **AT-FT03**: GPS bị từ chối: vẫn truy cập POI Detail.

@@ -7,13 +7,14 @@
 | **Maturity:** | Specification / Target behavior — chức năng được đặc tả theo PRD và database design; chưa xác nhận toàn bộ luồng mobile đã triển khai. |  |
 | **Summary:** | Cho phép người dùng tự chọn ngôn ngữ giao diện/nghe, bật tắt tự phát theo vị trí, cấu hình âm lượng và giao diện sáng/tối; duy trì lựa chọn qua các lần sử dụng không cần tài khoản. **Traceability:** Epic: EP-M04 — Offline Content and Preferences; Feature / Requirement: FT-M08 / FR-M06; User Stories: US-M16, US-M17, US-M18; Priority: P0 |  |
 | **Basic Course of Events:** | **Actor action** | **System response** |
-|  | 1\. Du khách mở màn hình Settings. |  |
-|  |  | 2\. Ứng dụng đọc thiết lập đã lưu; nếu lần đầu, sử dụng cấu hình mặc định đã xác định cho client. **A1, E3** |
-|  | 3\. Người dùng chọn ngôn ngữ giao diện; ứng dụng cập nhật chuỗi UI nếu bản dịch có sẵn. |  **E1** |
-|  | 4\. Người dùng chọn ngôn ngữ thuyết minh; FT-M03 sử dụng lựa chọn này cho lần phát tiếp theo; FT-M07 lọc package offline theo ngôn ngữ yêu cầu. |  **A2, E4** |
-|  | 5\. Người dùng bật/tắt auto narration; FT-M05 và FT-M06 đăng ký/dừng cơ chế theo dõi theo quyền thực tế. |  **A3, E2** |
-|  | 6\. Người dùng chỉnh âm lượng (trong giới hạn API player/OS) và chọn giao diện sáng/tối. |  **E5** |
-|  |  | 7\. Ứng dụng xác thực các lựa chọn, ghi bền vững và hiển thị thiết lập cập nhật khi mở lại. **E3** |
+|  | 1\. Du khách mở Settings. |  |
+|  |  | 2\. Đọc Local_App_State hoặc defaults; vẫn dùng offline. **A1, E3** |
+|  | 3\. Du khách chọn ngôn ngữ UI hoặc narration. |  |
+|  |  | 4\. Thay UI khi có locale; ngôn ngữ narration offline cần package phù hợp; không đổi audio đang phát. **A2, E1, E4** |
+|  | 5\. Du khách bật hoặc tắt auto narration. |  |
+|  |  | 6\. Bật phải kiểm tra GPS permission; tắt dừng tracking. **A3, E2** |
+|  | 7\. Du khách đổi theme hoặc âm lượng. |  |
+|  |  | 8\. Chỉ lưu settings nếu local write thành công; tôn trọng giới hạn OS. **E3, E5** |
 | **Alternative Paths:** | **A1 — Thay đổi thiết lập khi offline:** Dùng `Local_App_State`, lưu lựa chọn trên thiết bị mà không phụ thuộc API.<br><br>**A2 — Chọn ngôn ngữ nghe chưa có audio online:** Giữ preference, khi nghe online fallback tiếng Anh nếu có bản PUBLISHED hợp lệ; offline chỉ theo package đã tải.<br><br>**A3 — Tắt auto narration:** Dừng tracking không cần thiết, không tự kích hoạt audio mới; QR/manual vẫn hoạt động. |  |
 | **Exception Paths:** | **E1 — Không có ngôn ngữ giao diện tương ứng:** Giữ UI fallback/default đã hỗ trợ; không đồng nhất fallback UI với English audio.<br><br>**E2 — Bật auto nhưng GPS/background permission không được cấp:** Không start tracking trái quyền; hướng dẫn cấp quyền và giữ thao tác thủ công.<br><br>**E3 — Local storage ghi thất bại hoặc bị reset:** Thông báo không lưu được; khôi phục giá trị đã lưu hoặc default, không nói thay đổi đã được giữ sau restart.<br><br>**E4 — Đổi ngôn ngữ nhưng package READY không đúng ngôn ngữ:** Không phát asset sai ngôn ngữ; báo cần tải package mới khi có mạng.<br><br>**E5 — Thiết bị hạn chế âm lượng/phát nền:** Tuân thủ OS; không bảo đảm chỉnh âm lượng ngoài quyền ứng dụng. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
@@ -58,9 +59,13 @@ flowchart TD
 
 ## Traceability, Data and Implementation Notes
 
-- **Nguồn dữ liệu:** `Languages` (danh mục ngôn ngữ khả dụng), `Local_App_State`; không yêu cầu `Manager_Users` cho du khách.
-- **Liên kết:** Dependencies / Notes
-- Liên kết FT-M03, FT-M05, FT-M06, FT-M07; không yêu cầu Tourist login.
-- Danh sách giá trị mặc định UI/audio và chính sách quyền nền cần được xác nhận khi đặc tả ứng dụng cụ thể.
-- Nguồn: PRD.md FR-M06, US-M16–18, BR-01/05–06/12; `docs/database-design.md` §2.5.3, §3.2.
-- **Nguồn tham khảo:** PRD.md (§2.3, §3.3–3.4); `docs/database-design.md`; mẫu bố cục `docs/usecase/authentication-session.md`.
+- **Dependencies:** FT-M03/05/06/07; Local_App_State lưu cục bộ.
+- **Sources:** `PRD.md` (Feature/Requirement/User Story), `docs/database-design.md` (database contract), template `docs/usecase/authentication-session.md`.
+- **Maturity:** Target behavior / đặc tả, không khẳng định tính năng đã chạy trên client và backend.
+
+## Exception Acceptance Scenarios
+
+- **AT-FT01**: Không mạng vẫn lưu local preferences.
+- **AT-FT02**: Ngôn ngữ narration không có READY tương ứng: cảnh báo tải package.
+- **AT-FT03**: Bật auto không có permission: không tracking.
+- **AT-FT04**: Local write thất bại: không báo đã lưu.
