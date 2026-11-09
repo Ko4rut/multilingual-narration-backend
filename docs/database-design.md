@@ -1314,7 +1314,6 @@ Lưu snapshot metadata POI cần thiết để mobile có thể xác định vù
 | latitude             | Vĩ độ                                        |
 | longitude            | Kinh độ                                      |
 | trigger_radius_meter | Bán kính kích hoạt                           |
-| trigger_priority     | Độ ưu tiên khi các vùng chồng nhau           |
 | image_checksum       | Asset hình ảnh hiện được snapshot tham chiếu |
 
 Một POI có thể được nhiều package sử dụng.
@@ -1832,10 +1831,9 @@ Không được phát nhiều narration đồng thời.
 
 Các POI candidate được xếp theo:
 
-1. trigger_priority cao hơn.
-2. distance / trigger_radius_meter nhỏ hơn.
-3. Khoảng cách tuyệt đối nhỏ hơn.
-4. poi_id để tie-break deterministic.
+1. Tỷ lệ `distance / trigger_radius_meter` nhỏ hơn (POI mà thiết bị nằm sâu hơn trong vùng ảnh hưởng tương đối được xét trước).
+2. Khoảng cách tuyệt đối `distance` nhỏ hơn.
+3. `poi_id` theo thứ tự ổn định để tie-break deterministic.
 
 Chỉ candidate tốt nhất được phép auto-play.
 
