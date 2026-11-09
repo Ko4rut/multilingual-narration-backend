@@ -17,7 +17,7 @@
 |  |  | 8\. Chỉ chuyển yêu cầu phát tới FT-M03 khi điều kiện còn hợp lệ; sau khi bắt đầu phát thành công, cập nhật `last_auto_triggered_at`. |
 |  |  | 9\. Khi exit ổn định đủ debounce, trả POI về OUTSIDE để chờ entry mới. |
 | **Alternative Paths:** | **A1 — GPS nhảy tại biên:** Debounce 3 giây cho entry/exit; không kích hoạt theo một mẫu đơn lẻ.<br><br>**A2 — Nhiều POI chồng lấn:** Chọn tối đa một; các POI khác tiếp tục theo dõi.<br><br>**A3 — Không có audio local, thiết bị offline:** Không phát và không ghi cooldown. |  |
-| **Exception Paths:** | **E1 — GPS nhảy tại biên:** Debounce 3 giây cho entry/exit; không kích hoạt theo một mẫu đơn lẻ.<br><br>**E2 — Miss callback vị trí:** Safety reconcile mỗi **5 giây** đưa mẫu qua cùng state machine, không gọi player trực tiếp.<br><br>**E3 — Cooldown hết khi vẫn đứng trong vùng:** Không tự phát lại; chỉ xét entry mới sau exit/re-entry.<br><br>**E4 — Nhiều POI chồng lấn:** Chọn tối đa một; các POI khác tiếp tục theo dõi.<br><br>**E5 — Mẫu vị trí stale/không đủ tin cậy:** Không trigger; chờ mẫu mới.<br><br>**E6 — Không có audio local, thiết bị offline:** Không phát và không ghi cooldown.<br><br>**E7 — Người dùng tắt auto hoặc thu hồi quyền vị trí:** Dừng auto detection; QR/manual vẫn hoạt động. |  |
+| **Exception Paths:** | **E1 — Miss callback vị trí:** Safety reconcile mỗi **5 giây** đưa mẫu qua cùng state machine, không gọi player trực tiếp.<br><br>**E2 — Cooldown hết khi vẫn đứng trong vùng:** Không tự phát lại; chỉ xét entry mới sau exit/re-entry.<br><br>**E3 — Mẫu vị trí stale/không đủ tin cậy:** Không trigger; chờ mẫu mới.<br><br>**E4 — Người dùng tắt auto hoặc thu hồi quyền vị trí:** Dừng auto detection; QR/manual vẫn hoạt động. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
 | **Triggers:** | Ứng dụng nhận mẫu vị trí/entry event khi chế độ tự thuyết minh đang bật. |  |
 | **Assumptions:** | Location sample phải đủ mới/chính xác; thông số điều kiện vị trí theo database design. |  |
@@ -32,8 +32,6 @@
 **BR-12, BR-13:** Tôn trọng bật/tắt auto và cooldown; **không** áp cooldown AUTO_LOCATION cho mọi yêu cầu manual/QR.<br><br>**AC-M05-01:** US-M10 entry đủ điều kiện được xử lý sau debounce 3 giây.<br><br>**AC-M05-02:** US-M11 không phát trùng trong cùng entry hoặc trong cooldown 5 phút của cùng POI.<br><br>**AC-M05-03:** Safety reconcile 5 giây không bypass debounce/cooldown.<br><br>**AC-M05-04:** Khi POI overlap, hệ thống chỉ chọn tối đa một audio.<br><br>**AC-M05-05:** Chỉ ghi cooldown sau khi player thực sự bắt đầu; pending candidate được revalidate trước khi phát.
 
 ## Activity Diagram
-
-Activity Diagram
 
 ```mermaid
 flowchart TD
