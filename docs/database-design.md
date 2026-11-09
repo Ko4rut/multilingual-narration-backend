@@ -308,7 +308,7 @@ Các bảng thuộc nhóm:
 
 Lưu trữ thông tin về các điểm tham quan hoặc địa điểm mà hệ thống hỗ trợ thuyết minh tự động.
 
-Mỗi POI bao gồm thông tin vị trí địa lý, hình ảnh, mã QR, mức độ ưu tiên và bán kính kích hoạt để ứng dụng xác định khi nào người dùng tiến gần đến địa điểm.
+Mỗi POI bao gồm thông tin vị trí địa lý, hình ảnh, mã QR và bán kính kích hoạt để ứng dụng xác định khi nào người dùng tiến gần đến địa điểm.
 
 **_[2] Trường dữ liệu (Fields)_**
 
@@ -1013,7 +1013,7 @@ Thông tin này có thể được sử dụng để thống kê số lượt ng
 | installation_id | UUID       | No       | Mã định danh ngẫu nhiên của một lần cài đặt ứng dụng.                                     |
 | poi_id          | varchar FK | No       | Giúp biết POI được người dùng nghe thuyết minh, liên kết đến bảng **Point_Of_Interests**. |
 | poi_content_id  | varchar FK | No       | Giúp biết ngôn ngữ/nội dung nào được nghe, liên kết đến bảng **Poi_Contents**.            |
-| trigger_type    | enum       | No       | Cho biết cách thức audio thyết minh được kích hoạt, gồm: `AUTO_LOCATION`/`QR_CODE`.       |
+| trigger_type    | enum       | No       | Cho biết cách thức audio thyết minh được kích hoạt, gồm: `AUTO_LOCATION`/`QR_CODE`/`MANUAL`.       |
 | started_at      | timestamp  | No       | Thời điểm người dùng bắt đầu nghe nội dung.                                               |
 | completed_at    | timestamp  | Yes      | Thời điểm người dùng nghe hoàn tất hoặc kết thúc nội dung.                                |
 | duration_sec    | integer    | Yes      | Tổng thời gian đã nghe, tính bằng giây.                                                   |
@@ -1026,7 +1026,7 @@ Thông tin này có thể được sử dụng để thống kê số lượt ng
 | **PK**    | `id`                              | Khóa chính, định danh duy nhất lượt nghe.         |
 | **FK**    | `poi_id`                          | Tham chiếu đến `Point_Of_Interests(id)`.          |
 | **FK**    | `poi_content_id`                  | Tham chiếu đến `Poi_Contents(id)`.                |
-| **CHECK** | `trigger_type`                    | Thuộc tập giá trị `('AUTO_LOCATION', 'QR_CODE')`. |
+| **CHECK** | `trigger_type`                    | Thuộc tập giá trị `('AUTO_LOCATION', 'QR_CODE', 'MANUAL')`. |
 | **CHECK** | `duration_sec`                    | `>= 0` nếu có giá trị.                            |
 | **CHECK** | `completed_at`                    | `>= started_at` nếu có giá trị.                   |
 | **INDEX** | (`poi_id`, `started_at`)          | Tăng tốc thống kê theo POI + thời gian.           |
@@ -1049,6 +1049,9 @@ Các type hiện tại gồm:
 
 - `AUTO_LOCATION`: hệ thống tự kích hoạt khi thiết bị đi vào bán kính của POI.
 - `QR_CODE`: người dùng quét QR để mở/kích hoạt nội dung.
+- `MANUAL`: người dùng chọn POI từ danh sách hoặc bản đồ rồi chủ động phát audio, không qua QR hay Geofence.
+
+Lưu ý: MANUAL là phần mở rộng database contract ở mức tài liệu; backend enum, migration, validation và mobile event serialization phải được cập nhật trước khi sử dụng thực tế.
 
 [4.3] Trường `duration_sec`
 
@@ -1275,7 +1278,11 @@ Lưu thông tin cục bộ chung của ứng dụng.
 | Field                | Meaning                                  |
 | :------------------- | :--------------------------------------- |
 | installation_id      | UUID của lần cài đặt hiện tại            |
-| selected_language_id | Ngôn ngữ hiện tại của ứng dụng/narration |
+| selected_language_id | Ngôn ngữ narration người dùng chọn |
+| selected_ui_language_id | Ngôn ngữ giao diện |
+| auto_narration_enabled | Bật/tắt theo dõi Geofence |
+| theme | Chế độ hiển thị |
+| preferred_volume | Mức âm lượng theo giới hạn player/OS |
 | local_schema_version | Phiên bản cấu trúc SQLite                |
 | created_at           | Thời điểm dữ liệu local được tạo         |
 | last_updated_at      | Thời điểm cập nhật gần nhất              |
@@ -1314,9 +1321,13 @@ Lưu snapshot metadata POI cần thiết để mobile có thể xác định vù
 | latitude             | Vĩ độ                                        |
 | longitude            | Kinh độ                                      |
 | trigger_radius_meter | Bán kính kích hoạt                           |
+| poi_qr_code          | Mã QR nhận diện POI từ manifest offline      |
+| poi_status           | Trạng thái ACTIVE/INACTIVE trong snapshot    |
+| poi_image_url        | URL ảnh POI được snapshot tham chiếu         |
+| category_ids         | Danh sách mã danh mục lấy từ manifest        |
 | image_checksum       | Asset hình ảnh hiện được snapshot tham chiếu |
 
-Một POI có thể được nhiều package sử dụng.
+Một POI có thể được nhiều package sử dụng. Các trường bổ sung trong Local_POIs thuộc snapshot đã được xác minh; dữ liệu này có thể cũ so với server khi offline. QR scanner tra poi_qr_code trong snapshot READY; category_ids phục vụ lọc khi manifest chứa danh mục. Việc bổ sung các trường này là mục tiêu thiết kế local schema, cần migration SQLite khi triển khai.
 
 ### 3.2.4 Local_Poi_Contents
 
@@ -1403,7 +1414,7 @@ Lưu trạng thái cần thiết để chống phát narration lặp lại khi �
 
 Cooldown 5 phút được kiểm tra từ `last_auto_triggered_at`.
 
-Debounce 3 giây và trạng thái inside/outside hiện tại chỉ chủ yếu được giữ trong runtime memory.
+Debounce 3 giây và trạng thái inside/outside hiện tại chỉ chủ yếu được giữ trong runtime memory. Sau restart cần lấy location sample mới và đối chiếu cooldown từ dữ liệu đã lưu, không tự tạo trigger từ mẫu stale.
 
 ### 3.2.9 Local_Listening_Events
 
@@ -1415,7 +1426,7 @@ Lưu các listening event chưa hoặc đã đồng bộ.
 | installation_id      | Installation hiện tại                |
 | poi_id               | POI được phát                        |
 | poi_content_id       | Content được phát                    |
-| trigger_type         | AUTO_LOCATION hoặc QR_CODE           |
+| trigger_type         | AUTO_LOCATION, QR_CODE hoặc MANUAL   |
 | started_at           | Thời điểm audio thực sự bắt đầu phát |
 | completed_at         | Thời điểm kết thúc                   |
 | duration_sec         | Thời gian phát thực tế               |
@@ -1926,7 +1937,7 @@ sync_status = SYNCED
 | Cooldown hết khi người dùng vẫn đứng nguyên trong POI                | Không phát lại; phải exit rồi re-enter.                                                                                      |
 | Người dùng ra ngoài rồi vào lại trong < 5 phút                       | Entry mới được nhận diện nhưng bị cooldown, không phát.                                                                      |
 | Người dùng ra ngoài rồi vào lại sau > 5 phút                         | Debounce lại 3 giây rồi có thể phát.                                                                                         |
-| Hai POI overlap                                                      | Chỉ chọn một POI theo priority và khoảng cách.                                                                               |
+| Hai POI overlap                                                      | Chỉ chọn một POI theo tỷ lệ distance/trigger_radius_meter nhỏ nhất; hòa thì theo distance tuyệt đối, tiếp theo poi_id.                                                                               |
 | Đang phát POI A thì vào POI B                                        | Không interrupt tự động; B được revalidate sau khi A kết thúc.                                                               |
 | Không có audio local nhưng online                                    | Có thể lấy bản PUBLISHED online.                                                                                             |
 | Không có audio local và offline                                      | Không phát; không set cooldown.                                                                                              |

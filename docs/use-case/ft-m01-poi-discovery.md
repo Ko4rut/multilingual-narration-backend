@@ -7,13 +7,14 @@
 | **Maturity:** | Specification / Target behavior — chức năng được đặc tả theo PRD và database design; chưa xác nhận toàn bộ luồng mobile đã triển khai. |  |
 | **Summary:** | Cho phép du khách xem, tìm kiếm, mở chi tiết và khám phá POI lân cận mà không cần đăng nhập. Chức năng khám phá POI lân cận sử dụng khoảng cách đến vị trí thiết bị; bán kính khám phá **khác** `trigger_radius_meter` dành cho Geofence. **Traceability:** Epic: EP-M01 — POI Discovery and Interactive Map; Feature: FT-M01 — Point of Interest Discovery; Requirement: FR-M01; User Stories: US-M01, US-M02, US-M03 |  |
 | **Basic Course of Events:** | **Actor action** | **System response** |
-|  | 1\. Du khách mở màn hình khám phá. |  |
-|  |  | 2\. Ứng dụng kiểm tra kết nối và nguồn dữ liệu POI hợp lệ; ưu tiên dữ liệu công khai mới từ backend khi online, dùng snapshot đã tải khi offline. **A1, E1, E2** |
-|  |  | 3\. Ứng dụng lấy danh sách POI có `poi_status = ACTIVE` từ API công khai, kèm metadata khu vực/danh mục. |
-|  | 4\. Du khách nhập từ khóa hoặc chọn bộ lọc; danh sách cập nhật theo tiêu chí. |  **A3** |
-|  | 5\. Du khách chọn một POI; ứng dụng hiển thị tên, ảnh, vị trí/địa chỉ, khu vực, danh mục và nội dung thuyết minh khả dụng. |  **E4** |
-|  | 6\. Khi chọn “gần tôi”, ứng dụng xin quyền vị trí nếu chưa có, đọc mẫu vị trí đủ tin cậy và tính khoảng cách theo tọa độ POI. |  **A2, E3** |
-|  |  | 7\. Danh sách được sắp xếp theo khoảng cách nếu tính được; người dùng có thể mở bản đồ hoặc phát thuyết minh. |
+|  | 1\. Du khách mở danh sách khám phá POI. |  |
+|  |  | 2\. Ứng dụng gọi API công khai; nếu mất mạng hoặc API timeout/5xx thì thử package local READY. **A1, E1, E2** |
+|  |  | 3\. Hiển thị POI ACTIVE từ server hoặc snapshot local đã verify, có cảnh báo dữ liệu offline có thể cũ. |
+|  | 4\. Du khách nhập từ khóa, lọc danh mục/khu vực hoặc chọn gần tôi. |  |
+|  |  | 5\. Lọc POI theo metadata khả dụng; offline cần category_ids từ snapshot. Không có kết quả hiển thị empty state. **A3** |
+|  |  | 6\. Với gần tôi, kiểm tra quyền và mẫu GPS tin cậy; từ chối quyền không ngăn khám phá. **A2, E3** |
+|  | 7\. Du khách chọn một POI. |  |
+|  |  | 8\. Kiểm tra trạng thái theo nguồn hiện tại, mở đúng chi tiết POI; không dùng trigger_radius_meter làm bán kính khám phá. **E4** |
 | **Alternative Paths:** | **A1 — Mất mạng nhưng có package READY:** Đọc `Local_POIs` trong package READY; chỉ hiển thị dữ liệu thuộc snapshot, thông báo có thể cũ.<br><br>**A2 — Không cho phép vị trí:** Vẫn cho xem/tìm kiếm POI, không hiện khoảng cách/gần tôi.<br><br>**A3 — Không có kết quả:** Hiển thị empty state và cho điều chỉnh tìm kiếm/bộ lọc. |  |
 | **Exception Paths:** | **E1 — API lỗi/timeout dù có Internet:** Thử dùng snapshot local READY; nếu không có, hiển thị lỗi và thao tác retry.<br><br>**E2 — Mất mạng và không có package READY:** Không thể tải danh mục; báo cần kết nối hoặc tải gói trước.<br><br>**E3 — Mẫu GPS stale/accuracy kém hoặc dịch vụ định vị tắt:** Không dùng vị trí để xếp gần tôi, giữ danh sách thường.<br><br>**E4 — Chi tiết POI online đã INACTIVE/không còn tồn tại:** Không mở dữ liệu online đã bị gỡ, cập nhật danh sách; khi offline chỉ tin snapshot sẵn có cho đến lần đồng bộ. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
@@ -56,8 +57,13 @@ flowchart TD
 
 ## Traceability, Data and Implementation Notes
 
-- **Nguồn dữ liệu:** `Point_Of_Interests`, `Regions`, `Poi_Categories`, `Poi_Category_Mapping`; dữ liệu local tương ứng khi offline.
-- **Liên kết:** Liên kết FT-M02 (bản đồ), FT-M03 (phát thuyết minh), FT-M07 (snapshot offline).
-- **Phạm vi thiết kế mục tiêu:** phần hiển thị gần tôi và đồng bộ dữ liệu local cần được đối chiếu khi tích hợp mobile; sơ đồ không khẳng định đã triển khai.
-- Nguồn: PRD.md §2.3.1, §3.3–3.4; `docs/database-design.md` §2.2, §3–4.
-- **Nguồn tham khảo:** PRD.md (§2.3, §3.3–3.4); `docs/database-design.md`; mẫu bố cục `docs/usecase/authentication-session.md`.
+- **Dependencies:** FT-M02, FT-M03, FT-M07; local category filter cần category_ids trong manifest.
+- **Sources:** `PRD.md` (Feature/Requirement/User Story), `docs/database-design.md` (database contract), template `docs/usecase/authentication-session.md`.
+- **Maturity:** Target behavior / đặc tả, không khẳng định tính năng đã chạy trên client và backend.
+
+## Exception Acceptance Scenarios
+
+- **AT-FT01**: API timeout nhưng có READY: hiển thị snapshot, không mất dữ liệu.
+- **AT-FT02**: Mất mạng và không có READY: báo lỗi và cho retry.
+- **AT-FT03**: GPS bị từ chối: vẫn lọc/tìm POI, không hiển thị khoảng cách giả.
+- **AT-FT04**: Offline lọc category: chỉ dùng danh mục có trong manifest.
