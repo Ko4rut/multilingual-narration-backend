@@ -14,8 +14,8 @@
 |  | 5\. Du khách chọn một POI; ứng dụng hiển thị tên, ảnh, vị trí/địa chỉ, khu vực, danh mục và nội dung thuyết minh khả dụng. |  |
 |  | 6\. Khi chọn “gần tôi”, ứng dụng xin quyền vị trí nếu chưa có, đọc mẫu vị trí đủ tin cậy và tính khoảng cách theo tọa độ POI. |  |
 |  |  | 7\. Danh sách được sắp xếp theo khoảng cách nếu tính được; người dùng có thể mở bản đồ hoặc phát thuyết minh. |
-| **Alternative Paths:** | **A1 — Từ chối quyền vị trí/GPS tắt:** Vẫn hiển thị và tìm kiếm danh sách POI; ẩn khoảng cách, không ép buộc cấp quyền.<br><br>**A2 — Kết nối lỗi, có package READY:** Hiển thị POI thuộc snapshot local đã tải; thông báo dữ liệu có thể cũ.<br><br>**A3 — POI bị chuyển INACTIVE:** Không trả về trong truy vấn online mới; snapshot offline cũ có thể còn cho đến khi cập nhật. |  |
-| **Exception Paths:** | **E1 — Kết nối lỗi, không có dữ liệu local:** Thông báo không tải được danh sách và cho phép thử lại.<br><br>**E2 — Tìm kiếm không có kết quả:** Hiển thị trạng thái rỗng và tùy chọn xóa bộ lọc.<br><br>**E3 — Vị trí quá cũ hoặc độ chính xác kém:** Không sử dụng để xếp POI “gần tôi”; chuyển sang danh sách thông thường. |  |
+| **Alternative Paths:** | **A1 — Mất mạng nhưng có package READY:** Đọc `Local_POIs` trong package READY; chỉ hiển thị dữ liệu thuộc snapshot, thông báo có thể cũ.<br><br>**A2 — Không cho phép vị trí:** Vẫn cho xem/tìm kiếm POI, không hiện khoảng cách/gần tôi.<br><br>**A3 — Không có kết quả:** Hiển thị empty state và cho điều chỉnh tìm kiếm/bộ lọc. |  |
+| **Exception Paths:** | **E1 — API lỗi/timeout dù có Internet:** Thử dùng snapshot local READY; nếu không có, hiển thị lỗi và thao tác retry.<br><br>**E2 — Mất mạng và không có package READY:** Không thể tải danh mục; báo cần kết nối hoặc tải gói trước.<br><br>**E3 — Mẫu GPS stale/accuracy kém hoặc dịch vụ định vị tắt:** Không dùng vị trí để xếp gần tôi, giữ danh sách thường.<br><br>**E4 — Chi tiết POI online đã INACTIVE/không còn tồn tại:** Không mở dữ liệu online đã bị gỡ, cập nhật danh sách; khi offline chỉ tin snapshot sẵn có cho đến lần đồng bộ. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
 | **Triggers:** | Người dùng muốn xem, tìm kiếm hoặc mở POI. |  |
 | **Assumptions:** | Chỉ POI ACTIVE được công bố online; dữ liệu offline là snapshot đã được tải và kiểm chứng. |  |
@@ -27,25 +27,31 @@
 
 ## Business Rules and Acceptance Criteria
 
+**Lưu ý:** Kiểm tra kết nối Internet không thay cho kiểm tra kết quả HTTP; API vẫn có thể timeout/5xx khi thiết bị online. Không dùng bán kính Geofence để giới hạn danh sách khám phá.
+
+
 **BR-01, BR-02:** Truy vấn công khai không yêu cầu đăng nhập và chỉ trả POI ACTIVE.<br><br>**AC-M01-01:** US-M01 hiển thị danh sách POI ACTIVE; POI INACTIVE trên server không xuất hiện online.<br><br>**AC-M01-02:** US-M02 tìm kiếm/lọc và mở đúng chi tiết POI được chọn.<br><br>**AC-M01-03:** US-M03 chỉ hiển thị khoảng cách khi mẫu vị trí hợp lệ; từ chối quyền vị trí không chặn danh sách.<br><br>**AC-M01-04:** Không dùng `trigger_radius_meter` làm bán kính lọc mặc định của khám phá lân cận.<br><br>**AC-M01-05:** Offline chỉ dùng dữ liệu của package local đã commit READY, không giả định có toàn bộ danh mục POI.
 
 ## Activity Diagram
 
 ```mermaid
 flowchart TD
-    A([Mở khám phá POI]) --> B{Có kết nối mạng?}
-    B -- Có --> C[Lấy danh sách POI ACTIVE từ API]
-    B -- Không --> D{Có dữ liệu local READY?}
-    D -- Có --> E[Đọc snapshot POI trên thiết bị]
-    D -- Không --> X[Thông báo lỗi và cho thử lại]
-    C --> F[Hiển thị danh sách]
-    E --> F
-    F --> G{Tác vụ người dùng}
-    G -- Tìm kiếm/lọc --> H[Áp dụng bộ lọc] --> F
-    G -- Gần tôi --> I{Vị trí hợp lệ?}
-    I -- Có --> J[Tính khoảng cách và sắp xếp] --> F
-    I -- Không --> K[Thông báo, giữ danh sách] --> F
-    G -- Chọn POI --> L[Hiển thị chi tiết POI] --> M([Kết thúc])
+ A([Mở POI Discovery]) --> B{Internet khả dụng?}
+ B -- Có --> C[Gọi API danh sách POI ACTIVE]
+ C --> D{API phản hồi hợp lệ?}
+ D -- Có --> F[Hiển thị danh sách POI]
+ D -- Không --> E{Local package READY?}
+ B -- Không --> E
+ E -- Có --> G[Đọc snapshot Local_POIs; cảnh báo có thể cũ] --> F
+ E -- Không --> X[Thông báo lỗi mạng/dữ liệu và Retry]
+ F --> H{Thao tác}
+ H -- Tìm kiếm/lọc --> I[Lọc; hiển thị kết quả hoặc empty state] --> F
+ H -- Gần tôi --> J{Quyền GPS và sample tin cậy?}
+ J -- Không --> K[Giữ danh sách thường; báo giới hạn] --> F
+ J -- Có --> L[Tính distance từ tọa độ, không dùng trigger radius] --> F
+ H -- Chọn POI --> M{POI hợp lệ theo nguồn hiện tại?}
+ M -- Không --> N[Báo POI không khả dụng] --> F
+ M -- Có --> O[Hiển thị chi tiết POI] --> P([Kết thúc])
 ```
 
 ## Traceability, Data and Implementation Notes
