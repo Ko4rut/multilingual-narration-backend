@@ -15,7 +15,7 @@
 |  |  | 6\. Bắt đầu phát một audio, cập nhật trạng thái `PLAYING`; ghi nhận listening event khi phát **thực sự bắt đầu** nếu dịch vụ đã được tích hợp. |
 |  | 7\. Người dùng có thể `PAUSE`, `RESUME` hoặc `STOP`; khi hoàn tất hoặc dừng, cập nhật thời lượng nghe. |  |
 | **Alternative Paths:** | **A1 — Không có PUBLISHED theo ngôn ngữ chọn (online):** Thử bản tiếng Anh PUBLISHED có audio hợp lệ; thông báo nếu vẫn không có.<br><br>**A2 — Offline không có asset đúng ngôn ngữ:** Thông báo cần tải gói phù hợp; không phát bản khác tiếng. |  |
-| **Exception Paths:** | **E1 — Không có PUBLISHED theo ngôn ngữ chọn (online):** Thử bản tiếng Anh PUBLISHED có audio hợp lệ; thông báo nếu vẫn không có.<br><br>**E2 — Offline không có asset đúng ngôn ngữ:** Thông báo cần tải gói phù hợp; không phát bản khác tiếng.<br><br>**E3 — Audio local thiếu/hỏng checksum:** Không phát file chưa VERIFIED; gợi ý cập nhật/tải lại khi online.<br><br>**E4 — URL audio lỗi hoặc mất mạng:** Dừng/hiển thị lỗi; dùng local hợp lệ nếu sẵn có.<br><br>**E5 — Player đang phát nội dung khác:** Không chồng âm thanh; các yêu cầu auto được giữ làm pending và revalidate; yêu cầu thủ công xử lý theo chính sách chuyển phát của ứng dụng.<br><br>**E6 — TTS chưa có file audio:** Không giả định mobile tự tạo TTS; phát chỉ khi có audio khả dụng. |  |
+| **Exception Paths:** | **E1 — Audio local thiếu/hỏng checksum:** Không phát file chưa VERIFIED; gợi ý cập nhật/tải lại khi online.<br><br>**E2 — URL audio lỗi hoặc mất mạng:** Dừng/hiển thị lỗi; dùng local hợp lệ nếu sẵn có.<br><br>**E3 — Player đang phát nội dung khác:** Không chồng âm thanh; các yêu cầu auto được giữ làm pending và revalidate; yêu cầu thủ công xử lý theo chính sách chuyển phát của ứng dụng.<br><br>**E4 — TTS chưa có file audio:** Không giả định mobile tự tạo TTS; phát chỉ khi có audio khả dụng. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
 | **Triggers:** | Người dùng yêu cầu phát nội dung thuyết minh từ POI, QR hoặc Geofence. |  |
 | **Assumptions:** | Audio được quản lý bởi tài nguyên có sẵn; mobile không tự sinh TTS khi thiếu tệp. |  |
@@ -30,8 +30,6 @@
 **BR-05, BR-06, BR-14:** Online có fallback tiếng Anh; offline không fallback; chỉ dùng local package đã xác minh.<br><br>**AC-M03-01:** US-M06 phát đúng `poi_id` và nội dung PUBLISHED/ngôn ngữ khả dụng.<br><br>**AC-M03-02:** US-M07 pause/resume/stop điều khiển đúng phiên, không tạo audio chồng.<br><br>**AC-M03-03:** US-M08 thiếu bản ngôn ngữ yêu cầu online thì chọn bản `en` hợp lệ.<br><br>**AC-M03-04:** Không gán thời điểm nghe hoặc cooldown khi player chưa bắt đầu phát thành công.<br><br>**AC-M03-05:** Khi offline, không tự động lấy tiếng Anh nếu package yêu cầu là ngôn ngữ khác.
 
 ## Activity Diagram
-
-Activity Diagram
 
 ```mermaid
 flowchart TD
