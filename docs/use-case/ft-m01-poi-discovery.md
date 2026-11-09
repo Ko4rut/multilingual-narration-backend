@@ -15,7 +15,7 @@
 |  | 6\. Khi chọn “gần tôi”, ứng dụng xin quyền vị trí nếu chưa có, đọc mẫu vị trí đủ tin cậy và tính khoảng cách theo tọa độ POI. |  |
 |  |  | 7\. Danh sách được sắp xếp theo khoảng cách nếu tính được; người dùng có thể mở bản đồ hoặc phát thuyết minh. |
 | **Alternative Paths:** | **A1 — Từ chối quyền vị trí/GPS tắt:** Vẫn hiển thị và tìm kiếm danh sách POI; ẩn khoảng cách, không ép buộc cấp quyền.<br><br>**A2 — Kết nối lỗi, có package READY:** Hiển thị POI thuộc snapshot local đã tải; thông báo dữ liệu có thể cũ.<br><br>**A3 — POI bị chuyển INACTIVE:** Không trả về trong truy vấn online mới; snapshot offline cũ có thể còn cho đến khi cập nhật. |  |
-| **Exception Paths:** | **E1 — Từ chối quyền vị trí/GPS tắt:** Vẫn hiển thị và tìm kiếm danh sách POI; ẩn khoảng cách, không ép buộc cấp quyền.<br><br>**E2 — Kết nối lỗi, có package READY:** Hiển thị POI thuộc snapshot local đã tải; thông báo dữ liệu có thể cũ.<br><br>**E3 — Kết nối lỗi, không có dữ liệu local:** Thông báo không tải được danh sách và cho phép thử lại.<br><br>**E4 — Tìm kiếm không có kết quả:** Hiển thị trạng thái rỗng và tùy chọn xóa bộ lọc.<br><br>**E5 — POI bị chuyển INACTIVE:** Không trả về trong truy vấn online mới; snapshot offline cũ có thể còn cho đến khi cập nhật.<br><br>**E6 — Vị trí quá cũ hoặc độ chính xác kém:** Không sử dụng để xếp POI “gần tôi”; chuyển sang danh sách thông thường. |  |
+| **Exception Paths:** | **E1 — Kết nối lỗi, không có dữ liệu local:** Thông báo không tải được danh sách và cho phép thử lại.<br><br>**E2 — Tìm kiếm không có kết quả:** Hiển thị trạng thái rỗng và tùy chọn xóa bộ lọc.<br><br>**E3 — Vị trí quá cũ hoặc độ chính xác kém:** Không sử dụng để xếp POI “gần tôi”; chuyển sang danh sách thông thường. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
 | **Triggers:** | Người dùng muốn xem, tìm kiếm hoặc mở POI. |  |
 | **Assumptions:** | Chỉ POI ACTIVE được công bố online; dữ liệu offline là snapshot đã được tải và kiểm chứng. |  |
@@ -30,8 +30,6 @@
 **BR-01, BR-02:** Truy vấn công khai không yêu cầu đăng nhập và chỉ trả POI ACTIVE.<br><br>**AC-M01-01:** US-M01 hiển thị danh sách POI ACTIVE; POI INACTIVE trên server không xuất hiện online.<br><br>**AC-M01-02:** US-M02 tìm kiếm/lọc và mở đúng chi tiết POI được chọn.<br><br>**AC-M01-03:** US-M03 chỉ hiển thị khoảng cách khi mẫu vị trí hợp lệ; từ chối quyền vị trí không chặn danh sách.<br><br>**AC-M01-04:** Không dùng `trigger_radius_meter` làm bán kính lọc mặc định của khám phá lân cận.<br><br>**AC-M01-05:** Offline chỉ dùng dữ liệu của package local đã commit READY, không giả định có toàn bộ danh mục POI.
 
 ## Activity Diagram
-
-Activity Diagram
 
 ```mermaid
 flowchart TD
@@ -53,8 +51,7 @@ flowchart TD
 ## Traceability, Data and Implementation Notes
 
 - **Nguồn dữ liệu:** `Point_Of_Interests`, `Regions`, `Poi_Categories`, `Poi_Category_Mapping`; dữ liệu local tương ứng khi offline.
-- **Liên kết:** Dependencies and Notes
-- Liên kết FT-M02 (bản đồ), FT-M03 (phát thuyết minh), FT-M07 (snapshot offline).
+- **Liên kết:** Liên kết FT-M02 (bản đồ), FT-M03 (phát thuyết minh), FT-M07 (snapshot offline).
 - **Phạm vi thiết kế mục tiêu:** phần hiển thị gần tôi và đồng bộ dữ liệu local cần được đối chiếu khi tích hợp mobile; sơ đồ không khẳng định đã triển khai.
 - Nguồn: PRD.md §2.3.1, §3.3–3.4; `docs/database-design.md` §2.2, §3–4.
 - **Nguồn tham khảo:** PRD.md (§2.3, §3.3–3.4); `docs/database-design.md`; mẫu bố cục `docs/usecase/authentication-session.md`.
