@@ -38,22 +38,24 @@
 flowchart TD
  A([Chọn quét QR]) --> B{Được cấp quyền camera?}
  B -- Không --> C[Xin quyền]
- C --> D{Cấp quyền?}
- D -- Không --> X[Thông báo; chuyển khám phá thủ công]
- B -- Có --> E[Đọc QR]
+ C --> D{Người dùng cấp quyền?}
+ D -- Không --> X[Báo thiếu quyền; cho tìm POI thủ công]
+ B -- Có --> E[Đọc và giải mã QR]
  D -- Có --> E
- E --> F{QR hợp lệ và thuộc hệ thống?}
- F -- Không --> G[Báo QR không hợp lệ; quét lại] --> E
- F -- Có --> H{Online và API trả POI ACTIVE?}
- H -- Có --> I[Chọn POI online hợp lệ]
- H -- Không --> J{Snapshot READY có QR này?}
- J -- Không --> K[Thông báo POI không khả dụng/cần mạng]
- J -- Có --> L[Chọn POI local; snapshot có thể cũ]
- I --> M[Mở POI Detail]
- L --> M
- M --> N{Người dùng yêu cầu nghe?}
- N -- Có --> O[Chuyển FT-M03 chọn audio online/offline] --> P([Kết thúc])
- N -- Không --> P
+ E --> F{QR thuộc định dạng hệ thống?}
+ F -- Không --> G[Báo QR sai; quét lại] --> E
+ F -- Có --> H{Có Internet và API phản hồi?}
+ H -- Có --> I{POI tồn tại và ACTIVE?}
+ I -- Không --> J[Báo POI không khả dụng; không bypass bằng local]
+ I -- Có --> K[Chọn POI online]
+ H -- Không --> L{Snapshot package READY chứa QR và POI hợp lệ?}
+ L -- Không --> M[Báo cần kết nối hoặc tải package]
+ L -- Có --> N[Chọn POI local; cảnh báo snapshot có thể cũ]
+ K --> O[Điều hướng tới POI Detail]
+ N --> O
+ O --> P{Người dùng chọn nghe?}
+ P -- Có --> Q[FT-M03 kiểm tra audio online hoặc local VERIFIED] --> Z([Kết thúc])
+ P -- Không --> Z
 ```
 
 ## Traceability, Data and Implementation Notes
