@@ -15,7 +15,7 @@
 |  |  | 6\. Điều hướng đến màn hình chi tiết POI; người dùng có thể chủ động chọn phát narration. |
 |  |  | 7\. Khi yêu cầu phát, FT-M03 chọn audio/ngôn ngữ và xử lý offline/online theo quy tắc tương ứng. |
 | **Alternative Paths:** | **A1 — Từ chối quyền camera:** Hiển thị hướng dẫn cấp quyền, cho trở về khám phá POI thủ công.<br><br>**A2 — POI không tồn tại/INACTIVE trên server:** Không mở nội dung công khai; hiển thị thông báo phù hợp.<br><br>**A3 — Offline nhưng QR không có trong snapshot READY:** Thông báo cần có dữ liệu hoặc kết nối để mở POI. |  |
-| **Exception Paths:** | **E1 — Từ chối quyền camera:** Hiển thị hướng dẫn cấp quyền, cho trở về khám phá POI thủ công.<br><br>**E2 — QR sai định dạng/không thuộc hệ thống:** Thông báo QR không hợp lệ, tiếp tục quét.<br><br>**E3 — POI không tồn tại/INACTIVE trên server:** Không mở nội dung công khai; hiển thị thông báo phù hợp.<br><br>**E4 — Offline nhưng QR không có trong snapshot READY:** Thông báo cần có dữ liệu hoặc kết nối để mở POI.<br><br>**E5 — QR đọc lặp liên tục:** Khóa xử lý trong thời gian điều hướng để không mở nhiều lần.<br><br>**E6 — GPS không được cấp quyền:** Không ảnh hưởng khả năng quét QR. |  |
+| **Exception Paths:** | **E1 — QR sai định dạng/không thuộc hệ thống:** Thông báo QR không hợp lệ, tiếp tục quét.<br><br>**E2 — QR đọc lặp liên tục:** Khóa xử lý trong thời gian điều hướng để không mở nhiều lần.<br><br>**E3 — GPS không được cấp quyền:** Không ảnh hưởng khả năng quét QR. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
 | **Triggers:** | Người dùng chọn chức năng quét QR Code. |  |
 | **Assumptions:** | Mã QR nhận diện POI theo dữ liệu đã công bố; không phụ thuộc GPS. |  |
@@ -30,8 +30,6 @@
 **BR-01, BR-02:** QR không thay thế quy tắc public POI ACTIVE; Tourist không cần đăng nhập.<br><br>**AC-M04-01:** US-M09 quét QR hợp lệ mở đúng chi tiết POI tương ứng.<br><br>**AC-M04-02:** QR không hợp lệ, camera bị từ chối, POI không có sẵn đều có thông báo rõ.<br><br>**AC-M04-03:** Quy trình QR thực hiện được mà không yêu cầu GPS.<br><br>**AC-M04-04:** Khi offline, chỉ truy cập tài nguyên có trong package READY và đã xác minh trước khi phát.
 
 ## Activity Diagram
-
-Activity Diagram
 
 ```mermaid
 flowchart TD
