@@ -7,14 +7,14 @@
 | **Maturity:** | Specification / Target behavior — chức năng được đặc tả theo PRD và database design; chưa xác nhận toàn bộ luồng mobile đã triển khai. |  |
 | **Summary:** | Nhận diện entry/exit của vùng POI và chỉ đề xuất tự phát khi sự kiện hợp lệ, không rung do GPS và không chồng audio. **Traceability:** Epic: EP-M03 — Automatic Geofence Narration; Feature / Requirement: FT-M05 / FR-M07; User Stories: US-M10, US-M11; Priority: P0 |  |
 | **Basic Course of Events:** | **Actor action** | **System response** |
-|  |  | 1\. Location Engine nhận mẫu tọa độ, kiểm tra độ mới và độ chính xác. |
+|  |  | 1\. Location Engine nhận mẫu tọa độ, kiểm tra độ mới và độ chính xác. **E1, E3** |
 |  |  | 2\. Đối với POI có liên quan, tính khoảng cách và so với `trigger_radius_meter`. |
-|  |  | 3\. Xử lý state machine `OUTSIDE → ENTER_DEBOUNCE → INSIDE_HANDLED → EXIT_DEBOUNCE → OUTSIDE`. |
-|  |  | 4\. Khi chuyển từ OUTSIDE vào vùng, bắt đầu **debounce 3 giây**; nếu rời vùng trước khi đủ thời gian, hủy entry. |
-|  |  | 5\. Sau khi ở trong vùng ổn định, kiểm tra **cooldown 5 phút** theo từng POI cho `AUTO_LOCATION`. Nếu đang cooldown, đánh dấu entry đã xử lý nhưng không phát. |
-|  |  | 6\. Nếu nhiều POI cùng đủ điều kiện, chọn lần lượt theo tỷ lệ khoảng cách/bán kính thấp hơn, khoảng cách tuyệt đối thấp hơn, rồi `poi_id` để phân xử ổn định. |
-|  |  | 7\. Nếu player đang bận, lưu pending candidate và **kiểm tra lại** khi audio hiện tại kết thúc; không tự cắt ngang. |
-|  |  | 8\. Chỉ chuyển yêu cầu phát tới FT-M03 khi điều kiện còn hợp lệ; sau khi bắt đầu phát thành công, cập nhật `last_auto_triggered_at`. |
+|  |  | 3\. Xử lý state machine `OUTSIDE → ENTER_DEBOUNCE → INSIDE_HANDLED → EXIT_DEBOUNCE → OUTSIDE`. **A1, E2** |
+|  |  | 4\. Khi chuyển từ OUTSIDE vào vùng, bắt đầu **debounce 3 giây**; nếu rời vùng trước khi đủ thời gian, hủy entry. **E2** |
+|  |  | 5\. Sau khi ở trong vùng ổn định, kiểm tra **cooldown 5 phút** theo từng POI cho `AUTO_LOCATION`. Nếu đang cooldown, đánh dấu entry đã xử lý nhưng không phát. **E4, E7** |
+|  |  | 6\. Nếu nhiều POI cùng đủ điều kiện, chọn lần lượt theo tỷ lệ khoảng cách/bán kính thấp hơn, khoảng cách tuyệt đối thấp hơn, rồi `poi_id` để phân xử ổn định. **A2** |
+|  |  | 7\. Nếu player đang bận, lưu pending candidate và **kiểm tra lại** khi audio hiện tại kết thúc; không tự cắt ngang. **A3, E6** |
+|  |  | 8\. Chỉ chuyển yêu cầu phát tới FT-M03 khi điều kiện còn hợp lệ; sau khi bắt đầu phát thành công, cập nhật `last_auto_triggered_at`. **A4, E5, E6** |
 |  |  | 9\. Khi exit ổn định đủ debounce, trả POI về OUTSIDE để chờ entry mới. |
 | **Alternative Paths:** | **A1 — Entry mới khi người dùng đã ở trong vùng lúc mở app:** Safety reconcile đọc sample mới, chuyển OUTSIDE → ENTER_DEBOUNCE; chỉ trigger sau đủ 3 giây.<br><br>**A2 — Nhiều Geofence cùng đủ điều kiện:** Xếp theo tỷ lệ distance/trigger_radius_meter thấp hơn, distance tuyệt đối thấp hơn, poi_id tăng dần; chọn tối đa một candidate.<br><br>**A3 — Đang phát narration khác:** Giữ pending candidate; khi player rảnh kiểm tra lại vị trí, entry, cooldown và audio trước khi phát; không tự cắt ngang.<br><br>**A4 — Có Internet nhưng thiếu local audio:** Truy vấn nội dung PUBLISHED/audio online; chỉ ghi cooldown khi phát thực sự thành công. |  |
 | **Exception Paths:** | **E1 — GPS không được cấp quyền, bị tắt hoặc sample stale/accuracy kém:** Không auto-trigger; QR/manual vẫn dùng được.<br><br>**E2 — GPS dao động tại ranh giới:** Yêu cầu debounce 3 giây cho entry và exit; sự kiện không ổn định không thay state.<br><br>**E3 — Miss location callback:** Safety reconcile mỗi 5 giây khi runtime cho phép, đưa mẫu mới qua cùng state machine; không bypass debounce/cooldown.<br><br>**E4 — Re-entry trong cooldown 5 phút:** Đánh dấu INSIDE_HANDLED nhưng không phát; cooldown hết khi còn ở trong vùng không gây trigger mới.<br><br>**E5 — Mất mạng và không có local VERIFIED audio:** Không phát và không đặt last_auto_triggered_at.<br><br>**E6 — Audio load thất bại hoặc pending candidate đã ra khỏi vùng:** Không phát; không ghi cooldown; loại pending không còn hợp lệ.<br><br>**E7 — App restart khi cooldown chưa hết:** Đọc Local_POI_Trigger_State để tiếp tục cooldown theo POI. |  |
@@ -29,7 +29,7 @@
 
 ## Business Rules and Acceptance Criteria
 
-**Không sử dụng `trigger_priority`.** Thứ tự chọn POI khi overlap là `(distance / trigger_radius_meter) ASC`, `distance ASC`, `poi_id ASC`; dùng mẫu vị trí tin cậy. Safety reconcile 5 giây không thể cam kết trong OS background bị hạn chế. State được lưu/khôi phục để không phát lại do restart.
+Thứ tự chọn POI khi overlap là `(distance / trigger_radius_meter) ASC`, `distance ASC`, `poi_id ASC`; dùng mẫu vị trí tin cậy. Safety reconcile 5 giây không thể cam kết trong OS background bị hạn chế. State được lưu/khôi phục để không phát lại do restart.
 
 
 **BR-12, BR-13:** Tôn trọng bật/tắt auto và cooldown; **không** áp cooldown AUTO_LOCATION cho mọi yêu cầu manual/QR.<br><br>**AC-M05-01:** US-M10 entry đủ điều kiện được xử lý sau debounce 3 giây.<br><br>**AC-M05-02:** US-M11 không phát trùng trong cùng entry hoặc trong cooldown 5 phút của cùng POI.<br><br>**AC-M05-03:** Safety reconcile 5 giây không bypass debounce/cooldown.<br><br>**AC-M05-04:** Khi POI overlap, hệ thống chỉ chọn tối đa một audio.<br><br>**AC-M05-05:** Chỉ ghi cooldown sau khi player thực sự bắt đầu; pending candidate được revalidate trước khi phát.
