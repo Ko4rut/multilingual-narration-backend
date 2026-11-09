@@ -8,12 +8,12 @@
 | **Summary:** | Định danh POI bằng QR Code và mở nhanh thông tin/thuyết minh, không phụ thuộc GPS; QR phải tham chiếu POI hợp lệ. **Traceability:** Epic: EP-M02 — Narration Playback and QR Access; Feature / Requirement: FT-M04 / FR-M04; User Story: US-M09; Priority: P0 |  |
 | **Basic Course of Events:** | **Actor action** | **System response** |
 |  | 1\. Du khách chọn “Quét QR”. |  |
-|  |  | 2\. Ứng dụng kiểm tra và yêu cầu quyền camera khi cần. |
-|  |  | 3\. Camera đọc QR; ứng dụng phân tích giá trị và kiểm tra cấu trúc/định dạng cho phép. |
-|  |  | 4\. Ứng dụng đối chiếu QR với POI: online qua nguồn công khai hoặc offline qua dữ liệu POI đã có. |
-|  |  | 5\. Kiểm tra trạng thái POI được phép truy cập tại nguồn đang dùng. |
+|  |  | 2\. Ứng dụng kiểm tra và yêu cầu quyền camera khi cần. **E1** |
+|  |  | 3\. Camera đọc QR; ứng dụng phân tích giá trị và kiểm tra cấu trúc/định dạng cho phép. **E2, E6** |
+|  |  | 4\. Ứng dụng đối chiếu QR với POI: online qua nguồn công khai hoặc offline qua dữ liệu POI đã có. **A1, A2, E3, E4** |
+|  |  | 5\. Kiểm tra trạng thái POI được phép truy cập tại nguồn đang dùng. **E5** |
 |  |  | 6\. Điều hướng đến màn hình chi tiết POI; người dùng có thể chủ động chọn phát narration. |
-|  |  | 7\. Khi yêu cầu phát, FT-M03 chọn audio/ngôn ngữ và xử lý offline/online theo quy tắc tương ứng. |
+|  |  | 7\. Khi yêu cầu phát, FT-M03 chọn audio/ngôn ngữ và xử lý offline/online theo quy tắc tương ứng. **A3, E4** |
 | **Alternative Paths:** | **A1 — QR hợp lệ khi online:** Tra POI ACTIVE từ backend, mở detail; yêu cầu nghe chuyển tới FT-M03.<br><br>**A2 — QR hợp lệ khi offline, local package READY có POI:** Tra `poi_qr_code` trong snapshot local, mở detail; nghe nếu asset VERIFIED cùng ngôn ngữ có sẵn.<br><br>**A3 — Không cấp GPS:** QR vẫn hoạt động vì không yêu cầu GPS. |  |
 | **Exception Paths:** | **E1 — Không cấp camera hoặc camera không sẵn sàng:** Thông báo quyền/thiết bị, cung cấp cách tìm POI thủ công.<br><br>**E2 — QR sai định dạng, URL lạ hoặc không map POI:** Không điều hướng; báo QR không hợp lệ và cho quét lại.<br><br>**E3 — Online API timeout/5xx hoặc mất mạng trong tra cứu:** Thử local package READY; nếu POI không có, báo cần kết nối.<br><br>**E4 — Offline không có package READY hoặc QR không thuộc snapshot:** Không mở POI/không phát audio; giải thích cần tải dữ liệu khi online.<br><br>**E5 — POI INACTIVE hoặc đã bị xóa trên server:** Từ chối điều hướng với dữ liệu online; snapshot offline chỉ biết trạng thái tại lần tải trước.<br><br>**E6 — Quét cùng mã nhiều lần liên tiếp:** Chặn xử lý trùng trước khi hoàn thành điều hướng. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
