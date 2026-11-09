@@ -14,7 +14,7 @@
 |  | 5\. Người dùng chạm marker; ứng dụng hiển thị tóm tắt POI và tùy chọn xem chi tiết. |  |
 |  | 6\. Khi người dùng chọn xem chi tiết, ứng dụng mở đúng màn hình POI của FT-M01; từ đó có thể phát narration tại FT-M03. |  |
 | **Alternative Paths:** | **A1 — Quyền vị trí bị từ chối hoặc GPS tắt:** Bản đồ vẫn hiển thị POI; không hiển thị vị trí hiện tại.<br><br>**A2 — Không có dữ liệu POI hợp lệ:** Hiển thị trạng thái trống hoặc yêu cầu tải trước dữ liệu.<br><br>**A3 — POI thiếu tọa độ hợp lệ:** Không tạo marker lỗi; ghi nhận để xử lý dữ liệu. |  |
-| **Exception Paths:** | **E1 — Quyền vị trí bị từ chối hoặc GPS tắt:** Bản đồ vẫn hiển thị POI; không hiển thị vị trí hiện tại.<br><br>**E2 — Mẫu vị trí stale/không chính xác:** Không đưa ra khoảng cách hoặc gợi ý vị trí sai.<br><br>**E3 — Không có mạng và tile map chưa cache:** Có thể chuyển sang danh sách POI local; **không cam kết bản đồ nền offline**.<br><br>**E4 — Không có dữ liệu POI hợp lệ:** Hiển thị trạng thái trống hoặc yêu cầu tải trước dữ liệu.<br><br>**E5 — POI thiếu tọa độ hợp lệ:** Không tạo marker lỗi; ghi nhận để xử lý dữ liệu. |  |
+| **Exception Paths:** | **E1 — Mẫu vị trí stale/không chính xác:** Không đưa ra khoảng cách hoặc gợi ý vị trí sai.<br><br>**E2 — Không có mạng và tile map chưa cache:** Có thể chuyển sang danh sách POI local; **không cam kết bản đồ nền offline**. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
 | **Triggers:** | Người dùng mở màn hình bản đồ hoặc chạm marker POI. |  |
 | **Assumptions:** | Nhà cung cấp bản đồ cần kết nối nếu map tiles chưa cache; không cam kết offline map tiles. |  |
@@ -29,8 +29,6 @@
 **BR-01, BR-02:** Chỉ lấy POI ACTIVE từ nguồn công khai online; offline phụ thuộc snapshot đã tải.<br><br>**AC-M02-01:** US-M04 bản đồ có marker POI tương ứng tọa độ hợp lệ và vị trí thiết bị khi có quyền.<br><br>**AC-M02-02:** US-M05 chạm marker POI A không mở nhầm POI B.<br><br>**AC-M02-03:** Khi từ chối quyền vị trí, người dùng vẫn xem POI trên bản đồ.<br><br>**AC-M02-04:** Mất mạng không dẫn đến tuyên bố sai rằng bản đồ nền đã tải; cung cấp danh sách POI local nếu có.
 
 ## Activity Diagram
-
-Activity Diagram
 
 ```mermaid
 flowchart TD
