@@ -15,7 +15,7 @@
 |  | 6\. Người dùng chỉnh âm lượng (trong giới hạn API player/OS) và chọn giao diện sáng/tối. |  |
 |  |  | 7\. Ứng dụng xác thực các lựa chọn, ghi bền vững và hiển thị thiết lập cập nhật khi mở lại. |
 | **Alternative Paths:** | **A1 — Ngôn ngữ UI chưa có bản dịch:** Thông báo hoặc sử dụng ngôn ngữ giao diện mặc định; không đồng nhất với fallback narration online.<br><br>**A2 — Ngôn ngữ nghe không có bản PUBLISHED online:** FT-M03 áp dụng fallback tiếng Anh theo BR-05; giữ lựa chọn người dùng.<br><br>**A3 — Không có package offline theo ngôn ngữ mới:** Thông báo cần tải đúng package; không tự xem package ngôn ngữ khác là hợp lệ. |  |
-| **Exception Paths:** | **E1 — Ngôn ngữ UI chưa có bản dịch:** Thông báo hoặc sử dụng ngôn ngữ giao diện mặc định; không đồng nhất với fallback narration online.<br><br>**E2 — Ngôn ngữ nghe không có bản PUBLISHED online:** FT-M03 áp dụng fallback tiếng Anh theo BR-05; giữ lựa chọn người dùng.<br><br>**E3 — Không có package offline theo ngôn ngữ mới:** Thông báo cần tải đúng package; không tự xem package ngôn ngữ khác là hợp lệ.<br><br>**E4 — Bật auto nhưng chưa cấp quyền GPS/background:** Yêu cầu quyền cần thiết; nếu từ chối, không tự trigger.<br><br>**E5 — Lỗi ghi thiết lập local:** Hiển thị lỗi; không tuyên bố đã lưu vĩnh viễn.<br><br>**E6 — Thay đổi âm lượng bị OS giới hạn:** Tuân thủ giới hạn nền tảng; không vượt chính sách thiết bị. |  |
+| **Exception Paths:** | **E1 — Bật auto nhưng chưa cấp quyền GPS/background:** Yêu cầu quyền cần thiết; nếu từ chối, không tự trigger.<br><br>**E2 — Lỗi ghi thiết lập local:** Hiển thị lỗi; không tuyên bố đã lưu vĩnh viễn.<br><br>**E3 — Thay đổi âm lượng bị OS giới hạn:** Tuân thủ giới hạn nền tảng; không vượt chính sách thiết bị. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
 | **Triggers:** | Người dùng truy cập Settings và thay đổi tùy chọn. |  |
 | **Assumptions:** | Thiết lập người dùng được lưu cục bộ, không yêu cầu tài khoản Tourist. |  |
@@ -30,8 +30,6 @@
 **BR-01, BR-05–06, BR-12:** Tourist không cần tài khoản; lựa chọn ngôn ngữ không làm thay đổi quy tắc fallback; auto chỉ chạy khi bật và đủ quyền.<br><br>**AC-M08-01:** US-M16 ngôn ngữ giao diện và thuyết minh là hai tùy chọn độc lập.<br><br>**AC-M08-02:** US-M17 tắt auto ngăn kích hoạt mới và chấm dứt theo dõi không còn cần thiết.<br><br>**AC-M08-03:** US-M18 chỉnh âm thanh, theme và duy trì trạng thái sau restart khi lưu thành công.<br><br>**AC-M08-04:** Thay ngôn ngữ không tự chuyển phiên phát đang chạy hoặc package offline hiện tại sang nội dung khác khi chưa xác minh.
 
 ## Activity Diagram
-
-Activity Diagram
 
 ```mermaid
 flowchart TD
