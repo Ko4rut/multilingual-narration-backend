@@ -10,12 +10,12 @@
 |  | **FT-W01 — Quản lý POI** |  |
 |  | 1\. Người quản trị mở danh sách POI; backend kiểm tra session và permission `read`. |  |
 |  | 2\. Người quản trị tìm kiếm/lọc/phân trang, xem chi tiết POI và dữ liệu khu vực, danh mục. |  |
-|  |  | 3\. Chọn tạo POI; nhập `region_id`, `poi_name`, `poi_location`, `poi_image_url`, `poi_qr_code`, tọa độ và `trigger_radius_meter`. |
+|  | 3\. Chọn tạo POI; nhập `region_id`, `poi_name`, `poi_location`, `poi_image_url`, `poi_qr_code`, tọa độ và `trigger_radius_meter`. |  |
 |  |  | 4\. Backend kiểm tra bắt buộc, tọa độ trong miền hợp lệ, bán kính dương, mã QR/địa chỉ không trùng và khóa ngoại; tạo POI với `poi_status = INACTIVE` (**BR-03**). |
 |  |  | 5\. Khi cập nhật, backend kiểm tra permission, tham chiếu và quy tắc toàn vẹn dữ liệu. |
-|  |  | 6\. Khi yêu cầu kích hoạt, backend chỉ chuyển sang `ACTIVE` nếu POI có ít nhất một phiên bản tiếng Anh `PUBLISHED` và audio metadata/tài nguyên hợp lệ (**BR-04**). |
-|  |  | 7\. Khi vô hiệu hóa, POI ngừng xuất hiện ở API công khai online; thay đổi dữ liệu mobile-relevant đánh dấu package liên quan cần rebuild. |
-|  |  | 8\. Khi xóa, backend từ chối nếu còn tham chiếu nội dung, lịch sử nghe hoặc package vi phạm ràng buộc (**BR-11**). |
+|  | 6\. Khi yêu cầu kích hoạt, backend chỉ chuyển sang `ACTIVE` nếu POI có ít nhất một phiên bản tiếng Anh `PUBLISHED` và audio metadata/tài nguyên hợp lệ (**BR-04**). |  |
+|  | 7\. Khi vô hiệu hóa, POI ngừng xuất hiện ở API công khai online; thay đổi dữ liệu mobile-relevant đánh dấu package liên quan cần rebuild. |  |
+|  | 8\. Khi xóa, backend từ chối nếu còn tham chiếu nội dung, lịch sử nghe hoặc package vi phạm ràng buộc (**BR-11**). |  |
 |  | **FT-W02 — Quản lý nội dung và xuất bản** |  |
 |  | 1\. Từ một POI, người quản trị chọn ngôn ngữ đã đăng ký và tạo nội dung `narration_title`, `narration_script`. |  |
 |  |  | 2\. Backend tạo `Poi_Content` mới ở `DRAFT` với `content_version` tăng trong phạm vi `poi_id + language_id`; không ghi đè bản đang PUBLISHED. |
@@ -29,7 +29,7 @@
 |  |  | 2\. Hệ thống hiển thị `audio_source_type` (`RECORD` hoặc `TTS`), `audio_url`, `audio_mime_type`, `audio_size`, `audio_duration_sec`, `audio_checksum_sha256`. |
 |  |  | 3\. Trước khi gắn/thay audio, hệ thống kiểm tra tính hợp lệ của metadata và xác minh tài nguyên vật lý qua cơ chế tích hợp thích hợp. |
 |  |  | 4\. Mỗi `poi_content_id` có tối đa một `Content_Audio` trong thiết kế hiện tại. |
-|  |  | 5\. Nếu thay audio, phải dùng asset URL bất biến phù hợp checksum; đánh dấu các package tham chiếu nội dung cần rebuild. |
+|  | 5\. Nếu thay audio, phải dùng asset URL bất biến phù hợp checksum; đánh dấu các package tham chiếu nội dung cần rebuild. |  |
 |  |  | 6\. Chỉ metadata **không** chứng minh tệp đã upload/verify; không publish dựa trên bản ghi chưa kiểm chứng. |
 | **Alternative Paths:** | **A1 — Quản trị POI:** Đăng nhập có permission phù hợp để xem, tạo/cập nhật, kích hoạt/vô hiệu hóa hoặc xóa POI theo điều kiện nghiệp vụ.<br><br>**A2 — Quản trị content:** Tạo phiên bản DRAFT, gửi phê duyệt, phê duyệt/từ chối và xuất bản theo phân quyền.<br><br>**A3 — Quản trị audio:** Kiểm tra hoặc thay metadata và tài nguyên audio liên kết phiên bản content trước khi publish. |  |
 | **Exception Paths:** | **E1 — Session hết hạn/không có permission:** Từ chối hành động tại backend; không chỉ ẩn nút trên web.<br><br>**E2 — Tạo POI dữ liệu không hợp lệ/trùng QR:** Thông báo trường lỗi; không tạo bản ghi.<br><br>**E3 — Kích hoạt POI thiếu English PUBLISHED/audio:** Giữ INACTIVE và giải thích điều kiện thiếu.<br><br>**E4 — Xóa POI vẫn bị tham chiếu:** Từ chối xóa để giữ toàn vẹn dữ liệu.<br><br>**E5 — Content chưa APPROVED hoặc audio thiếu:** Từ chối publish; giữ phiên bản đang phục vụ.<br><br>**E6 — TTS/upload/verify audio thất bại:** Giữ content APPROVED; không archive bản PUBLISHED trước.<br><br>**E7 — Publish phiên bản mới:** Archive bản cũ của cùng POI-ngôn ngữ; không ảnh hưởng ngôn ngữ khác.<br><br>**E8 — Thay đổi POI/content/audio làm package stale:** Đánh dấu rebuild; không coi package BUILDING là đã sẵn sàng tải. |  |
@@ -90,8 +90,7 @@ flowchart TD
 ## Traceability, Data and Implementation Notes
 
 - **Nguồn dữ liệu:** - **Hậu điều kiện thành công:** Dữ liệu được lưu/đổi trạng thái hợp lệ; nội dung PUBLISHED có audio hợp lệ; POI ACTIVE chỉ tồn tại khi có bản tiếng Anh PUBLISHED và audio phù hợp. `Point_Of_Interests`, `Poi_Category_Mapping`, `Regions`, `Poi_Categories`, `Languages`, `Poi_Contents`, `Content_Audios`, `Offline_Packages`, `Offline_Package_Items`; audit log là yêu cầu hệ thống.
-- **Liên kết:** Traceability and Notes
-- EP-W01 chỉ bao gồm FT-W01, FT-W02, FT-W03 theo PRD §3.3.2; xác thực/phiên quản trị thuộc EP-W02.
+- **Liên kết:** EP-W01 chỉ bao gồm FT-W01, FT-W02, FT-W03 theo PRD §3.3.2; xác thực/phiên quản trị thuộc EP-W02.
 - Quy trình TTS/upload/verify file được mô tả như **luồng tích hợp mục tiêu**; không khẳng định chỉ từ metadata rằng file đã được tạo thực tế.
 - PRD FR-W03 có nghiệp vụ gỡ bỏ nội dung; chuyển trạng thái/gỡ bỏ phải bảo toàn quy tắc English narration của POI ACTIVE và phiên bản đang phân phối.
 - Nguồn: PRD.md FR-W02–04, US-W01–08, BR-02–04/09/11; `docs/database-design.md` §2.2–2.3.
