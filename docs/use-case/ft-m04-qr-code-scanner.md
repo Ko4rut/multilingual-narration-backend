@@ -14,8 +14,8 @@
 |  |  | 5\. Kiểm tra trạng thái POI được phép truy cập tại nguồn đang dùng. |
 |  |  | 6\. Điều hướng đến màn hình chi tiết POI; người dùng có thể chủ động chọn phát narration. |
 |  |  | 7\. Khi yêu cầu phát, FT-M03 chọn audio/ngôn ngữ và xử lý offline/online theo quy tắc tương ứng. |
-| **Alternative Paths:** | **A1 — Từ chối quyền camera:** Hiển thị hướng dẫn cấp quyền, cho trở về khám phá POI thủ công.<br><br>**A2 — POI không tồn tại/INACTIVE trên server:** Không mở nội dung công khai; hiển thị thông báo phù hợp.<br><br>**A3 — Offline nhưng QR không có trong snapshot READY:** Thông báo cần có dữ liệu hoặc kết nối để mở POI. |  |
-| **Exception Paths:** | **E1 — QR sai định dạng/không thuộc hệ thống:** Thông báo QR không hợp lệ, tiếp tục quét.<br><br>**E2 — QR đọc lặp liên tục:** Khóa xử lý trong thời gian điều hướng để không mở nhiều lần.<br><br>**E3 — GPS không được cấp quyền:** Không ảnh hưởng khả năng quét QR. |  |
+| **Alternative Paths:** | **A1 — QR hợp lệ khi online:** Tra POI ACTIVE từ backend, mở detail; yêu cầu nghe chuyển tới FT-M03.<br><br>**A2 — QR hợp lệ khi offline, local package READY có POI:** Tra `poi_qr_code` trong snapshot local, mở detail; nghe nếu asset VERIFIED cùng ngôn ngữ có sẵn.<br><br>**A3 — Không cấp GPS:** QR vẫn hoạt động vì không yêu cầu GPS. |  |
+| **Exception Paths:** | **E1 — Không cấp camera hoặc camera không sẵn sàng:** Thông báo quyền/thiết bị, cung cấp cách tìm POI thủ công.<br><br>**E2 — QR sai định dạng, URL lạ hoặc không map POI:** Không điều hướng; báo QR không hợp lệ và cho quét lại.<br><br>**E3 — Online API timeout/5xx hoặc mất mạng trong tra cứu:** Thử local package READY; nếu POI không có, báo cần kết nối.<br><br>**E4 — Offline không có package READY hoặc QR không thuộc snapshot:** Không mở POI/không phát audio; giải thích cần tải dữ liệu khi online.<br><br>**E5 — POI INACTIVE hoặc đã bị xóa trên server:** Từ chối điều hướng với dữ liệu online; snapshot offline chỉ biết trạng thái tại lần tải trước.<br><br>**E6 — Quét cùng mã nhiều lần liên tiếp:** Chặn xử lý trùng trước khi hoàn thành điều hướng. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
 | **Triggers:** | Người dùng chọn chức năng quét QR Code. |  |
 | **Assumptions:** | Mã QR nhận diện POI theo dữ liệu đã công bố; không phụ thuộc GPS. |  |
@@ -27,25 +27,33 @@
 
 ## Business Rules and Acceptance Criteria
 
+**Phân biệt trạng thái:** Khi backend xác nhận POI INACTIVE, không được fallback sang local chỉ để vượt hạn chế public; fallback local chỉ áp dụng khi không thể xác minh qua backend (offline hoặc lỗi truy vấn), với cảnh báo snapshot có thể cũ.
+
+
 **BR-01, BR-02:** QR không thay thế quy tắc public POI ACTIVE; Tourist không cần đăng nhập.<br><br>**AC-M04-01:** US-M09 quét QR hợp lệ mở đúng chi tiết POI tương ứng.<br><br>**AC-M04-02:** QR không hợp lệ, camera bị từ chối, POI không có sẵn đều có thông báo rõ.<br><br>**AC-M04-03:** Quy trình QR thực hiện được mà không yêu cầu GPS.<br><br>**AC-M04-04:** Khi offline, chỉ truy cập tài nguyên có trong package READY và đã xác minh trước khi phát.
 
 ## Activity Diagram
 
 ```mermaid
 flowchart TD
-    A([Chọn quét QR]) --> B{Có quyền camera?}
-    B -- Không --> C[Yêu cầu quyền]
-    C --> D{Được cấp?}
-    D -- Không --> X[Thông báo và cho chọn POI thủ công]
-    B -- Có --> E[Quét QR]
-    D -- Có --> E
-    E --> F{QR đúng định dạng?}
-    F -- Không --> G[Thông báo mã không hợp lệ] --> E
-    F -- Có --> H[Tra cứu POI từ online hoặc local]
-    H --> I{POI được phép truy cập?}
-    I -- Không --> J[Thông báo không khả dụng]
-    I -- Có --> K[Điều hướng tới POI Detail]
-    K --> L([Kết thúc])
+ A([Chọn quét QR]) --> B{Được cấp quyền camera?}
+ B -- Không --> C[Xin quyền]
+ C --> D{Cấp quyền?}
+ D -- Không --> X[Thông báo; chuyển khám phá thủ công]
+ B -- Có --> E[Đọc QR]
+ D -- Có --> E
+ E --> F{QR hợp lệ và thuộc hệ thống?}
+ F -- Không --> G[Báo QR không hợp lệ; quét lại] --> E
+ F -- Có --> H{Online và API trả POI ACTIVE?}
+ H -- Có --> I[Chọn POI online hợp lệ]
+ H -- Không --> J{Snapshot READY có QR này?}
+ J -- Không --> K[Thông báo POI không khả dụng/cần mạng]
+ J -- Có --> L[Chọn POI local; snapshot có thể cũ]
+ I --> M[Mở POI Detail]
+ L --> M
+ M --> N{Người dùng yêu cầu nghe?}
+ N -- Có --> O[Chuyển FT-M03 chọn audio online/offline] --> P([Kết thúc])
+ N -- Không --> P
 ```
 
 ## Traceability, Data and Implementation Notes
