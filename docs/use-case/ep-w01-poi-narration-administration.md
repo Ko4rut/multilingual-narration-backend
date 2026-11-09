@@ -8,29 +8,29 @@
 | **Summary:** | Quản lý vòng đời POI, phiên bản nội dung đa ngôn ngữ và metadata audio từ khâu tạo/hiệu chỉnh đến phê duyệt, xuất bản và phân phối công khai; bảo đảm không công bố dữ liệu chưa hợp lệ. **Traceability:** Epic: EP-W01 — POI and Narration Administration; Component / Priority: Web Administration / P0; Features: FT-W01 POI Management; FT-W02 Narration Content Management; FT-W03 Audio Management; Requirements: FR-W02; FR-W03; FR-W04; User Stories: US-W01–US-W08 |  |
 | **Basic Course of Events:** | **Actor action** | **System response** |
 |  | **FT-W01 — Quản lý POI** |  |
-|  | 1\. Người quản trị mở danh sách POI; backend kiểm tra session và permission `read`. |  |
+|  | 1\. Người quản trị mở danh sách POI; backend kiểm tra session và permission `read`. |  **E1, E2, E3** |
 |  | 2\. Người quản trị tìm kiếm/lọc/phân trang, xem chi tiết POI và dữ liệu khu vực, danh mục. |  |
-|  | 3\. Chọn tạo POI; nhập `region_id`, `poi_name`, `poi_location`, `poi_image_url`, `poi_qr_code`, tọa độ và `trigger_radius_meter`. |  |
-|  |  | 4\. Backend kiểm tra bắt buộc, tọa độ trong miền hợp lệ, bán kính dương, mã QR/địa chỉ không trùng và khóa ngoại; tạo POI với `poi_status = INACTIVE` (**BR-03**). |
+|  | 3\. Chọn tạo POI; nhập `region_id`, `poi_name`, `poi_location`, `poi_image_url`, `poi_qr_code`, tọa độ và `trigger_radius_meter`. |  **A1, E4** |
+|  |  | 4\. Backend kiểm tra bắt buộc, tọa độ trong miền hợp lệ, bán kính dương, mã QR/địa chỉ không trùng và khóa ngoại; tạo POI với `poi_status = INACTIVE` (**BR-03**). **A1, E4** |
 |  |  | 5\. Khi cập nhật, backend kiểm tra permission, tham chiếu và quy tắc toàn vẹn dữ liệu. |
-|  | 6\. Khi yêu cầu kích hoạt, backend chỉ chuyển sang `ACTIVE` nếu POI có ít nhất một phiên bản tiếng Anh `PUBLISHED` và audio metadata/tài nguyên hợp lệ (**BR-04**). |  |
-|  | 7\. Khi vô hiệu hóa, POI ngừng xuất hiện ở API công khai online; thay đổi dữ liệu mobile-relevant đánh dấu package liên quan cần rebuild. |  |
-|  | 8\. Khi xóa, backend từ chối nếu còn tham chiếu nội dung, lịch sử nghe hoặc package vi phạm ràng buộc (**BR-11**). |  |
+|  | 6\. Khi yêu cầu kích hoạt, backend chỉ chuyển sang `ACTIVE` nếu POI có ít nhất một phiên bản tiếng Anh `PUBLISHED` và audio metadata/tài nguyên hợp lệ (**BR-04**). |  **A2, E6** |
+|  | 7\. Khi vô hiệu hóa, POI ngừng xuất hiện ở API công khai online; thay đổi dữ liệu mobile-relevant đánh dấu package liên quan cần rebuild. |  **A2, E10** |
+|  | 8\. Khi xóa, backend từ chối nếu còn tham chiếu nội dung, lịch sử nghe hoặc package vi phạm ràng buộc (**BR-11**). |  **E5** |
 |  | **FT-W02 — Quản lý nội dung và xuất bản** |  |
-|  | 1\. Từ một POI, người quản trị chọn ngôn ngữ đã đăng ký và tạo nội dung `narration_title`, `narration_script`. |  |
-|  |  | 2\. Backend tạo `Poi_Content` mới ở `DRAFT` với `content_version` tăng trong phạm vi `poi_id + language_id`; không ghi đè bản đang PUBLISHED. |
-|  | 3\. Người có quyền gửi `WAITING_APPROVAL`; reviewer có permission tương ứng phê duyệt thành `APPROVED` hoặc từ chối (`REJECTED` theo state machine). |  |
-|  |  | 4\. Trước khi publish, hệ thống yêu cầu audio hợp lệ gắn với đúng phiên bản content; nếu có quy trình TTS khi publish thì tạo file, upload và xác minh trước khi đổi trạng thái. |
-|  |  | 5\. Khi mọi điều kiện đạt và permission `publish` hợp lệ, backend chuyển bản mới thành `PUBLISHED`, lưu thông tin người/thời điểm xuất bản. |
-|  |  | 6\. Bản PUBLISHED trước của cùng cặp POI-ngôn ngữ được chuyển `ARCHIVED` trong xử lý nhất quán; đánh dấu package offline bị ảnh hưởng cần rebuild. |
+|  | 1\. Từ một POI, người quản trị chọn ngôn ngữ đã đăng ký và tạo nội dung `narration_title`, `narration_script`. |  **A3, E2, E3** |
+|  |  | 2\. Backend tạo `Poi_Content` mới ở `DRAFT` với `content_version` tăng trong phạm vi `poi_id + language_id`; không ghi đè bản đang PUBLISHED. **A3** |
+|  | 3\. Người có quyền gửi `WAITING_APPROVAL`; reviewer có permission tương ứng phê duyệt thành `APPROVED` hoặc từ chối (`REJECTED` theo state machine). |  **E3, E7** |
+|  |  | 4\. Trước khi publish, hệ thống yêu cầu audio hợp lệ gắn với đúng phiên bản content; nếu có quy trình TTS khi publish thì tạo file, upload và xác minh trước khi đổi trạng thái. **A4, E8, E11** |
+|  |  | 5\. Khi mọi điều kiện đạt và permission `publish` hợp lệ, backend chuyển bản mới thành `PUBLISHED`, lưu thông tin người/thời điểm xuất bản. **A5, E7, E9** |
+|  |  | 6\. Bản PUBLISHED trước của cùng cặp POI-ngôn ngữ được chuyển `ARCHIVED` trong xử lý nhất quán; đánh dấu package offline bị ảnh hưởng cần rebuild. **A5, E9, E10** |
 |  |  | 7\. Nếu đây là tiếng Anh cho POI ACTIVE, phải bảo đảm quá trình thay phiên bản không tạo khoảng trống bản tiếng Anh khả dụng. |
 |  | **FT-W03 — Quản lý metadata audio** |  |
-|  | 1\. Người có quyền mở phiên bản content và trang quản lý audio. |  |
+|  | 1\. Người có quyền mở phiên bản content và trang quản lý audio. |  **E2, E3** |
 |  |  | 2\. Hệ thống hiển thị `audio_source_type` (`RECORD` hoặc `TTS`), `audio_url`, `audio_mime_type`, `audio_size`, `audio_duration_sec`, `audio_checksum_sha256`. |
-|  |  | 3\. Trước khi gắn/thay audio, hệ thống kiểm tra tính hợp lệ của metadata và xác minh tài nguyên vật lý qua cơ chế tích hợp thích hợp. |
+|  |  | 3\. Trước khi gắn/thay audio, hệ thống kiểm tra tính hợp lệ của metadata và xác minh tài nguyên vật lý qua cơ chế tích hợp thích hợp. **A4, E8, E11** |
 |  |  | 4\. Mỗi `poi_content_id` có tối đa một `Content_Audio` trong thiết kế hiện tại. |
-|  | 5\. Nếu thay audio, phải dùng asset URL bất biến phù hợp checksum; đánh dấu các package tham chiếu nội dung cần rebuild. |  |
-|  |  | 6\. Chỉ metadata **không** chứng minh tệp đã upload/verify; không publish dựa trên bản ghi chưa kiểm chứng. |
+|  | 5\. Nếu thay audio, phải dùng asset URL bất biến phù hợp checksum; đánh dấu các package tham chiếu nội dung cần rebuild. |  **A4, E10** |
+|  |  | 6\. Chỉ metadata **không** chứng minh tệp đã upload/verify; không publish dựa trên bản ghi chưa kiểm chứng. **E11** |
 | **Alternative Paths:** | **A1 — Quản lý POI và sửa metadata:** Người có quyền tạo/sửa POI; chỉ POI hợp lệ được lưu, POI mới luôn INACTIVE.<br><br>**A2 — Kích hoạt và vô hiệu hóa POI:** Khi kích hoạt phải có nội dung en PUBLISHED + audio thực sự hợp lệ; khi vô hiệu hóa, API online không trả POI và package liên quan cần rebuild.<br><br>**A3 — Tạo phiên bản nội dung mới:** Giữ bản PUBLISHED cũ đang phân phối trong khi bản mới DRAFT/WAITING_APPROVAL/APPROVED; không ghi đè version cũ.<br><br>**A4 — Thay audio RECORD/TTS:** Upload tài nguyên mới trước, xác minh SHA-256/MIME/size/duration và URL bất biến rồi liên kết metadata; đánh dấu offline package liên quan cần rebuild.<br><br>**A5 — Xuất bản phiên bản mới:** Chuyển phiên bản cũ cùng POI/ngôn ngữ sang ARCHIVED nhất quán; bảo đảm POI ACTIVE không mất bản en PUBLISHED hợp lệ. |  |
 | **Exception Paths:** | **E1 — Không có mạng đến Admin API/timeout/HTTP 5xx:** Thông báo yêu cầu chưa được xác nhận; không tự giả định ghi thành công, tải lại trạng thái server khi có mạng trước khi retry để tránh tạo dữ liệu trùng.<br><br>**E2 — JWT/session hết hạn hoặc bị thu hồi:** Trả 401; đăng nhập/làm mới phiên theo EP-W02, không thực hiện mutation trước khi xác thực hợp lệ.<br><br>**E3 — Không có permission cho hành động:** Backend trả 403; không sửa database, dù giao diện có hiển thị thao tác.<br><br>**E4 — POI thiếu trường, tọa độ ngoài [-90,90]/[-180,180], bán kính không dương, QR/địa chỉ trùng:** Trả validation/conflict; không tạo hoặc cập nhật bản ghi không hợp lệ.<br><br>**E5 — Xóa POI còn quan hệ content/history/offline package:** Từ chối xóa theo ràng buộc tham chiếu BR-11; giữ nguyên dữ liệu liên quan.<br><br>**E6 — Bật ACTIVE nhưng thiếu bản tiếng Anh PUBLISHED hoặc audio hợp lệ:** Giữ INACTIVE và chỉ rõ điều kiện còn thiếu.<br><br>**E7 — Content chưa APPROVED, role không có quyền approve/publish, hoặc phiên bản đã thay đổi:** Không xuất bản; yêu cầu kiểm tra lại state và quyền ở backend.<br><br>**E8 — TTS/upload/file verification thất bại:** Giữ content APPROVED, bản PUBLISHED cũ tiếp tục phục vụ, không archive, cho retry bước tạo audio.<br><br>**E9 — Publish/đổi ARCHIVED hoặc ghi DB lỗi giữa transaction:** Rollback để không có hai bản PUBLISHED hoặc mất bản đang phân phối; thông báo lỗi và tải lại trạng thái.<br><br>**E10 — Offline package rebuild thất bại:** Không công bố manifest BUILDING/FAILED; bản PUBLISHED cũ và local READY cũ tiếp tục sử dụng.<br><br>**E11 — Audio metadata tồn tại nhưng file thiếu/checksum sai:** Không chấp nhận tài nguyên chưa VERIFIED khi publish; không đánh đồng metadata với upload thực tế. |  |
 | **Extension Points:** | Có thể bổ sung hệ thống xử lý TTS/upload file thực tế, audit event và quy trình rebuild package tự động. |  |
