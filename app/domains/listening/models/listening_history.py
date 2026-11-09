@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Uuid
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -11,6 +11,26 @@ from app.core.database import Base
 
 class ListeningHistory(Base):
     __tablename__ = "listening_history"
+    __table_args__ = (
+        CheckConstraint(
+            "trigger_type IN ('AUTO_LOCATION', 'QR_CODE')",
+            name="ck_listening_history_trigger_type",
+        ),
+        CheckConstraint(
+            "duration_sec IS NULL OR duration_sec >= 0",
+            name="ck_listening_history_duration_nonnegative",
+        ),
+        CheckConstraint(
+            "completed_at IS NULL OR completed_at >= started_at",
+            name="ck_listening_history_completed_after_started",
+        ),
+        Index("ix_listening_history_poi_started_at", "poi_id", "started_at"),
+        Index(
+            "ix_listening_history_installation_started_at",
+            "installation_id",
+            "started_at",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     installation_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
