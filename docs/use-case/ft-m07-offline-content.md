@@ -17,7 +17,7 @@
 |  |  | 8\. Sau commit thành công mới cleanup asset cũ không còn được package nào tham chiếu. |
 |  | 9\. Du khách sử dụng content/audio local khi offline; xem dung lượng và có thể quản lý gói đã tải. |  |
 | **Alternative Paths:** | **A1 — Package trên server BUILDING/FAILED chưa có version published:** Thông báo chưa sẵn sàng; không tải như gói hoàn chỉnh.<br><br>**A2 — Hai package dùng cùng asset:** Tái sử dụng theo checksum; chỉ xóa asset khi không package nào tham chiếu. |  |
-| **Exception Paths:** | **E1 — Package trên server BUILDING/FAILED chưa có version published:** Thông báo chưa sẵn sàng; không tải như gói hoàn chỉnh.<br><br>**E2 — Manifest checksum sai/schema không tương thích:** Từ chối phiên bản; giữ local READY cũ.<br><br>**E3 — Thiếu dung lượng:** Dừng trước download/commit; cho phép giải phóng dung lượng.<br><br>**E4 — Mất mạng/app bị kill/timeout:** Lưu download job; resume/retry phù hợp; không commit bản tải dở.<br><br>**E5 — Asset thiếu, SHA-256 sai:** Không đánh dấu VERIFIED; xóa file tạm và tải lại có giới hạn.<br><br>**E6 — Transaction local thất bại:** Rollback toàn bộ chuyển version; package cũ vẫn READY.<br><br>**E7 — Server publish v3 khi client tải v2:** Cho hoàn tất manifest bất biến v2; kiểm tra version mới ở lần tiếp theo.<br><br>**E8 — Hai package dùng cùng asset:** Tái sử dụng theo checksum; chỉ xóa asset khi không package nào tham chiếu. |  |
+| **Exception Paths:** | **E1 — Manifest checksum sai/schema không tương thích:** Từ chối phiên bản; giữ local READY cũ.<br><br>**E2 — Thiếu dung lượng:** Dừng trước download/commit; cho phép giải phóng dung lượng.<br><br>**E3 — Mất mạng/app bị kill/timeout:** Lưu download job; resume/retry phù hợp; không commit bản tải dở.<br><br>**E4 — Asset thiếu, SHA-256 sai:** Không đánh dấu VERIFIED; xóa file tạm và tải lại có giới hạn.<br><br>**E5 — Transaction local thất bại:** Rollback toàn bộ chuyển version; package cũ vẫn READY.<br><br>**E6 — Server publish v3 khi client tải v2:** Cho hoàn tất manifest bất biến v2; kiểm tra version mới ở lần tiếp theo. |  |
 | **Extension Points:** | Có thể mở rộng theo các năng lực tích hợp mobile, backend và chính sách vận hành đã ghi trong PRD; không nằm trong phạm vi xác nhận triển khai hiện tại. |  |
 | **Triggers:** | Người dùng yêu cầu tải/cập nhật/quản lý gói nội dung offline. |  |
 | **Assumptions:** | Backend phải xuất bản manifest và tài nguyên hợp lệ; metadata DB không đồng nghĩa asset đã upload xong. |  |
@@ -32,8 +32,6 @@
 **BR-06, BR-07, BR-08, BR-14:** Package offline một ngôn ngữ xác định; chỉ PUBLISHED được phân phối; BUILDING không sẵn sàng; toàn vẹn bắt buộc trước kích hoạt.<br><br>**AC-M07-01:** US-M13 chọn region/language/category? truy xuất đúng package logic.<br><br>**AC-M07-02:** US-M14 khi mất mạng vẫn truy cập được POI/audio từ package READY và asset VERIFIED.<br><br>**AC-M07-03:** US-M15 hiển thị dung lượng và cho phép quản lý gói mà không xóa nhầm asset dùng chung.<br><br>**AC-M07-04:** Checksum sai, schema sai, thiếu bộ nhớ, transaction thất bại không làm mất bản READY trước đó.<br><br>**AC-M07-05:** Không áp dụng online English fallback tự động khi chỉ có package offline theo ngôn ngữ khác.
 
 ## Activity Diagram
-
-Activity Diagram
 
 ```mermaid
 flowchart TD
