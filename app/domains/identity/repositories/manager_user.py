@@ -2,13 +2,11 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.domains.identity.models.manager_user import (
-    ManagerUserModel,
-    ManagerUserStatus,
-)
+from app.domains.identity.models.manager_user import ManagerUserModel, ManagerUserStatus
 
 
 class ManagerUserRepository:
+
     def __init__(self, session: Session):
         self.session = session
 
@@ -18,9 +16,7 @@ class ManagerUserRepository:
 
     def get_by_email(self, email: str) -> ManagerUserModel | None:
         # Lấy tài khoản theo email đã được service chuẩn hóa.
-        return self.session.scalar(
-            select(ManagerUserModel).where(ManagerUserModel.email == email)
-        )
+        return self.session.scalar(select(ManagerUserModel).where(ManagerUserModel.email == email))
 
     def get_all(
         self,
