@@ -1,29 +1,12 @@
 from typing import Self
 
-from iso639 import is_language
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domains.catalog.models.language import LanguageStatus
-
-
-def normalize_language_code(value: str) -> str:
-    normalized = value.strip().lower()
-    if len(normalized) == 2:
-        valid = is_language(normalized, "pt1")
-    elif len(normalized) == 3:
-        valid = is_language(normalized, ("pt2b", "pt2t"))
-    else:
-        valid = False
-    if not valid:
-        raise ValueError("language_code must be a valid ISO 639-1 or ISO 639-2 code")
-    return normalized
-
-
-def normalize_language_name(value: str) -> str:
-    normalized = value.strip()
-    if not normalized:
-        raise ValueError("language_name must not be empty")
-    return normalized
+from app.domains.catalog.utils import (
+    normalize_language_code,
+    normalize_language_name,
+)
 
 
 class LanguageRead(BaseModel):

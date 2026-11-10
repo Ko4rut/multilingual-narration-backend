@@ -25,3 +25,10 @@ class OfflinePackageRead(BaseModel):
     created_at: datetime
     last_updated_at: datetime
     published_at: datetime | None
+
+
+class OfflinePackagePage(BaseModel):
+    items: list[OfflinePackageRead]
+    total: int
+    offset: int
+    limit: int

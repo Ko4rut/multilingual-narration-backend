@@ -45,7 +45,7 @@ class OfflinePackageItemRepository:
             .join(ContentAudio, ContentAudio.poi_content_id == PoiContent.id)
             .where(
                 PointOfInterest.region_id == region_id,
-                func.lower(PointOfInterest.poi_status) == "active",
+                PointOfInterest.poi_status == "ACTIVE",
                 PoiContent.language_id == language_id,
                 func.upper(PoiContent.content_status) == "PUBLISHED",
                 ContentAudio.audio_size > 0,
@@ -56,9 +56,7 @@ class OfflinePackageItemRepository:
                     "audio/mpeg", "audio/aac", "audio/ogg",
                     "audio/wav", "audio/mp4", "audio/webm",
                 )),
-                func.upper(ContentAudio.audio_source_type).in_((
-                    "RECORD", "TTS", "PRE_GENERATED", "TTS_GENERATED",
-                )),
+                ContentAudio.audio_source_type.in_(("RECORD", "TTS")),
             )
         )
         if category_id is not None:

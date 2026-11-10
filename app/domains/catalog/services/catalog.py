@@ -3,18 +3,14 @@ from collections.abc import Callable
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.domains.catalog.exceptions import (
-    LanguageAlreadyExists,
-    LanguageInUse,
-    LanguageNotFound,
-)
+from app.domains.catalog.exceptions import LanguageAlreadyExists, LanguageNotFound
 from app.domains.catalog.models.language import Language, LanguageStatus
 from app.domains.catalog.models.poi_category import PoiCategory
 from app.domains.catalog.models.region import Region
 from app.domains.catalog.repositories.language import LanguageRepository
 from app.domains.catalog.repositories.poi_category import PoiCategoryRepository
 from app.domains.catalog.repositories.region import RegionRepository
-from app.domains.catalog.utils import generate_catalog_identifier
+from app.domains.catalog.utils import generate_catalog_identifier, get_constraint_name
 
 
 class CatalogService:
@@ -34,16 +30,16 @@ class CatalogService:
         self.id_factory = id_factory
 
     def list_regions(self) -> list[Region]:
-        return self.region_repository.list_all()
+        return self.region_repository.get_all()
 
     def list_categories(self) -> list[PoiCategory]:
-        return self.poi_category_repository.list_all()
+        return self.poi_category_repository.get_all()
 
     def list_supported_languages(self) -> list[Language]:
-        return self.language_repository.list_supported()
+        return self.language_repository.get_supported()
 
     def list_languages(self) -> list[Language]:
-        return self.language_repository.list_all()
+        return self.language_repository.get_all()
 
     def create_language(
         self, *, language_code: str, language_name: str, language_status: LanguageStatus
@@ -63,6 +59,12 @@ class CatalogService:
                 self.session.flush()
         except IntegrityError as exc:
             self._translate_integrity_error(exc)
+        return language
+
+    def _require_language(self, language_id: str) -> Language:
+        language = self.language_repository.get_by_id(language_id)
+        if language is None:
+            raise LanguageNotFound("Language not found")
         return language
 
     def update_language(
@@ -87,23 +89,6 @@ class CatalogService:
             self._translate_integrity_error(exc)
         return language
 
-    def delete_language(self, language_id: str) -> None:
-        try:
-            with self.session.begin():
-                language = self._require_language(language_id)
-                if self.language_repository.is_referenced(language_id):
-                    raise LanguageInUse("Language is referenced and cannot be deleted")
-                self.language_repository.delete(language)
-                self.session.flush()
-        except IntegrityError as exc:
-            self._translate_integrity_error(exc)
-
-    def _require_language(self, language_id: str) -> Language:
-        language = self.language_repository.get_by_id(language_id)
-        if language is None:
-            raise LanguageNotFound("Language not found")
-        return language
-
     def _require_available_language(
         self,
         *,
@@ -111,24 +96,15 @@ class CatalogService:
         language_name: str | None = None,
         exclude_id: str | None = None,
     ) -> None:
-        if self.language_repository.find_conflict(
+        if self.language_repository.get_conflict(
             language_code=language_code,
             language_name=language_name,
             exclude_id=exclude_id,
         ) is not None:
             raise LanguageAlreadyExists("Language code or name already exists")
 
-    @staticmethod
-    def _constraint_name(exc: IntegrityError) -> str | None:
-        return getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
-
     def _translate_integrity_error(self, exc: IntegrityError) -> None:
-        constraint = self._constraint_name(exc)
+        constraint = get_constraint_name(exc)
         if constraint in {"language_language_code_key", "language_language_name_key"}:
             raise LanguageAlreadyExists("Language code or name already exists") from exc
-        if constraint in {
-            "poi_content_language_id_fkey",
-            "offline_package_language_id_fkey",
-        }:
-            raise LanguageInUse("Language is referenced and cannot be deleted") from exc
         raise exc

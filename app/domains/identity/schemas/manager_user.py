@@ -41,6 +41,13 @@ class ManagerUserRead(BaseModel):
     last_login_at: datetime | None
 
 
+class ManagerUserPage(BaseModel):
+    items: list[ManagerUserRead]
+    total: int
+    offset: int
+    limit: int
+
+
 class ManagerUserCreate(BaseModel):
     # Model để tạo người dùng quản lý mới. 
     # Sử dụng để nhận dữ liệu từ yêu cầu API và xác thực dữ liệu đó trước khi lưu vào cơ sở dữ liệu.

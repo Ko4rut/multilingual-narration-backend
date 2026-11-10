@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     database_url: SecretStr
     # Local development storage. Docker overrides this to a named-volume mount.
     offline_manifest_dir: Path = Path(__file__).resolve().parents[2] / "var" / "offline" / "manifests"
+    tts_audio_dir: Path = Path(__file__).resolve().parents[2] / "assets" / "audio" / "tts"
+    tts_audio_public_base_url: str = "http://localhost:8000/api/v1/assets/audio"
 
     # Không cung cấp khóa mặc định. Môi trường chạy API phải inject private key
     # và tập public key; nếu thiếu, endpoint đăng nhập sẽ trả HTTP 503.

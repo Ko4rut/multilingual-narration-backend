@@ -44,6 +44,7 @@ from app.domains.identity.schemas.authentication import (
 )
 from app.domains.identity.schemas.manager_user import (
     ManagerUserCreate,
+    ManagerUserPage,
     ManagerUserRead,
     ManagerUserUpdate,
 )
@@ -176,7 +177,7 @@ def get_me(identity: Annotated[AuthenticatedIdentity, Depends(get_current_identi
 # Các endpoint thuộc về ManagerUserService.
 # ==============================================================================================================
 
-@manager_user_router.get("", response_model=list[ManagerUserRead])
+@manager_user_router.get("", response_model=ManagerUserPage)
 def list_manager_users(
     _identity: UserManagementRead,
     service: Annotated[ManagerUserService, Depends(get_manager_user_service)],
@@ -184,16 +185,13 @@ def list_manager_users(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     search: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
     user_status: Annotated[ManagerUserStatus | None, Query()] = None,
-) -> list[ManagerUserRead]:
-    return [
-        ManagerUserRead.model_validate(user)
-        for user in service.list_manager_users(
-            offset=offset,
-            limit=limit,
-            search=search,
-            user_status=user_status,
-        )
-    ]
+) -> ManagerUserPage:
+    return service.list_manager_users(
+        offset=offset,
+        limit=limit,
+        search=search,
+        user_status=user_status,
+    )
 
 
 @manager_user_router.post("", response_model=ManagerUserRead, status_code=status.HTTP_201_CREATED)

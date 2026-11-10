@@ -17,6 +17,7 @@ from app.domains.identity.repositories.manager_user import ManagerUserRepository
 from app.domains.identity.repositories.role import RoleRepository
 from app.domains.identity.repositories.user_session import UserSessionRepository
 from app.domains.identity.security import Argon2PasswordHasher
+from app.domains.identity.schemas.manager_user import ManagerUserPage
 from app.domains.identity.utils.identity import (
     generate_dated_identifier,
     normalize_email,
@@ -62,7 +63,7 @@ class ManagerUserService:
         limit: int = 20,
         search: str | None = None,
         user_status: str | ManagerUserStatus | None = None,
-    ) -> list[ManagerUserModel]:
+    ) -> ManagerUserPage:
         """Liệt kê người dùng theo từ khóa, trạng thái và phân trang."""
 
         if offset < 0:
@@ -83,11 +84,21 @@ class ManagerUserService:
             if user_status is not None
             else None
         )
-        return self.manager_user_repository.get_all(
+        filters = {
+            "search": normalized_search,
+            "user_status": normalized_status,
+        }
+        items = self.manager_user_repository.get_all(
             offset=offset,
             limit=limit,
-            search=normalized_search,
-            user_status=normalized_status,
+            **filters,
+        )
+        total = self.manager_user_repository.get_count(**filters)
+        return ManagerUserPage(
+            items=items,
+            total=total,
+            offset=offset,
+            limit=limit,
         )
 
     def create_manager_user(

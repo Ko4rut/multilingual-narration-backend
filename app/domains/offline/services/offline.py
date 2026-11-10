@@ -16,6 +16,7 @@ from app.domains.offline.models.offline_package import OfflinePackage, OfflinePa
 from app.domains.offline.models.offline_package_item import OfflinePackageItem
 from app.domains.offline.repositories.offline_package import OfflinePackageRepository
 from app.domains.offline.repositories.offline_package_item import OfflinePackageItemRepository
+from app.domains.offline.schemas.offline_package import OfflinePackagePage
 from app.domains.offline.storage.manifest import FileSystemManifestStorage
 from app.domains.offline.utils.offline import make_package_key
 from app.domains.offline.utils.manifest import manifest_bytes
@@ -291,11 +292,18 @@ class OfflinePackageService:
     def list_published_packages(
         self, *, region_id: str | None = None, language_id: str | None = None,
         category_id: str | None = None, offset: int = 0, limit: int = 20,
-    ) -> list[OfflinePackage]:
+    ) -> OfflinePackagePage:
         """Public mobile catalog: only packages with published manifests."""
-        return self.packages.list_published(
-            region_id=region_id, language_id=language_id,
-            category_id=category_id, offset=offset, limit=limit,
+        filters = {
+            "published_only": True,
+            "region_id": region_id,
+            "language_id": language_id,
+            "category_id": category_id,
+        }
+        items = self.packages.get_all(offset=offset, limit=limit, **filters)
+        total = self.packages.get_count(**filters)
+        return OfflinePackagePage(
+            items=items, total=total, offset=offset, limit=limit,
         )
 
     def get_published_package(self, package_id: str) -> OfflinePackage:
@@ -309,8 +317,12 @@ class OfflinePackageService:
             raise OfflinePackageNotFound("Offline package not found")
         return package
 
-    def list_admin_packages(self, *, offset: int = 0, limit: int = 20) -> list[OfflinePackage]:
-        return self.packages.list_all(offset=offset, limit=limit)
+    def list_admin_packages(self, *, offset: int = 0, limit: int = 20) -> OfflinePackagePage:
+        items = self.packages.get_all(offset=offset, limit=limit)
+        total = self.packages.get_count()
+        return OfflinePackagePage(
+            items=items, total=total, offset=offset, limit=limit,
+        )
 
     def get_admin_package(self, package_id: str) -> OfflinePackage:
         package = self.packages.get_by_id(package_id)

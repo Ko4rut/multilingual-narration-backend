@@ -20,7 +20,7 @@ from app.domains.offline.schemas.offline_api import (
     OfflinePackagePreparationRead, OfflinePackagePrepareRequest,
     OfflineRebuildPreviewRead, OfflineRebuildPreviewRequest,
 )
-from app.domains.offline.schemas.offline_package import OfflinePackageRead
+from app.domains.offline.schemas.offline_package import OfflinePackagePage, OfflinePackageRead
 from app.domains.offline.schemas.offline_package_item import OfflinePackageItemRead
 from app.domains.offline.services.offline import (
     OfflinePackageNotFound, OfflinePackagePreparationError, OfflinePackageService,
@@ -56,7 +56,7 @@ def offline_http_errors():
         raise
 
 
-@router.get("/packages", response_model=list[OfflinePackageRead],
+@router.get("/packages", response_model=OfflinePackagePage,
             summary="List published offline packages")
 def list_published_packages(
     service: OfflineService,
@@ -80,7 +80,7 @@ def get_published_package(package_id: PackageId, service: OfflineService):
         return service.get_published_package(package_id)
 
 
-@admin_router.get("", response_model=list[OfflinePackageRead],
+@admin_router.get("", response_model=OfflinePackagePage,
                   summary="Admin: list all offline packages")
 def list_admin_packages(
     identity: ReadAccess, service: OfflineService,

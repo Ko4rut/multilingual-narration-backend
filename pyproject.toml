@@ -15,6 +15,8 @@ dependencies = [
   "iso639-lang>=2.6,<3.0",
   "pwdlib[argon2]>=0.3,<1.0",
   "PyJWT[crypto]>=2.10,<3.0",
+  "gTTS>=2.5,<3.0",
+  "mutagen>=1.47,<2.0",
 ]
 
 [project.optional-dependencies]

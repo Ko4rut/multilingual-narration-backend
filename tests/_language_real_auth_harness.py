@@ -43,7 +43,7 @@ from app.domains.identity.security import Argon2PasswordHasher
 from app.main import create_app
 
 
-ACTIONS = ("read", "create", "update", "delete")
+ACTIONS = ("read", "create", "update")
 TEST_LANGUAGE_CODES = ("zza", "aar", "abk", "ace")
 
 
@@ -246,24 +246,12 @@ def run() -> None:
             )
             print("update=403_then_200")
 
-            delete_denied = client.delete(
+            delete_not_supported = client.delete(
                 f"/api/v1/admin/catalog/languages/{language_id}",
                 headers=headers,
             )
-            assert delete_denied.status_code == 403
-            grant("delete")
-            delete_allowed = client.delete(
-                f"/api/v1/admin/catalog/languages/{language_id}",
-                headers=headers,
-            )
-            assert delete_allowed.status_code == 204
-            missing = client.delete(
-                f"/api/v1/admin/catalog/languages/{language_id}",
-                headers=headers,
-            )
-            assert missing.status_code == 404
-            language_id = None
-            print("delete=403_then_204")
+            assert delete_not_supported.status_code == 405
+            print("delete=405")
     finally:
         with Session(engine) as session, session.begin():
             if language_id is not None:

@@ -78,7 +78,7 @@ Tất cả route dưới đây yêu cầu Bearer token hợp lệ và permission
 
 | Method | Path | Permission | Mục đích |
 | --- | --- | --- | --- |
-| GET | `/manager-users` | `read` | Danh sách có phân trang; `search` tìm theo ID/email/họ tên và `user_status` lọc `ACTIVE`/`INACTIVE` |
+| GET | `/manager-users` | `read` | Trang `{items,total,offset,limit}`; `search` tìm theo ID/email/họ tên và `user_status` lọc `ACTIVE`/`INACTIVE` |
 | POST | `/manager-users` | `create` | Tạo tài khoản, băm mật khẩu |
 | GET | `/manager-users/{user_id}` | `read` | Chi tiết tài khoản |
 | PATCH | `/manager-users/{user_id}` | `update` | Sửa role, email, tên, trạng thái hoặc mật khẩu; đổi mật khẩu sẽ thu hồi mọi session |

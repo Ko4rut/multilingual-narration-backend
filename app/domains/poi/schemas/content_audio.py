@@ -55,8 +55,7 @@ class AdminContentAudioRead(ContentAudioRead):
     @field_validator("audio_source_type", mode="before")
     @classmethod
     def normalize_source(cls, value: str) -> str:
-        aliases = {"PRE_GENERATED": "RECORD", "TTS_GENERATED": "TTS"}
-        return aliases.get(value.upper(), value.upper())
+        return value.upper()
 
 
 class ContentAudioPage(BaseModel):

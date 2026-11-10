@@ -21,3 +21,6 @@ postgres-data/
 
 # Generated local offline manifests are not source-controlled.
 /var/
+
+# Generated TTS audio is runtime data even though it lives in the POI source tree.
+/assets/audio/tts/*.mp3

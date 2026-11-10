@@ -23,3 +23,7 @@ class NarrationNotFound(ResourceNotFound):
 
 class PoiPermissionDenied(Exception):
     pass
+
+
+class TtsGenerationFailed(Exception):
+    """Không thể tạo hoặc lưu audio TTS để hoàn tất publish."""

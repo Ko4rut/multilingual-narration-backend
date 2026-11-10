@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app.domains.catalog.exceptions import LanguageAlreadyExists, LanguageInUse, LanguageNotFound
+from app.domains.catalog.exceptions import LanguageAlreadyExists, LanguageNotFound
 from app.domains.catalog.models import LanguageStatus
 from app.domains.catalog.routers import get_catalog_service
 from app.domains.catalog.services import CatalogService
@@ -15,10 +15,10 @@ class CatalogRepositoryStub:
     def __init__(self, records):
         self.records = records
 
-    def list_all(self):
+    def get_all(self):
         return self.records
 
-    def list_supported(self):
+    def get_supported(self):
         return [
             record
             for record in self.records
@@ -178,12 +178,8 @@ class LanguageServiceStub:
         }
         return language(language_id, **values)
 
-    def delete_language(self, language_id):
-        if self.error:
-            raise self.error
 
-
-def test_admin_language_crud_contract(catalog_client_factory):
+def test_admin_language_management_contract(catalog_client_factory):
     service = LanguageServiceStub()
     auth = AuthenticationServiceStub()
     headers = {"Authorization": "Bearer token"}
@@ -208,8 +204,8 @@ def test_admin_language_crud_contract(catalog_client_factory):
     assert created.json()["language_name"] == "English"
     assert updated.status_code == 200
     assert updated.json()["language_name"] == "Modern English"
-    assert deleted.status_code == 204 and deleted.content == b""
-    assert [check[2] for check in auth.permission_checks] == ["read", "create", "update", "delete"]
+    assert deleted.status_code == 405
+    assert [check[2] for check in auth.permission_checks] == ["read", "create", "update"]
 
 
 @pytest.mark.parametrize(
@@ -238,8 +234,6 @@ def test_language_input_validation_returns_422(catalog_client_factory, method, b
         ("post", LanguageAlreadyExists("duplicate"), 409),
         ("patch", LanguageNotFound("missing"), 404),
         ("patch", LanguageAlreadyExists("duplicate"), 409),
-        ("delete", LanguageNotFound("missing"), 404),
-        ("delete", LanguageInUse("used"), 409),
     ],
 )
 def test_language_errors_are_mapped(catalog_client_factory, method, error, expected):

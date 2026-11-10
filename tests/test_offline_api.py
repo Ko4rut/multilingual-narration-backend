@@ -13,6 +13,7 @@ from app.domains.identity.routers.dependencies import (
 )
 from app.domains.offline.models.offline_package import OfflinePackageStatus
 from app.domains.offline.routers.dependencies import get_offline_service
+from app.domains.offline.schemas.offline_package import OfflinePackagePage
 from app.domains.offline.services.offline import (
     OfflinePackageNotFound, OfflinePackagePreparationError, OfflineRebuildPlan,
 )
@@ -43,9 +44,13 @@ def package(*, published=True):
 def setup():
     app = create_app()
     service = MagicMock()
-    service.list_published_packages.return_value = [package()]
+    service.list_published_packages.return_value = OfflinePackagePage(
+        items=[package()], total=1, offset=0, limit=10,
+    )
     service.get_published_package.return_value = package()
-    service.list_admin_packages.return_value = [package(published=False)]
+    service.list_admin_packages.return_value = OfflinePackagePage(
+        items=[package(published=False)], total=1, offset=0, limit=20,
+    )
     service.get_admin_package.return_value = package(published=False)
     service.get_admin_package_items.return_value = []
     service.prepare_initial_package.return_value = (
@@ -90,8 +95,9 @@ def test_public_package_listing_and_detail(setup):
         "/api/v1/offline/packages?region_id=region-1&offset=0&limit=10"
     )
     assert response.status_code == 200
-    assert len(response.json()) == 1
-    assert response.json()[0]["package_status"] == "PUBLISHED"
+    assert len(response.json()["items"]) == 1
+    assert response.json()["items"][0]["package_status"] == "PUBLISHED"
+    assert response.json()["total"] == 1
     assert client.get("/api/v1/offline/packages/pack-1").status_code == 200
     service.list_published_packages.assert_called_once_with(
         region_id="region-1", language_id=None, category_id=None,
@@ -119,7 +125,8 @@ def test_admin_package_list_and_items(setup):
     client, _, _, _ = setup
     listed = client.get("/api/v1/admin/offline/packages")
     assert listed.status_code == 200
-    assert listed.json()[0]["package_status"] == "BUILDING"
+    assert listed.json()["items"][0]["package_status"] == "BUILDING"
+    assert listed.json()["total"] == 1
     assert client.get("/api/v1/admin/offline/packages/pack-1").status_code == 200
     assert client.get("/api/v1/admin/offline/packages/pack-1/items").json() == []
 

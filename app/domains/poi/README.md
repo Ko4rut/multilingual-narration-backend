@@ -6,7 +6,9 @@ Phạm vi ghi: `point_of_interest`, `poi_category_mapping`, `poi_content`, `cont
 Không sửa frontend, Identity, Catalog, Listening, Offline hoặc Audit.
 Dữ liệu tham chiếu ở domain khác chỉ được đọc. Tái sử dụng xác thực/phân quyền
 Identity hiện có, không sửa login hoặc cấu hình tài khoản/token của người khác.
-Các tích hợp storage/TTS, Audit và rebuild Offline vẫn chờ người phụ trách.
+TTS hiện dùng gTTS và persistent local volume gắn tại `assets/audio/tts` ở thư
+mục gốc backend; các file MP3 sinh lúc chạy không được commit.
+Object storage production, Audit và rebuild Offline vẫn chờ triển khai.
 
 ## Cách tổ chức tương tự Identity
 
@@ -19,29 +21,36 @@ services/poi.py            PoiService: đọc POI public
 services/poi_management.py PoiAdminService: quản trị POI, transaction
 services/poi_content.py    PoiContentService: nội dung và audio đi kèm, transaction
 repositories/point_of_interest.py   Truy vấn/lưu POI, dùng chung public và quản trị
-repositories/poi_category_mapping.py Truy vấn/thay mapping và đọc category tham chiếu
-repositories/poi_content.py         Đọc content tiếng Anh đã publish, chặn xóa POI có content
+repositories/poi_category_mapping.py Đọc và thay toàn bộ category mapping của POI
+repositories/poi_content.py         Truy vấn nội dung thuyết minh và ngôn ngữ
 repositories/content_audio.py       Kiểm tra metadata audio của content
-exceptions.py             Lỗi nghiệp vụ
+exceptions/               Lỗi nghiệp vụ và public exports của domain
+utils/utils.py            Sinh ID, escape LIKE và đọc tên database constraint
 models/                   ORM POI hiện có
 ```
 
 Luồng tạo mới: router kiểm tra quyền → schema validate body → service bắt đầu
-transaction → repository kiểm tra region/category và dữ liệu trùng → thêm POI
+transaction → repository POI/Catalog kiểm tra region/category → thêm POI
 và mapping → flush → commit → trả response. Lỗi sẽ rollback toàn bộ transaction.
-PATCH/DELETE khóa dòng POI bằng `FOR UPDATE` để tuần tự hóa thay đổi cùng POI.
+PATCH khóa dòng POI bằng `FOR UPDATE` để tuần tự hóa thay đổi cùng POI.
 Session ghi tách khỏi Session xác thực, tương tự dependency quản trị Identity.
 
 `app/route/api.py` chỉ được thêm đăng ký router mới. API public hiện có và các
-service public được giữ nguyên. Repository POI có sẵn được mở rộng, giữ nguyên
-hai truy vấn public `list_active()` và `get_active()`. Các repository chia theo
-bảng như Identity; service phối hợp bốn repository cùng Session/transaction.
+service public được giữ nguyên. Repository POI dùng `get_all()` chung cho danh sách
+public, quản trị và dữ liệu chọn; `get_by_id(active_only=True)` bảo vệ API public.
+Các repository chia theo
+bảng như Identity; service phối hợp repository POI với repository Catalog đọc-only
+bằng cùng Session/transaction. Repository mapping không truy vấn trực tiếp bảng
+`poi_category`.
 Schema và router được bổ sung trong các file có sẵn. Service được tách theo
 trách nhiệm: `services/poi.py` giữ `PoiService` đọc public,
 `services/poi_management.py` chứa `PoiAdminService` quản trị địa điểm,
 `services/poi_content.py` chứa `PoiContentService` quản lý nội dung và audio.
 Các class được export qua `services/__init__.py`. Trong `routers/poi.py`,
 `router` và `admin_router` giữ hai nhóm endpoint với quyền truy cập riêng.
+Mọi endpoint danh sách có `offset/limit` trả cùng cấu trúc
+`{"items": [], "total": 0, "offset": 0, "limit": 20}`; frontend không tự
+đếm từ một trang dữ liệu.
 
 ## Danh sách endpoint
 
@@ -55,7 +64,6 @@ Prefix: `/api/v1/admin/pois`.
 | POST | `/api/v1/admin/pois` | create | 201, POI vừa tạo |
 | PATCH | `/api/v1/admin/pois/{id}` | update | 200, POI sau cập nhật |
 | PATCH | `/api/v1/admin/pois/{id}/status` | update | 200, POI sau đổi trạng thái |
-| DELETE | `/api/v1/admin/pois/{id}` | delete | 204, không có body |
 
 Tất cả endpoint yêu cầu Bearer token và session hợp lệ qua dependency Identity
 hiện có; không mở public endpoint quản trị hoặc tắt phân quyền để chạy demo.
@@ -129,18 +137,18 @@ nguồn RECORD/TTS. Kiểm tra chấp nhận tên nguồn seed cũ
 PATCH giữ POI ACTIVE cũng kiểm tra điều kiện này. Từ chối thì trả 409 và không
 lưu một phần thay đổi. Không có request mạng đến storage trong transaction.
 
-### Xóa và lỗi
+### Vô hiệu hóa và lỗi
 
-POI còn content hoặc được lịch sử nghe/item offline tham chiếu không thể xóa.
-Nên chuyển INACTIVE trong trường hợp này. Chỉ xóa POI độc lập và mapping của nó;
-không cascade xóa dữ liệu của người khác qua API này.
+Phiên bản hiện tại không cung cấp endpoint hard delete POI. Khi một địa điểm
+không còn được sử dụng, quản trị viên đổi trạng thái sang `INACTIVE` để giữ lịch
+sử nghe, nội dung thuyết minh và dữ liệu offline liên quan.
 
 | HTTP | Ý nghĩa |
 | --- | --- |
 | 401 | Token/session không hợp lệ, theo Identity hiện có |
 | 403 | Thiếu permission tương ứng |
 | 404 | Không có POI, region hoặc category được tham chiếu |
-| 409 | QR/địa chỉ trùng, không đủ điều kiện active hoặc bị chặn xóa |
+| 409 | QR/địa chỉ trùng hoặc không đủ điều kiện active |
 | 422 | Body/filter không hợp lệ |
 | 503 | Thiếu cấu hình JWT theo dependency Identity |
 
@@ -155,19 +163,16 @@ constraint đã biết sau rollback, không che lỗi database không liên quan
 .\venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
-Revision `0005_poi_management` sau `0004_identity_constraints` chỉ tác động hai
-bảng thuộc POI: thêm UNIQUE địa chỉ, CHECK tọa độ/bán kính và index tọa độ/category.
-Không chạy migration ở startup. Dữ liệu cũ vi phạm ràng buộc làm migration thất
-bại; không tự sửa địa chỉ hoặc xóa bản ghi. Không chỉnh lịch sử migration.
+Revision `0007_poi_schema_alignment` bổ sung các constraint/index POI ban đầu;
+revision `0009_poi_contract` chuẩn hóa trạng thái thành `ACTIVE`/`INACTIVE`, nguồn
+audio thành `RECORD`/`TTS`, siết ảnh và người cập nhật POI thành NOT NULL, đồng thời
+thêm CHECK MIME. Migration tự điền `last_updated_by` từ `created_by`, nhưng sẽ dừng
+nếu POI cũ thiếu URL ảnh thật hoặc audio có MIME không được hỗ trợ. Phải bổ sung dữ
+liệu hợp lệ rồi chạy lại; migration không tự tạo URL giả hoặc xóa bản ghi.
 
-Những khác biệt với tài liệu được giữ để không phá contract hiện tại:
-
-- API quản trị nhận/trả ACTIVE/INACTIVE, nhưng lưu `active`/`inactive`. Các giá trị
-  cũ khác như `maintenance` được xem là INACTIVE; không đổi hàng loạt dữ liệu seed.
-- API public `/api/v1/pois` vẫn chỉ trả bản ghi có `poi_status='active'`, schema và
-  phân trang như trước. Không thêm CHECK uppercase lên cột trạng thái hiện có.
-- Không siết nullability của ảnh/người cập nhật cho bản ghi cũ. API tạo mới yêu
-  cầu ảnh và tự điền người thao tác; response vẫn đọc được bản ghi cũ thiếu ảnh.
+Checksum audio dùng để kiểm tra toàn vẹn và tái sử dụng asset, không phải khóa định
+danh nên có thể trùng giữa nhiều content. Quan hệ một audio cho mỗi content vẫn
+được bảo đảm bởi UNIQUE `poi_content_id`.
 
 ## Phần phối hợp sau này
 
@@ -193,12 +198,9 @@ Prefix `/api/v1/admin/poi-contents`; quyền thuộc `Narration Content Manageme
 | GET | `/options` | read | POI và Language cho form (chỉ đọc Catalog) |
 | GET | `/{id}` | read | Chi tiết kèm metadata audio nếu có |
 | POST | đường dẫn gốc | create | Tạo DRAFT, tự cấp số phiên bản |
-| POST | `/{id}/versions` | create | Tạo DRAFT mới từ bản cũ, không sao chép audio |
 | PATCH | `/{id}` | update | Chỉ sửa DRAFT/REJECTED |
-| DELETE | `/{id}` | delete | Chỉ xóa DRAFT/REJECTED chưa được tham chiếu |
 | POST | `/{id}/submit` | update | DRAFT/REJECTED → WAITING_APPROVAL |
-| POST | `/{id}/approve` | approve | WAITING_APPROVAL → APPROVED |
-| POST | `/{id}/reject` | approve | WAITING_APPROVAL → REJECTED |
+| POST | `/{id}/review` | approve | APPROVE hoặc REJECT content đang WAITING_APPROVAL |
 | POST | `/{id}/publish` | publish | APPROVED → PUBLISHED khi audio hợp lệ |
 
 Danh sách trả `{items,total,offset,limit}`, mặc định 0/20, limit tối đa 100.
@@ -218,22 +220,27 @@ Body tạo mới:
 
 Backend cấp ID, phiên bản và người tạo; không nhận trạng thái/version/actor từ
 client. Script không rỗng, tối đa 100.000 ký tự. Language mới phải SUPPORTED hoặc
-giá trị tương thích `active` của seed. Khi nhân bản, gửi `{}` để dùng lại văn bản
-hoặc gửi title/script thay thế. Version được cấp `max + 1` trong phạm vi
-POI–Language dưới khóa POI, chống hai request trùng version.
+giá trị tương thích `active` của seed. Mỗi request tạo mới phải gửi đầy đủ tiêu đề
+và nội dung; backend không sao chép dữ liệu từ content cũ. Version được cấp
+`max + 1` trong phạm vi POI–Language dưới khóa POI, chống hai request trùng version.
 
-Không sửa/xóa bản WAITING_APPROVAL/APPROVED/PUBLISHED/ARCHIVED; tạo phiên bản mới
-khi cần chỉnh sửa. Sửa văn bản DRAFT/REJECTED xóa metadata audio cũ không còn
-khớp nếu chưa được package tham chiếu; không xóa file storage. Lưu REJECTED đưa
-về DRAFT; có thể gửi lại trực tiếp từ REJECTED. Trường duyệt/xuất bản cũ được xóa
-khi gửi lại. Tác giả không tự phê duyệt, phù hợp luồng duyệt prototype web.
+Không cung cấp endpoint xóa content. Với WAITING_APPROVAL/APPROVED/PUBLISHED/
+ARCHIVED, cần tạo phiên bản mới khi chỉnh sửa. DRAFT/REJECTED chỉ được sửa trực
+tiếp khi chưa có audio; nếu đã có audio thì cũng phải tạo phiên bản mới để giữ
+nguyên metadata và lịch sử. Lưu REJECTED đưa về DRAFT; có thể gửi lại trực tiếp
+từ REJECTED. Trường duyệt/xuất bản cũ được xóa khi gửi lại. Endpoint review nhận
+`{"decision":"APPROVE"}` hoặc `{"decision":"REJECT"}`; tác giả không được tự
+review content của mình.
 Reject chưa nhận ghi chú vì schema hiện không lưu lý do; việc lưu reviewer/lý do
 từ chối chi tiết chờ thiết kế Audit, không nhận rồi bỏ dữ liệu.
 
-Publish chỉ dùng audio hợp lệ đã có, chưa gọi TTS. Thiếu audio trả 409 và giữ
-APPROVED; bản PUBLISHED cũ vẫn phục vụ. Khi thành công, archive bản cũ cùng
-POI–Language và publish bản mới trong một transaction. Không publish bản thấp
-hơn version đang phân phối. ARCHIVED giữ nội dung/audio cho tham chiếu lịch sử.
+Publish ưu tiên audio RECORD/TTS hợp lệ đã có. Nếu content chưa có audio hợp lệ,
+backend dùng gTTS tạo MP3 từ tiêu đề và script, lưu file bất biến theo checksum,
+tạo/cập nhật ContentAudio nguồn TTS rồi mới publish. Lời gọi TTS chạy ngoài
+transaction ghi; trước khi lưu, backend khóa content và xác minh nội dung chưa bị
+thay đổi. TTS/storage lỗi trả 503 và content vẫn APPROVED. Khi thành công, archive
+bản cũ cùng POI–Language và publish bản mới. Không publish bản thấp hơn version
+đang phân phối. ARCHIVED giữ nội dung/audio cho tham chiếu lịch sử.
 
 ## API metadata audio
 
@@ -245,7 +252,6 @@ Quyền cũng thuộc `Narration Content Management`:
 | GET | `/api/v1/admin/audios/{audio_id}` | read |
 | GET | `/api/v1/admin/poi-contents/{id}/audio` | read |
 | PUT | `/api/v1/admin/poi-contents/{id}/audio` | update |
-| DELETE | `/api/v1/admin/poi-contents/{id}/audio` | delete |
 
 Danh sách có cùng phân trang; filter `poi_id`, `language_id`, `poi_content_id`,
 `audio_source_type=RECORD|TTS`, `search` theo ID/tiêu đề content. PUT trả 200 khi
@@ -265,16 +271,16 @@ thêm hoặc thay metadata; mỗi content có tối đa một audio:
 PUT yêu cầu đủ metadata của file đã upload/xác minh trước đó: URL HTTP(S) không
 chứa credentials, size/duration dương, checksum hợp lệ. MIME hỗ trợ: audio/mpeg,
 audio/aac, audio/ogg, audio/wav, audio/mp4, audio/webm. Size dùng bigint, duration
-dùng integer. Source TTS chỉ mô tả asset TTS đã có, không tạo TTS mới.
+dùng integer. Audio sinh tự động được phục vụ tại
+`/api/v1/assets/audio/{checksum}.mp3`.
 
 Cho phép gắn/thay metadata khi DRAFT/REJECTED/APPROVED/PUBLISHED; đóng băng khi
 WAITING_APPROVAL và ARCHIVED. Thay audio PUBLISHED là đổi metadata nguyên tử sang
-asset mới hợp lệ, giữ ID bản ghi audio. Checksum đổi bắt buộc URL mới. Không xóa
-audio PUBLISHED/ARCHIVED; bản khác chỉ xóa nếu chưa có item offline tham chiếu.
-Các thao tác không làm POI ACTIVE mất audio tiếng Anh khả dụng. Không tự thay
-package hoặc xóa file storage. Giữ UNIQUE checksum của schema hiện có: đăng ký
-cùng checksum cho hai audio sẽ nhận 409; cần thống nhất riêng nếu muốn nhiều
-phiên bản dùng chung asset, không đổi natural key của seed trong đợt này.
+asset mới hợp lệ, giữ ID bản ghi audio. Checksum đổi bắt buộc URL mới. Không cung
+cấp endpoint xóa audio; metadata cũ được giữ để bảo toàn lịch sử và tham chiếu
+offline. Các thao tác không làm POI ACTIVE mất audio tiếng Anh khả dụng. Không tự
+thay package hoặc xóa file storage. Hai content có thể đăng ký cùng checksum khi
+cùng tham chiếu một asset vật lý; checksum không thay thế ID của bản ghi audio.
 
 ## Chọn thuyết minh online và fallback
 
@@ -282,7 +288,7 @@ phiên bản dùng chung asset, không đổi natural key của seed trong đợ
 GET /api/v1/pois/{poi_id}/narration?language_code=vi
 ```
 
-Endpoint public chỉ phục vụ POI `active`. Chọn PUBLISHED của ngôn ngữ yêu cầu
+Endpoint public chỉ phục vụ POI `ACTIVE`. Chọn PUBLISHED của ngôn ngữ yêu cầu
 có audio hợp lệ và language đang được hỗ trợ; nếu không có thì dùng tiếng Anh.
 Mặc định en. Không có cả hai thì 404; POI ẩn/không tồn tại cũng 404. Response có
 `requested_language_code`, `language_code`, `is_fallback`, nội dung, version và
@@ -304,7 +310,7 @@ Phần nội bộ POI đã thực hiện; các việc sau còn chờ bên phụ 
 | Identity | Dùng dependency/quyền hiện có; không sửa login, tài khoản hay khóa JWT |
 | Catalog | Chỉ đọc; chưa xử lý cascade khi bên Catalog đổi trạng thái |
 | Storage/upload | Chưa upload/đọc bytes, xác minh checksum/MIME thực hoặc dọn asset |
-| TTS | Chưa chọn provider, gọi API sinh audio, retry job hoặc tính phí |
+| TTS | Đang dùng gTTS đồng bộ; production nên thay bằng provider có SLA/job retry |
 | Offline | Chưa đánh dấu/rebuild package khi dữ liệu đổi, không tăng package_version |
 | Audit | Chưa ghi sự kiện, reviewer/lý do từ chối hoặc lịch sử thao tác |
 | Frontend | Chưa gọi API hoặc sửa giao diện/đăng nhập |

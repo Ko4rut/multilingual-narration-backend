@@ -1,16 +1,14 @@
-from sqlalchemy import exists, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.domains.catalog.models.language import Language, LanguageStatus
-from app.domains.offline.models.offline_package import OfflinePackage
-from app.domains.poi.models.poi_content import PoiContent
 
 
 class LanguageRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def list_supported(self) -> list[Language]:
+    def get_supported(self) -> list[Language]:
         return list(
             self.session.scalars(
                 select(Language)
@@ -19,13 +17,13 @@ class LanguageRepository:
             )
         )
 
-    def list_all(self) -> list[Language]:
+    def get_all(self) -> list[Language]:
         return list(self.session.scalars(select(Language).order_by(Language.id)))
 
     def get_by_id(self, language_id: str) -> Language | None:
         return self.session.get(Language, language_id)
 
-    def find_conflict(
+    def get_conflict(
         self,
         *,
         language_code: str | None = None,
@@ -44,15 +42,3 @@ class LanguageRepository:
 
     def add(self, language: Language) -> None:
         self.session.add(language)
-
-    def delete(self, language: Language) -> None:
-        self.session.delete(language)
-
-    def is_referenced(self, language_id: str) -> bool:
-        statement = select(
-            or_(
-                exists().where(PoiContent.language_id == language_id),
-                exists().where(OfflinePackage.language_id == language_id),
-            )
-        )
-        return bool(self.session.scalar(statement))

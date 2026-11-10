@@ -6,8 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN addgroup --system app && adduser --system --ingroup app app \\
-    && mkdir -p /var/lib/mnr/offline-manifests \\
+RUN addgroup --system app && adduser --system --ingroup app app \
+    && mkdir -p /var/lib/mnr/offline-manifests \
     && chown -R app:app /var/lib/mnr
 
 COPY requirements.txt ./
@@ -17,6 +17,11 @@ COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app app ./app
 COPY --chown=app:app scripts ./scripts
 COPY --chown=app:app alembic.ini ./
+
+# Thư mục runtime nằm trong source tree theo cấu hình hiện tại. Quyền sở hữu này
+# cũng được dùng để khởi tạo named volume trong lần chạy Docker đầu tiên.
+RUN mkdir -p /app/assets/audio/tts \
+    && chown -R app:app /app/assets
 
 USER app
 

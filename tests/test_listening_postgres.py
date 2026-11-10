@@ -54,7 +54,7 @@ def test_concurrent_same_id_is_idempotent_on_postgresql():
     try:
         with Session(engine) as session, session.begin():
             revision = session.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0008_listening_events"
+            assert revision == "0009_poi_contract"
             session.add_all(
                 [
                     RoleModel(
@@ -98,12 +98,12 @@ def test_concurrent_same_id_is_idempotent_on_postgresql():
                 PointOfInterest(
                     id=poi_id,
                     region_id=region_id,
-                    poi_image_url=None,
+                    poi_image_url=f"https://assets.test.invalid/poi/{suffix}.webp",
                     image_checksum_sha256=None,
                     poi_qr_code=f"qr-listen-{suffix}",
                     poi_name=f"Listening Test POI {suffix}",
                     poi_location=f"Listening Test Location {suffix}",
-                    poi_status="inactive",
+                    poi_status="INACTIVE",
                     latitude=Decimal("10.000000"),
                     longitude=Decimal("106.000000"),
                     trigger_radius_meter=Decimal("25.00"),

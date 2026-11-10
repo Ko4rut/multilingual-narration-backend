@@ -35,6 +35,7 @@ DurationSeconds = Annotated[int, Field(strict=True, ge=0)]
 class ListeningTriggerType(str, Enum):
     AUTO_LOCATION = "AUTO_LOCATION"
     QR_CODE = "QR_CODE"
+    MANUAL = "MANUAL"
 
 
 class ListeningSaveResult(str, Enum):

@@ -4,7 +4,3 @@ class LanguageNotFound(Exception):
 
 class LanguageAlreadyExists(Exception):
     """Language code or name conflicts with an existing record."""
-
-
-class LanguageInUse(Exception):
-    """Language is referenced by content or an offline package."""

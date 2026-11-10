@@ -13,7 +13,7 @@ class ListeningHistory(Base):
     __tablename__ = "listening_history"
     __table_args__ = (
         CheckConstraint(
-            "trigger_type IN ('AUTO_LOCATION', 'QR_CODE')",
+            "trigger_type IN ('AUTO_LOCATION', 'QR_CODE', 'MANUAL')",
             name="ck_listening_history_trigger_type",
         ),
         CheckConstraint(

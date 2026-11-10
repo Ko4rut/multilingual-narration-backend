@@ -5,7 +5,6 @@ import pytest
 
 from app.domains.catalog.exceptions import (
     LanguageAlreadyExists,
-    LanguageInUse,
     LanguageNotFound,
 )
 from app.domains.catalog.models import LanguageStatus
@@ -24,24 +23,16 @@ class RepositoryStub:
     def __init__(self):
         self.record = None
         self.conflict = None
-        self.referenced = False
         self.added = None
-        self.deleted = None
 
     def get_by_id(self, language_id):
         return self.record
 
-    def find_conflict(self, **kwargs):
+    def get_conflict(self, **kwargs):
         return self.conflict
-
-    def is_referenced(self, language_id):
-        return self.referenced
 
     def add(self, record):
         self.added = record
-
-    def delete(self, record):
-        self.deleted = record
 
 
 def build_service(repository):
@@ -81,12 +72,3 @@ def test_update_missing_language_is_not_found():
         build_service(RepositoryStub()).update_language(
             "lang-missing", language_name="New name"
         )
-
-
-def test_delete_referenced_language_is_conflict_and_not_deleted():
-    repository = RepositoryStub()
-    repository.record = SimpleNamespace(id="lang-12345678")
-    repository.referenced = True
-    with pytest.raises(LanguageInUse):
-        build_service(repository).delete_language("lang-12345678")
-    assert repository.deleted is None

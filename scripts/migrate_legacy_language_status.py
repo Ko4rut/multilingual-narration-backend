@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.domains.catalog.schemas.language import normalize_language_code
+from app.domains.catalog.utils import normalize_language_code
 
 
 ALLOWED_STATUSES = {"active", "SUPPORTED", "UNSUPPORTED"}
