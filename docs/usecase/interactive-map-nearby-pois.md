@@ -1,0 +1,73 @@
+# UC-MOBILE-MAP-01 — Xem bản đồ và khám phá POI lân cận
+
+| Use case number: | UC-MOBILE-MAP-01 |  |
+| :---- | :---- | :---- |
+| **Use case name:** | Xem bản đồ tương tác và danh sách điểm tham quan lân cận |  |
+| **Actor(s):** | Khách du lịch (Tourist); thành phần hỗ trợ: Mobile Application, dịch vụ vị trí, bản đồ và dữ liệu POI |  |
+| **Maturity:** | Specified — mô tả nghiệp vụ mục tiêu dựa trên giao diện Mobile hiện có; không khẳng định mọi chức năng đã được triển khai |  |
+| **Summary:** | Du khách mở tab **Map** để xem vị trí hiện tại và các điểm tham quan (POI) lân cận. Giao diện có bản đồ và **Bottom Sheet** ở phía dưới; du khách có thể vuốt thanh kéo lên/xuống, cuộn danh sách, tìm POI theo tên và chọn POI để xem chi tiết. Khi có Internet, ứng dụng lấy POI ACTIVE từ hệ thống; khi không có Internet, dùng POI từ package offline **READY** nếu đã tải. Việc hiển thị nền bản đồ khi offline phụ thuộc vào tile đã được lưu, không đồng nghĩa với việc có dữ liệu POI offline. |  |
+| **Basic Course of Events:** | **Actor action** | **System response** |
+|  | 1\. Du khách chọn tab **Map** trên ứng dụng. |  |
+|  |  | 2\. Ứng dụng hiển thị trạng thái “Đang xác định vị trí của bạn...” trong lúc kiểm tra quyền vị trí và lấy tọa độ hiện tại. **A1, E1** |
+|  |  | 3\. Ứng dụng kiểm tra khả năng lấy dữ liệu POI: có Internet thì nhận danh sách POI ACTIVE; nếu không kết nối được thì kiểm tra dữ liệu offline trong package READY. **A2, A3, E2** |
+|  |  | 4\. Ứng dụng tải lớp nền bản đồ khi khả dụng, hiển thị vị trí người dùng (nếu có tọa độ) và đặt marker các POI có tọa độ hợp lệ trên bản đồ. **A1, A3, E3** |
+|  |  | 5\. Hệ thống xác định POI lân cận bằng khoảng cách từ tọa độ người dùng đến từng POI; hiển thị danh sách tại **Bottom Sheet** gồm ảnh, danh mục, tên, mô tả ngắn và khoảng cách khi tính được. **A1, E4** |
+|  | 6\. Du khách vuốt **thanh kéo** của Bottom Sheet lên hoặc chạm vào thanh kéo. |  |
+|  |  | 7\. Ứng dụng mở rộng Bottom Sheet để hiển thị thêm các POI card và ô tìm kiếm; du khách có thể cuộn danh sách trong sheet, hoặc kéo thanh xuống để thu gọn mà không rời màn Map. **A4** |
+|  | 8\. Du khách nhập từ khóa vào ô **Search point of interest...** hoặc cuộn danh sách để tìm POI. |  |
+|  |  | 9\. Ứng dụng lọc danh sách theo **tên POI**, hiển thị các kết quả tương ứng; cho phép xóa từ khóa tìm kiếm. **A5, E5** |
+|  | 10\. Du khách chạm vào một **POI card** trên Bottom Sheet hoặc marker tương ứng trên bản đồ. |  |
+|  |  | 11\. Ứng dụng mở trang chi tiết của POI đã chọn; người dùng có thể xem thông tin và chủ động phát narration từ trang chi tiết theo Use Case phát thuyết minh riêng. **E6** |
+|  | 12\. Du khách quay lại bản đồ hoặc nhấn nút xác định vị trí hiện tại. |  |
+|  |  | 13\. Ứng dụng trở về màn Map; khi có vị trí hợp lệ, nút định vị đưa tâm bản đồ về tọa độ của người dùng. **E1** |
+| **Alternative Paths:** | **A1 — Không có quyền hoặc chưa có vị trí:** Tại bước 2, nếu du khách chưa cấp quyền, từ chối quyền vị trí hoặc chưa xác định được GPS, ứng dụng vẫn cho phép xem POI từ dữ liệu có sẵn theo khu vực mặc định/đã tải, **không hiển thị vị trí và khoảng cách giả**; tiếp tục bước 3. Đây là yêu cầu nghiệp vụ mục tiêu; màn Map hiện tại cần điều chỉnh để thực hiện được.<br><br>**A2 — Có Internet:** Tại bước 3, nếu kết nối và hệ thống cung cấp dữ liệu thành công, ứng dụng dùng POI **ACTIVE** đang công khai để hiển thị; tiếp tục bước 4.<br><br>**A3 — Không có Internet nhưng đã tải offline:** Tại bước 3 hoặc 4, nếu không có kết nối nhưng đã có package **READY** chứa POI, ứng dụng dùng snapshot POI trên thiết bị và hiển thị “Đang sử dụng dữ liệu điểm tham quan đã tải xuống.”. Nếu tile nền không khả dụng thì vẫn cho xem **danh sách POI** trong Bottom Sheet, không cam kết bản đồ nền offline; tiếp tục bước 5.<br><br>**A4 — Thu gọn hoặc mở rộng Bottom Sheet:** Tại bước 6 hoặc 7, nếu du khách vuốt thanh kéo xuống hoặc nhấn lại thanh kéo, sheet thu gọn; khi kéo lên hoặc nhấn lại, sheet mở rộng. Việc **cuộn bên trong danh sách** không được hiểu là yêu cầu thu gọn toàn bộ sheet; quay lại bước 7 hoặc tiếp tục bước 8.<br><br>**A5 — Xóa từ khóa tìm kiếm:** Tại bước 9, nếu du khách chọn biểu tượng xóa ô tìm kiếm, ứng dụng xóa từ khóa và hiển thị lại danh sách POI hiện có; quay lại bước 8. |  |
+| **Exception Paths:** | **E1 — Không thể lấy vị trí GPS:** Tại bước 2 hoặc 13, nếu dịch vụ định vị tắt, không có quyền hoặc không lấy được tọa độ, hiển thị “Không thể xác định vị trí hiện tại. Bạn vẫn có thể khám phá các điểm tham quan.”; không tính khoảng cách khi thiếu tọa độ tin cậy; tiếp tục bước 3 (nếu đang mở Map) hoặc quay lại bước 12 (nếu đang nhấn định vị).<br><br>**E2 — Không có Internet và chưa tải POI offline:** Tại bước 3, nếu không thể lấy POI từ hệ thống và không có package READY chứa POI, hiển thị “Chưa có dữ liệu điểm tham quan. Vui lòng kết nối Internet hoặc tải nội dung ngoại tuyến.”; giữ màn Map/trạng thái trống và kết thúc luồng tải POI hiện tại.<br><br>**E3 — Không tải được nền bản đồ:** Tại bước 4, nếu map style hoặc tile không có sẵn khi mất kết nối, hiển thị “Không thể tải bản đồ. Bạn vẫn có thể xem danh sách điểm tham quan đã tải.” khi có POI local READY; không hiển thị nền bản đồ như thể đã tải thành công; tiếp tục bước 5 ở chế độ danh sách hoặc kết thúc nếu không có POI.<br><br>**E4 — Không có POI hợp lệ trong khu vực/dữ liệu:** Tại bước 5, nếu danh sách trống hoặc các POI không có tọa độ hợp lệ để đặt marker, hiển thị “Không tìm thấy điểm tham quan phù hợp.”; giữ thanh tìm kiếm và cho phép đổi từ khóa/khu vực; tiếp tục bước 8.<br><br>**E5 — Tìm kiếm không có kết quả:** Tại bước 9, nếu không có tên POI khớp từ khóa, hiển thị “Không tìm thấy điểm tham quan.” và “Hãy thử tìm tên khác.”; quay lại bước 8.<br><br>**E6 — POI không còn khả dụng:** Tại bước 11, nếu POI được chọn không có dữ liệu chi tiết hợp lệ hoặc server xác nhận đã INACTIVE, hiển thị “Điểm tham quan này hiện không khả dụng.”; không mở trang lỗi và quay lại bước 10. Khi offline, dữ liệu chỉ phản ánh trạng thái snapshot đã tải. |  |
+| **Extension Points:** | Có thể mở rộng lọc theo danh mục, chọn vùng bản đồ để tải POI khác, gom cụm marker khi dày đặc và điều hướng qua ứng dụng bản đồ ngoài. Các chức năng này không bắt buộc trong Use Case hiện tại. |  |
+| **Triggers:** | Du khách mở tab Map, vuốt Bottom Sheet, tìm kiếm POI hoặc chọn một địa điểm. |  |
+| **Assumptions:** | POI công khai online có trạng thái ACTIVE và tọa độ hợp lệ; offline sử dụng package READY; khoảng cách (nếu có GPS đáng tin cậy) được tính theo tọa độ hiện tại, không lấy từ giá trị mock cố định. Khu vực POI lân cận do truy vấn/nguồn dữ liệu xác định, **không sử dụng `trigger_radius_meter` của Geofence làm bán kính khám phá**. |  |
+| **Preconditions:** | Ứng dụng được mở và có tab Map; không yêu cầu đăng nhập. Quyền vị trí và Internet là điều kiện để bổ sung thông tin, không được coi là điều kiện bắt buộc để xem POI local đã có. |  |
+| **Post Conditions:** | **Thành công:** Map hiển thị dữ liệu bản đồ khi có tile, danh sách/marker POI hợp lệ, Bottom Sheet có thể kéo và cuộn, người dùng truy cập được chi tiết POI. **Thiếu GPS:** Vẫn xem POI nhưng không hiển thị vị trí/khoảng cách không đáng tin cậy. **Thiếu mạng:** Dùng POI READY nếu có; nếu không có dữ liệu thì hiển thị trạng thái trống phù hợp. |  |
+| **Preferences:** | Ưu tiên giao diện dễ sử dụng: nút định vị hiện tại; Bottom Sheet thu gọn/mở rộng bằng kéo hoặc chạm thanh kéo; cuộn danh sách độc lập; tìm theo tên và xóa nhanh. Không để lỗi tile nền ngăn người dùng xem POI local sẵn có. |  |
+| **Author(s):** | MNR Documentation Team |  |
+| **Date:** | 10-11-2026 |  |
+
+## Mô tả giao diện Map và Bottom Sheet
+
+- **Bản đồ:** hiển thị bằng MapLibre với nguồn raster tile OpenStreetMap. Nút định vị đưa camera về GPS hiện tại (khi có tọa độ).
+- **Bottom Sheet:** nằm sát cạnh dưới, mặc định thu gọn còn thanh kéo; khi mở rộng chiếm khoảng **54% chiều cao màn hình** theo cấu hình giao diện hiện có. Có thể kéo lên/xuống hoặc nhấn thanh kéo để đổi trạng thái.
+- **Ô tìm kiếm:** ở đầu Bottom Sheet với placeholder **“Search point of interest...”**; lọc danh sách **theo tên POI**, không mặc định tìm nội dung mô tả/danh mục.
+- **POI card:** có ảnh đại diện, các badge danh mục, tên POI, mô tả ngắn và khoảng cách khi được tính; nhấn card là hành động yêu cầu mở chi tiết.
+- **Danh sách:** cuộn theo chiều dọc bên trong Bottom Sheet, không bắt buộc thu sheet khi cuộn; danh sách trống có thông báo rõ ràng.
+- **Không có GPS:** đặc tả mục tiêu cho phép xem POI từ nguồn dữ liệu hoặc khu vực mặc định mà không cần quyền vị trí.
+
+## Quy tắc dữ liệu Online và Offline
+
+| Tình trạng | Dữ liệu POI | Nền bản đồ | Cách hiển thị |
+| --- | --- | --- | --- |
+| Có Internet và tải POI thành công | POI ACTIVE công khai mới nhất | Tải tile trực tuyến | Marker POI + Bottom Sheet + khoảng cách nếu có GPS |
+| Có Internet nhưng truy vấn POI lỗi, có local READY | Snapshot POI đã tải (có thể cũ) | Tile online nếu tải được | Marker/danh sách theo snapshot, có cảnh báo |
+| Không Internet, có package READY | POI từ `Local_POIs` | Chỉ dùng tile có sẵn nếu được cache | Bottom Sheet luôn dùng được với POI đã tải; bản đồ nền không được bảo đảm |
+| Không Internet, không có READY | Không có POI khả dụng | Không được giả định có tile | Trạng thái trống và hướng dẫn kết nối/tải offline |
+| GPS không có quyền hoặc không tin cậy | POI online/offline vẫn có thể xem | Tùy tình trạng tile | Không có dấu vị trí người dùng hoặc khoảng cách giả |
+
+**Lưu ý:** POI lân cận là quy tắc nghiệp vụ của chức năng khám phá. Khoảng cách được tính dựa trên tọa độ địa lý khi có vị trí phù hợp. Không dùng bán kính kích hoạt narration tự động (`trigger_radius_meter`) để loại các POI khỏi danh sách Map.
+
+## Đối chiếu với mã nguồn Mobile tại thời điểm viết
+
+Đã tham chiếu repository `mujin0422/multilingual-narration-mobile`, nhánh `main` tại các file:
+
+- `src/features/map/components/MapController.tsx`
+- `src/features/map/components/MapLibreMap.tsx`
+- `src/features/map/components/BottomSheet.tsx`
+- `src/features/map/hooks/useBottomSheet.ts`
+- `src/features/map/hooks/usePoiSearch.ts`
+- `src/features/map/hooks/useUserLocation.ts`
+- `src/features/map/components/PoiCard.tsx`
+- `src/features/map/constants/bottomSheet.ts`
+- `src/features/map/data/mock-pois.ts`
+
+**Đã có trên UI:** MapLibre, hiển thị vị trí người dùng, nút focus GPS, Bottom Sheet có kéo/chạm thanh, FlatList cuộn, ô tìm theo tên, POI card và trạng thái danh sách rỗng.
+
+**Chưa hoàn thiện trong mã nguồn hiện tại:** MapController chưa truyền dữ liệu POI thật vào BottomSheet (đang dùng `MOCK_POIS`); MapLibreMap mới hiển thị marker của người dùng, **chưa render marker POI**; BottomSheet trong MapController chưa nhận `onPoiPress` để điều hướng sang POI Detail; quyền GPS bị từ chối hiện trả về màn thông báo thay vì cho xem Map/POI; khoảng cách trong `MOCK_POIS` đang là số cố định; chưa có cơ chế chính thức để sử dụng package READY và offline tile trên Map.
+
+Những nội dung **chưa hoàn thiện** ở trên là hành vi yêu cầu trong Use Case, không phải khẳng định hệ thống đã chạy được. Các câu thông báo trong dấu ngoặc kép là đề xuất nội dung UI theo đặc tả.
