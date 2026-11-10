@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.domains.catalog.repositories.poi_category import PoiCategoryRepository
 from app.domains.identity.routers.dependencies import get_authentication_service, get_current_identity
 from app.domains.identity.services.authentication import AuthenticatedIdentity, AuthenticationService
 from app.domains.poi.repositories.content_audio import ContentAudioRepository
@@ -22,6 +23,7 @@ def get_poi_admin_service(
         session=session, repository=PoiRepository(session),
         mappings=PoiCategoryMappingRepository(session), contents=PoiContentRepository(session),
         audios=ContentAudioRepository(session),
+        categories=PoiCategoryRepository(session),
     )
 
 

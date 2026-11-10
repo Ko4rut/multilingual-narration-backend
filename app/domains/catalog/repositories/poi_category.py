@@ -12,3 +12,24 @@ class PoiCategoryRepository:
         return list(
             self.session.scalars(select(PoiCategory).order_by(PoiCategory.id))
         )
+
+    def get_choices(self) -> list[PoiCategory]:
+        """Lấy danh mục cho form theo tên rồi ID để có thứ tự ổn định."""
+        return list(
+            self.session.scalars(
+                select(PoiCategory).order_by(
+                    PoiCategory.category_name,
+                    PoiCategory.id,
+                )
+            )
+        )
+
+    def get_existing_ids(self, category_ids: list[str]) -> set[str]:
+        """Trả về các ID danh mục thực sự tồn tại trong danh sách đầu vào."""
+        if not category_ids:
+            return set()
+        return set(
+            self.session.scalars(
+                select(PoiCategory.id).where(PoiCategory.id.in_(category_ids))
+            )
+        )

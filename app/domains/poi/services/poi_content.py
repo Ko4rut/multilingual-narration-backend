@@ -1,6 +1,4 @@
 from datetime import datetime, timezone
-from secrets import token_hex
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -32,6 +30,7 @@ from app.domains.poi.schemas.poi_content import (
     PoiContentVersionCreate,
     PublishedNarration,
 )
+from app.domains.poi.utils import generate_dated_identifier, get_constraint_name
 
 
 class PoiContentService:
@@ -222,7 +221,8 @@ class PoiContentService:
                 now = datetime.now(timezone.utc)
                 if audio is None:
                     audio = ContentAudio(
-                        id=f"audio-{now:%d%m%y}-{token_hex(4)}", poi_content_id=content.id,
+                        id=generate_dated_identifier("audio", now),
+                        poi_content_id=content.id,
                         **payload.model_dump(), created_at=now, last_updated_at=now,
                     )
                     self.audios.add(audio)
@@ -277,7 +277,9 @@ class PoiContentService:
             raise PoiConflict("Content version limit exceeded")
         now = datetime.now(timezone.utc)
         content = PoiContent(
-            id=f"cont-{now:%d%m%y}-{token_hex(4)}", poi_id=poi_id, language_id=language_id,
+            id=generate_dated_identifier("cont", now),
+            poi_id=poi_id,
+            language_id=language_id,
             narration_title=title, narration_script=script, content_version=version,
             content_status="DRAFT", created_by=actor_id, created_at=now,
         )
@@ -363,7 +365,7 @@ class PoiContentService:
 
     @staticmethod
     def _translate_integrity_error(exc: IntegrityError) -> None:
-        name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        name = get_constraint_name(exc)
         if name in {"uq_poi_content_poi_language_version", "uq_poi_content_published_language"}:
             raise PoiConflict("A conflicting narration version already exists; reload and retry") from exc
         if name == "uq_content_audio_content":

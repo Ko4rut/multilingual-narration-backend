@@ -6,6 +6,7 @@ from app.domains.listening.models.listening_history import ListeningHistory
 from app.domains.offline.models.offline_package_item import OfflinePackageItem
 from app.domains.poi.models.poi_category_mapping import PoiCategoryMapping
 from app.domains.poi.models.point_of_interest import PointOfInterest
+from app.domains.poi.utils import escape_like_value
 
 
 class PoiRepository:
@@ -47,7 +48,7 @@ class PoiRepository:
     ) -> tuple[list[PointOfInterest], int]:
         filters = []
         if search is not None:
-            escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            escaped = escape_like_value(search)
             pattern = f"%{escaped}%"
             filters.append(or_(*[
                 column.ilike(pattern, escape="\\")

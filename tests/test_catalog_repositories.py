@@ -38,6 +38,36 @@ def test_category_get_all_orders_by_id_without_pagination():
     assert statement._offset_clause is None
 
 
+def test_category_get_choices_orders_by_name_then_id():
+    session = MagicMock(spec=Session)
+    expected = [MagicMock()]
+    session.scalars.return_value = expected
+
+    result = PoiCategoryRepository(session).get_choices()
+
+    assert result == expected
+    statement = session.scalars.call_args.args[0]
+    assert "ORDER BY poi_category.category_name, poi_category.id" in str(statement)
+
+
+def test_category_get_existing_ids_returns_only_database_matches():
+    session = MagicMock(spec=Session)
+    session.scalars.return_value = ["cat-1"]
+
+    result = PoiCategoryRepository(session).get_existing_ids(["cat-1", "cat-missing"])
+
+    assert result == {"cat-1"}
+    statement = session.scalars.call_args.args[0]
+    assert "poi_category.id IN" in str(statement)
+
+
+def test_category_get_existing_ids_skips_query_for_empty_input():
+    session = MagicMock(spec=Session)
+
+    assert PoiCategoryRepository(session).get_existing_ids([]) == set()
+    session.scalars.assert_not_called()
+
+
 def test_language_get_supported_filters_status_and_orders_by_id():
     session = MagicMock(spec=Session)
     expected = [MagicMock()]

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.domains.poi.models.content_audio import ContentAudio
 from app.domains.poi.models.poi_content import PoiContent
 from app.domains.offline.models.offline_package_item import OfflinePackageItem
+from app.domains.poi.utils import escape_like_value
 
 
 class ContentAudioRepository:
@@ -58,7 +59,7 @@ class ContentAudioRepository:
             aliases = {"RECORD": ("RECORD", "PRE_GENERATED"), "TTS": ("TTS", "TTS_GENERATED")}
             filters.append(func.upper(ContentAudio.audio_source_type).in_(aliases[audio_source_type]))
         if search is not None:
-            escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            escaped = escape_like_value(search)
             pattern = f"%{escaped}%"
             filters.append(or_(
                 ContentAudio.id.ilike(pattern, escape="\\"),

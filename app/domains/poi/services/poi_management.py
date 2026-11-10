@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
-from secrets import token_hex
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.domains.catalog.repositories.poi_category import PoiCategoryRepository
 from app.domains.poi.exceptions import (
     InvalidPoiFilter,
     PoiConflict,
@@ -23,23 +22,26 @@ from app.domains.poi.schemas.point_of_interest import (
     PoiRead,
     PoiUpdate,
 )
+from app.domains.poi.utils import generate_dated_identifier, get_constraint_name
 
 
 class PoiAdminService:
     def __init__(
         self, session: Session, repository: PoiRepository,
         mappings: PoiCategoryMappingRepository, contents: PoiContentRepository,
-        audios: ContentAudioRepository,
+        audios: ContentAudioRepository, categories: PoiCategoryRepository,
     ):
         self.session = session
         self.repository = repository
         self.mappings = mappings
         self.contents = contents
         self.audios = audios
+        self.categories = categories
 
     def get_options(self) -> PoiFormOptions:
         return PoiFormOptions(
-            regions=self.repository.get_regions(), categories=self.mappings.get_categories(),
+            regions=self.repository.get_regions(),
+            categories=self.categories.get_choices(),
         )
 
     def list_pois(
@@ -69,14 +71,14 @@ class PoiAdminService:
                 self._require_unique(payload.poi_qr_code, payload.poi_location)
                 now = datetime.now(timezone.utc)
                 poi = PointOfInterest(
-                    id=f"poi-{now:%d%m%y}-{token_hex(4)}",
+                    id=generate_dated_identifier("poi", now),
                     **payload.model_dump(exclude={"category_ids", "poi_status"}),
                     poi_status="inactive", created_by=actor_id, last_updated_by=actor_id,
                     created_at=now, last_updated_at=now,
                 )
                 self.repository.add(poi)
                 self.session.flush()
-                self.mappings.replace_categories(poi.id, payload.category_ids)
+                self.mappings.replace_for_poi(poi.id, payload.category_ids)
                 self.session.flush()
                 result = self._responses([poi])[0]
         except IntegrityError as exc:
@@ -108,9 +110,11 @@ class PoiAdminService:
                     changed = changed or poi.poi_status != stored_status
                     poi.poi_status = stored_status
                 if category_ids is not None:
-                    current_ids = self.mappings.get_category_mappings([poi.id])[poi.id]
+                    current_ids = self.mappings.get_category_ids_by_poi_ids([poi.id])[
+                        poi.id
+                    ]
                     if set(current_ids) != set(category_ids):
-                        self.mappings.replace_categories(poi.id, category_ids)
+                        self.mappings.replace_for_poi(poi.id, category_ids)
                         changed = True
                 if changed:
                     poi.last_updated_by = actor_id
@@ -129,7 +133,7 @@ class PoiAdminService:
                     raise PoiConflict("POIs with linked content cannot be deleted; deactivate the POI instead")
                 if self.repository.has_external_references(poi_id):
                     raise PoiConflict("POIs referenced by listening history or offline packages cannot be deleted")
-                self.mappings.replace_categories(poi_id, [])
+                self.mappings.replace_for_poi(poi_id, [])
                 self.repository.delete(poi)
                 self.session.flush()
         except IntegrityError as exc:
@@ -145,7 +149,7 @@ class PoiAdminService:
         if not self.repository.region_exists(region_id):
             raise PoiReferenceNotFound("Region not found")
         if category_ids is not None:
-            missing = set(category_ids) - self.mappings.get_existing_category_ids(category_ids)
+            missing = set(category_ids) - self.categories.get_existing_ids(category_ids)
             if missing:
                 raise PoiReferenceNotFound("Unknown category IDs: " + ", ".join(sorted(missing)))
 
@@ -158,7 +162,7 @@ class PoiAdminService:
         if not pois:
             return []
         ids = [poi.id for poi in pois]
-        mappings = self.mappings.get_category_mappings(ids)
+        mappings = self.mappings.get_category_ids_by_poi_ids(ids)
         activatable = self._get_activatable_ids(ids)
         results = []
         for poi in pois:
@@ -179,7 +183,7 @@ class PoiAdminService:
 
     @staticmethod
     def _translate_integrity_error(exc: IntegrityError) -> None:
-        name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        name = get_constraint_name(exc)
         if name == "point_of_interest_poi_qr_code_key":
             raise PoiConflict("poi_qr_code already exists") from exc
         if name == "uq_point_of_interest_location":

@@ -19,15 +19,16 @@ services/poi.py            PoiService: đọc POI public
 services/poi_management.py PoiAdminService: quản trị POI, transaction
 services/poi_content.py    PoiContentService: nội dung và audio đi kèm, transaction
 repositories/point_of_interest.py   Truy vấn/lưu POI, dùng chung public và quản trị
-repositories/poi_category_mapping.py Truy vấn/thay mapping và đọc category tham chiếu
+repositories/poi_category_mapping.py Đọc và thay toàn bộ category mapping của POI
 repositories/poi_content.py         Đọc content tiếng Anh đã publish, chặn xóa POI có content
 repositories/content_audio.py       Kiểm tra metadata audio của content
-exceptions.py             Lỗi nghiệp vụ
+exceptions/               Lỗi nghiệp vụ và public exports của domain
+utils/utils.py            Sinh ID, escape LIKE và đọc tên database constraint
 models/                   ORM POI hiện có
 ```
 
 Luồng tạo mới: router kiểm tra quyền → schema validate body → service bắt đầu
-transaction → repository kiểm tra region/category và dữ liệu trùng → thêm POI
+transaction → repository POI/Catalog kiểm tra region/category và dữ liệu trùng → thêm POI
 và mapping → flush → commit → trả response. Lỗi sẽ rollback toàn bộ transaction.
 PATCH/DELETE khóa dòng POI bằng `FOR UPDATE` để tuần tự hóa thay đổi cùng POI.
 Session ghi tách khỏi Session xác thực, tương tự dependency quản trị Identity.
@@ -35,7 +36,9 @@ Session ghi tách khỏi Session xác thực, tương tự dependency quản tr�
 `app/route/api.py` chỉ được thêm đăng ký router mới. API public hiện có và các
 service public được giữ nguyên. Repository POI có sẵn được mở rộng, giữ nguyên
 hai truy vấn public `list_active()` và `get_active()`. Các repository chia theo
-bảng như Identity; service phối hợp bốn repository cùng Session/transaction.
+bảng như Identity; service phối hợp repository POI với repository Catalog đọc-only
+bằng cùng Session/transaction. Repository mapping không truy vấn trực tiếp bảng
+`poi_category`.
 Schema và router được bổ sung trong các file có sẵn. Service được tách theo
 trách nhiệm: `services/poi.py` giữ `PoiService` đọc public,
 `services/poi_management.py` chứa `PoiAdminService` quản trị địa điểm,

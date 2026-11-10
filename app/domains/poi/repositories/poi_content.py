@@ -5,6 +5,7 @@ from app.domains.catalog.models.language import Language, LanguageStatus
 from app.domains.listening.models.listening_history import ListeningHistory
 from app.domains.offline.models.offline_package_item import OfflinePackageItem
 from app.domains.poi.models.poi_content import PoiContent
+from app.domains.poi.utils import escape_like_value
 
 
 class PoiContentRepository:
@@ -46,7 +47,7 @@ class PoiContentRepository:
         if content_status is not None:
             filters.append(func.upper(PoiContent.content_status) == content_status)
         if search is not None:
-            escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            escaped = escape_like_value(search)
             pattern = f"%{escaped}%"
             filters.append(or_(
                 PoiContent.id.ilike(pattern, escape="\\"),
