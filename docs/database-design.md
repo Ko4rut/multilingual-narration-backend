@@ -570,7 +570,7 @@ Bảng không lưu trực tiếp bytes của audio trong cơ sở dữ liệu. T
 | audio_mime_type       | varchar   | No       | MIME type của tệp, ví dụ: `audio/mpeg`, `audio/aac`.                                       |
 | audio_checksum_sha256 | varchar   | No       | Checksum SHA-256 dùng để kiểm tra tính toàn vẹn và nhận diện tệp đã tồn tại trên thiết bị. |
 | created_at            | timestamp | No       | Thời điểm bản ghi âm thanh được tạo.                                                       |
-| last_updated_at       | timestamp | Yes      | Thời điểm bản ghi âm thanh cuối được cập nhật trong hệ thống.                              |
+| last_updated_at       | timestamp | No       | Thời điểm bản ghi âm thanh cuối được cập nhật trong hệ thống.                              |
 
 **_[3] Ràng buộc (constraint):_**
 
@@ -582,7 +582,7 @@ Bảng không lưu trực tiếp bytes của audio trong cơ sở dữ liệu. T
 | **CHECK**  | `audio_size`         | `>= 0`.                                                                     |
 | **CHECK**  | `audio_duration_sec` | `>= 0`.                                                                     |
 | **CHECK**  | `audio_source_type`  | Thuộc tập giá trị `('RECORD', 'TTS')`.                                      |
-| **CHECK**  | `audio_mime_type`    | Thuộc tập giá trị hợp lệ (ví dụ: `audio/mpeg`, `audio/aac`, ...).           |
+| **CHECK**  | `audio_mime_type`    | Thuộc `audio/mpeg`, `audio/aac`, `audio/ogg`, `audio/wav`, `audio/mp4`, `audio/webm`. |
 | **INDEX**  | `audio_source_type`  | Tăng tốc lọc audio theo nguồn tạo.                                          |
 
 **_[4] Quy tắc nghiệp vụ (Business Rules)_**
@@ -887,7 +887,7 @@ Nhờ tách 3 tầng như vậy:
 [4.7] Điều kiện POI được đưa vào bản package phát hành
 
 ```
-- Chỉ chọn POI có poi_status = active và thuộc đúng region/category của bộ filter.
+- Chỉ chọn POI có `poi_status = 'ACTIVE'` và thuộc đúng region/category của bộ lọc.
 - Chỉ chọn phiên bản Poi_Content đang published theo language của package.
 - Content phải có Content_Audio tham chiếu đúng poi_content_id, với URL,
   MIME type, kích thước, thời lượng và checksum hợp lệ; asset thực tế phải

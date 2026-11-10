@@ -221,6 +221,26 @@ def test_identity_model_nullability_and_permission_constraints():
     )
 
 
+def test_poi_contract_nullability_and_constraints():
+    poi = Base.metadata.tables["point_of_interest"]
+    audio = Base.metadata.tables["content_audio"]
+
+    assert not poi.c.poi_image_url.nullable
+    assert not poi.c.last_updated_by.nullable
+    assert {
+        constraint.name for constraint in poi.constraints
+    } >= {"ck_point_of_interest_status"}
+    assert {
+        constraint.name for constraint in audio.constraints
+    } >= {"ck_content_audio_source", "ck_content_audio_mime"}
+    assert not any(
+        isinstance(constraint, UniqueConstraint)
+        and {column.name for column in constraint.columns}
+        == {"audio_checksum_sha256"}
+        for constraint in audio.constraints
+    )
+
+
 def test_identity_status_session_constraints_and_indexes():
     manager_user = Base.metadata.tables["manager_user"]
     user_session = Base.metadata.tables["user_session"]

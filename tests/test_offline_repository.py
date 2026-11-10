@@ -61,7 +61,7 @@ def test_candidate_query_requires_active_exact_language_published_and_valid_audi
     ))
     assert "point_of_interest.region_id = 'region-1'" in sql
     assert "poi_content.language_id = 'lang-vi'" in sql
-    assert "lower(point_of_interest.poi_status)" in sql
+    assert "point_of_interest.poi_status = 'ACTIVE'" in sql
     assert "upper(poi_content.content_status)" in sql
     assert "content_audio.audio_size > 0" in sql
     assert "content_audio.audio_duration_sec > 0" in sql

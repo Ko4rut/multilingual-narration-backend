@@ -81,7 +81,7 @@ def make_poi() -> PointOfInterest:
         poi_qr_code="museum-qr",
         poi_name="Museum",
         poi_location="Museum address",
-        poi_status="inactive",
+        poi_status="INACTIVE",
         latitude=Decimal("10.000000"),
         longitude=Decimal("106.000000"),
         trigger_radius_meter=Decimal("50.00"),
@@ -127,7 +127,7 @@ def test_create_poi_sets_inactive_status_actor_and_categories() -> None:
 
     assert repository.added is not None
     assert re.fullmatch(r"poi-\d{6}-[0-9a-f]{8}", repository.added.id)
-    assert repository.added.poi_status == "inactive"
+    assert repository.added.poi_status == "INACTIVE"
     assert repository.added.created_by == "user-1"
     assert result.category_ids == ["cat-1"]
     assert mappings.replacements == [(repository.added.id, ["cat-1"])]

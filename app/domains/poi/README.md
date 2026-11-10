@@ -161,19 +161,16 @@ constraint đã biết sau rollback, không che lỗi database không liên quan
 .\venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
-Revision `0005_poi_management` sau `0004_identity_constraints` chỉ tác động hai
-bảng thuộc POI: thêm UNIQUE địa chỉ, CHECK tọa độ/bán kính và index tọa độ/category.
-Không chạy migration ở startup. Dữ liệu cũ vi phạm ràng buộc làm migration thất
-bại; không tự sửa địa chỉ hoặc xóa bản ghi. Không chỉnh lịch sử migration.
+Revision `0007_poi_schema_alignment` bổ sung các constraint/index POI ban đầu;
+revision `0009_poi_contract` chuẩn hóa trạng thái thành `ACTIVE`/`INACTIVE`, nguồn
+audio thành `RECORD`/`TTS`, siết ảnh và người cập nhật POI thành NOT NULL, đồng thời
+thêm CHECK MIME. Migration tự điền `last_updated_by` từ `created_by`, nhưng sẽ dừng
+nếu POI cũ thiếu URL ảnh thật hoặc audio có MIME không được hỗ trợ. Phải bổ sung dữ
+liệu hợp lệ rồi chạy lại; migration không tự tạo URL giả hoặc xóa bản ghi.
 
-Những khác biệt với tài liệu được giữ để không phá contract hiện tại:
-
-- API quản trị nhận/trả ACTIVE/INACTIVE, nhưng lưu `active`/`inactive`. Bộ lọc trạng
-  thái chỉ khớp đúng hai giá trị này, không gom giá trị cũ khác vào INACTIVE.
-- API public `/api/v1/pois` vẫn chỉ trả bản ghi có `poi_status='active'`, schema và
-  phân trang như trước. Không thêm CHECK uppercase lên cột trạng thái hiện có.
-- Không siết nullability của ảnh/người cập nhật cho bản ghi cũ. API tạo mới yêu
-  cầu ảnh và tự điền người thao tác; response vẫn đọc được bản ghi cũ thiếu ảnh.
+Checksum audio dùng để kiểm tra toàn vẹn và tái sử dụng asset, không phải khóa định
+danh nên có thể trùng giữa nhiều content. Quan hệ một audio cho mỗi content vẫn
+được bảo đảm bởi UNIQUE `poi_content_id`.
 
 ## Phần phối hợp sau này
 
@@ -278,9 +275,8 @@ WAITING_APPROVAL và ARCHIVED. Thay audio PUBLISHED là đổi metadata nguyên 
 asset mới hợp lệ, giữ ID bản ghi audio. Checksum đổi bắt buộc URL mới. Không xóa
 audio PUBLISHED/ARCHIVED; bản khác chỉ xóa nếu chưa có item offline tham chiếu.
 Các thao tác không làm POI ACTIVE mất audio tiếng Anh khả dụng. Không tự thay
-package hoặc xóa file storage. Giữ UNIQUE checksum của schema hiện có: đăng ký
-cùng checksum cho hai audio sẽ nhận 409; cần thống nhất riêng nếu muốn nhiều
-phiên bản dùng chung asset, không đổi natural key của seed trong đợt này.
+package hoặc xóa file storage. Hai content có thể đăng ký cùng checksum khi cùng
+tham chiếu một asset vật lý; checksum không thay thế ID của bản ghi audio.
 
 ## Chọn thuyết minh online và fallback
 
@@ -288,7 +284,7 @@ phiên bản dùng chung asset, không đổi natural key của seed trong đợ
 GET /api/v1/pois/{poi_id}/narration?language_code=vi
 ```
 
-Endpoint public chỉ phục vụ POI `active`. Chọn PUBLISHED của ngôn ngữ yêu cầu
+Endpoint public chỉ phục vụ POI `ACTIVE`. Chọn PUBLISHED của ngôn ngữ yêu cầu
 có audio hợp lệ và language đang được hỗ trợ; nếu không có thì dùng tiếng Anh.
 Mặc định en. Không có cả hai thì 404; POI ẩn/không tồn tại cũng 404. Response có
 `requested_language_code`, `language_code`, `is_fallback`, nội dung, version và

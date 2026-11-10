@@ -6,8 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN addgroup --system app && adduser --system --ingroup app app \\
-    && mkdir -p /var/lib/mnr/offline-manifests \\
+RUN addgroup --system app && adduser --system --ingroup app app \
+    && mkdir -p /var/lib/mnr/offline-manifests \
     && chown -R app:app /var/lib/mnr
 
 COPY requirements.txt ./

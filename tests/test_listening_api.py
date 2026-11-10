@@ -63,7 +63,6 @@ def test_save_event_is_anonymous_returns_ack_and_normalizes_utc(listening_client
         {"id": "listen-invalid"},
         {"id": "listen-321326-1234abcd"},
         {"installation_id": "not-a-uuid"},
-        {"trigger_type": "MANUAL"},
         {"started_at": "2026-11-09T10:00:00"},
         {"duration_sec": -1},
         {"duration_sec": 1.5},

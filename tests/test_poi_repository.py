@@ -22,7 +22,8 @@ def test_get_all_supports_status_filter_and_stable_pagination() -> None:
     assert result == expected
     statement = session.scalars.call_args.args[0]
     rendered = str(statement)
-    assert "upper(point_of_interest.poi_status)" in rendered
+    assert "point_of_interest.poi_status" in rendered
+    assert "upper(" not in rendered
     assert "ACTIVE" in statement.compile().params.values()
     assert "ORDER BY point_of_interest.id" in rendered
     assert statement._offset_clause is not None
@@ -56,7 +57,8 @@ def test_get_count_uses_same_status_filter_without_treating_other_values_as_inac
     assert total == 0
     count_statement = session.scalar.call_args.args[0]
     rendered = str(count_statement)
-    assert "upper(point_of_interest.poi_status)" in rendered
+    assert "point_of_interest.poi_status" in rendered
+    assert "upper(" not in rendered
     assert "!=" not in rendered
     assert "INACTIVE" in count_statement.compile().params.values()
 

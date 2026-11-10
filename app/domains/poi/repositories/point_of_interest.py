@@ -81,7 +81,7 @@ class PoiRepository:
         """Lấy POI theo ID, có thể giới hạn POI ACTIVE hoặc khóa dòng khi ghi."""
         statement = select(PointOfInterest).where(PointOfInterest.id == poi_id)
         if active_only:
-            statement = statement.where(func.upper(PointOfInterest.poi_status) == "ACTIVE")
+            statement = statement.where(PointOfInterest.poi_status == "ACTIVE")
         if for_update:
             statement = statement.with_for_update()
         return self.session.scalar(statement)
@@ -107,7 +107,7 @@ class PoiRepository:
                 )
             ]))
         if poi_status is not None:
-            filters.append(func.upper(PointOfInterest.poi_status) == poi_status)
+            filters.append(PointOfInterest.poi_status == poi_status)
         if region_id is not None:
             filters.append(PointOfInterest.region_id == region_id)
         if category_id is not None:

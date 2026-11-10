@@ -88,7 +88,7 @@ class PoiAdminService:
                 poi = PointOfInterest(
                     id=generate_dated_identifier("poi", now),
                     **payload.model_dump(exclude={"category_ids", "poi_status"}),
-                    poi_status="inactive", created_by=actor_id, last_updated_by=actor_id,
+                    poi_status="INACTIVE", created_by=actor_id, last_updated_by=actor_id,
                     created_at=now, last_updated_at=now,
                 )
                 self.repository.add(poi)
@@ -111,7 +111,7 @@ class PoiAdminService:
                 category_ids = values.pop("category_ids", None)
                 target_status = values.pop("poi_status", None)
                 self._require_references(values.get("region_id", poi.region_id), category_ids)
-                remains_active = target_status == "ACTIVE" or (target_status is None and poi.poi_status == "active")
+                remains_active = target_status == "ACTIVE" or (target_status is None and poi.poi_status == "ACTIVE")
                 if remains_active and poi.id not in self._get_activatable_ids([poi.id]):
                     raise PoiConflict("An ACTIVE POI requires published English content with valid audio metadata")
                 if "poi_image_url" in values and values["poi_image_url"] != poi.poi_image_url:
@@ -120,9 +120,8 @@ class PoiAdminService:
                 for name, value in values.items():
                     setattr(poi, name, value)
                 if target_status is not None:
-                    stored_status = target_status.lower()
-                    changed = changed or poi.poi_status != stored_status
-                    poi.poi_status = stored_status
+                    changed = changed or poi.poi_status != target_status
+                    poi.poi_status = target_status
                 if category_ids is not None:
                     current_ids = self.mappings.get_category_ids_by_poi_ids([poi.id])[
                         poi.id
@@ -162,7 +161,7 @@ class PoiAdminService:
         results = []
         for poi in pois:
             values = PoiRead.model_validate(poi).model_dump()
-            values["poi_status"] = "ACTIVE" if poi.poi_status == "active" else "INACTIVE"
+            values["poi_status"] = poi.poi_status
             results.append(AdminPoiRead(
                 **values, created_by=poi.created_by, last_updated_by=poi.last_updated_by,
                 category_ids=mappings[poi.id], can_activate=poi.id in activatable,

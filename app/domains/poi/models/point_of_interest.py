@@ -16,12 +16,16 @@ class PointOfInterest(Base):
         CheckConstraint("latitude BETWEEN -90 AND 90", name="ck_poi_latitude"),
         CheckConstraint("longitude BETWEEN -180 AND 180", name="ck_poi_longitude"),
         CheckConstraint("trigger_radius_meter > 0", name="ck_poi_radius"),
+        CheckConstraint(
+            "poi_status IN ('ACTIVE', 'INACTIVE')",
+            name="ck_point_of_interest_status",
+        ),
         Index("ix_point_of_interest_coordinates", "latitude", "longitude"),
     )
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     region_id: Mapped[str] = mapped_column(String(50), ForeignKey("region.id", ondelete="RESTRICT"), nullable=False, index=True)
-    poi_image_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    poi_image_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     image_checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     poi_qr_code: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     poi_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -31,6 +35,6 @@ class PointOfInterest(Base):
     longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
     trigger_radius_meter: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
     created_by: Mapped[str] = mapped_column(String(50), ForeignKey("manager_user.id", ondelete="RESTRICT"), nullable=False, index=True)
-    last_updated_by: Mapped[str | None] = mapped_column(String(50), ForeignKey("manager_user.id", ondelete="RESTRICT"), nullable=True, index=True)
+    last_updated_by: Mapped[str] = mapped_column(String(50), ForeignKey("manager_user.id", ondelete="RESTRICT"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

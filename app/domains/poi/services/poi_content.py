@@ -329,7 +329,7 @@ class PoiContentService:
         return poi, content
 
     def _ensure_active_english(self, poi: PointOfInterest) -> None:
-        if poi.poi_status == "active":
+        if poi.poi_status == "ACTIVE":
             versions = self.contents.get_published_english_contents([poi.id])
             if not self.audios.get_content_ids_with_valid_audio(list(versions)):
                 raise PoiConflict("An ACTIVE POI must retain published English content with valid audio")
@@ -386,8 +386,6 @@ class PoiContentService:
             raise PoiConflict("A conflicting narration version already exists; reload and retry") from exc
         if name == "uq_content_audio_content":
             raise PoiConflict("This content already has an audio record") from exc
-        if name == "content_audio_audio_checksum_sha256_key":
-            raise PoiConflict("This audio checksum is already registered") from exc
         if name in {"poi_content_language_id_fkey", "poi_content_poi_id_fkey", "content_audio_poi_content_id_fkey"}:
             raise PoiReferenceNotFound("The selected POI, language or content no longer exists") from exc
         if name in {"listening_history_poi_content_id_fkey", "offline_package_item_poi_content_id_fkey", "offline_package_item_audio_id_fkey"}:

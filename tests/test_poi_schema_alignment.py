@@ -13,6 +13,10 @@ MIGRATION_FILE = (
     Path(__file__).resolve().parents[1]
     / "alembic" / "versions" / "0007_align_poi_schema.py"
 )
+CANONICAL_MIGRATION_FILE = (
+    Path(__file__).resolve().parents[1]
+    / "alembic" / "versions" / "0009_canonicalize_poi_contract.py"
+)
 
 
 def test_migration_has_parent_and_complete_poi_schema_operations(monkeypatch):
@@ -61,6 +65,56 @@ def test_migration_has_parent_and_complete_poi_schema_operations(monkeypatch):
     assert any("multiple PUBLISHED" in sql for sql in recorded["sql"])
     assert any("duplicate poi_location" in sql for sql in recorded["sql"])
     assert any("multiple audio rows" in sql for sql in recorded["sql"])
+
+
+def test_canonical_migration_enforces_documented_poi_contract(monkeypatch):
+    spec = spec_from_file_location("poi_contract_migration", CANONICAL_MIGRATION_FILE)
+    module = module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    assert module.revision == "0009_poi_contract"
+    assert module.down_revision == "0008_listening_events"
+
+    recorded = {"check": [], "drop": [], "alter": [], "sql": []}
+    monkeypatch.setattr(
+        module.op,
+        "create_check_constraint",
+        lambda name, *_args, **_kwargs: recorded["check"].append(name),
+    )
+    monkeypatch.setattr(
+        module.op,
+        "drop_constraint",
+        lambda name, *_args, **_kwargs: recorded["drop"].append(name),
+    )
+    monkeypatch.setattr(
+        module.op,
+        "alter_column",
+        lambda table, name, **kwargs: recorded["alter"].append(
+            (table, name, kwargs)
+        ),
+    )
+    monkeypatch.setattr(
+        module.op, "execute", lambda sql: recorded["sql"].append(str(sql))
+    )
+
+    module.upgrade()
+
+    assert set(recorded["check"]) == {
+        "ck_point_of_interest_status",
+        "ck_content_audio_source",
+        "ck_content_audio_mime",
+    }
+    assert "content_audio_audio_checksum_sha256_key" in recorded["drop"]
+    assert {
+        (table, name, kwargs["nullable"])
+        for table, name, kwargs in recorded["alter"]
+    } == {
+        ("point_of_interest", "poi_image_url", False),
+        ("point_of_interest", "last_updated_by", False),
+    }
+    assert any("upper(poi_status) = 'ACTIVE'" in sql for sql in recorded["sql"])
+    assert any("PRE_GENERATED" in sql for sql in recorded["sql"])
 
 
 def test_published_narration_query_compares_language_enum_without_lower():

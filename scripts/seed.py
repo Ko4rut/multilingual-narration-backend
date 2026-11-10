@@ -459,7 +459,7 @@ def seed_pois(session: Session, users, regions, categories):
             "105.835432",
             "80.00",
             ["HISTORICAL", "CULTURAL"],
-            "active",
+            "ACTIVE",
         ),
         (
             "HAN-HO-GUOM",
@@ -470,7 +470,7 @@ def seed_pois(session: Session, users, regions, categories):
             "105.852448",
             "120.00",
             ["LANDMARK", "NATURE"],
-            "active",
+            "ACTIVE",
         ),
         (
             "NBI-TRANG-AN",
@@ -481,7 +481,7 @@ def seed_pois(session: Session, users, regions, categories):
             "105.911184",
             "150.00",
             ["NATURE", "CULTURAL"],
-            "active",
+            "ACTIVE",
         ),
         (
             "NBI-HOA-LU",
@@ -492,7 +492,7 @@ def seed_pois(session: Session, users, regions, categories):
             "105.907407",
             "100.00",
             ["HISTORICAL", "RELIGIOUS"],
-            "active",
+            "ACTIVE",
         ),
         (
             "HUE-DAI-NOI",
@@ -503,7 +503,7 @@ def seed_pois(session: Session, users, regions, categories):
             "107.578769",
             "140.00",
             ["HISTORICAL", "CULTURAL"],
-            "active",
+            "ACTIVE",
         ),
         (
             "HUE-THIEN-MU",
@@ -514,7 +514,7 @@ def seed_pois(session: Session, users, regions, categories):
             "107.544973",
             "90.00",
             ["RELIGIOUS", "LANDMARK"],
-            "active",
+            "ACTIVE",
         ),
         (
             "DAD-CAU-RONG",
@@ -525,7 +525,7 @@ def seed_pois(session: Session, users, regions, categories):
             "108.227264",
             "130.00",
             ["LANDMARK"],
-            "active",
+            "ACTIVE",
         ),
         (
             "DAD-NGU-HANH-SON",
@@ -536,7 +536,7 @@ def seed_pois(session: Session, users, regions, categories):
             "108.263535",
             "150.00",
             ["NATURE", "RELIGIOUS"],
-            "active",
+            "ACTIVE",
         ),
         (
             "HCM-WAR-MUSEUM",
@@ -547,7 +547,7 @@ def seed_pois(session: Session, users, regions, categories):
             "106.692243",
             "75.00",
             ["MUSEUM", "HISTORICAL"],
-            "active",
+            "ACTIVE",
         ),
         (
             "HCM-CENTRAL-POST",
@@ -558,7 +558,7 @@ def seed_pois(session: Session, users, regions, categories):
             "106.699934",
             "70.00",
             ["LANDMARK", "CULTURAL"],
-            "active",
+            "ACTIVE",
         ),
         (
             "CTO-CAI-RANG",
@@ -569,7 +569,7 @@ def seed_pois(session: Session, users, regions, categories):
             "105.748237",
             "180.00",
             ["CULTURAL", "LANDMARK"],
-            "active",
+            "ACTIVE",
         ),
         (
             "CTO-BINH-THUY",
@@ -580,7 +580,7 @@ def seed_pois(session: Session, users, regions, categories):
             "105.733285",
             "60.00",
             ["HISTORICAL", "CULTURAL"],
-            "maintenance",
+            "INACTIVE",
         ),
     ]
 
@@ -749,7 +749,7 @@ def seed_content(session: Session, users, languages, pois):
 
 
 def seed_listening_history(session: Session, pois, content_map):
-    trigger_types = ["gps", "qr_code", "manual"]
+    trigger_types = ["AUTO_LOCATION", "QR_CODE", "MANUAL"]
     language_codes = ["vi", "en", "ja", "fr", "ko"]
     published_entries = list(content_map.items())
 

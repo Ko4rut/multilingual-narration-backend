@@ -19,7 +19,7 @@ class PoiRead(BaseModel):
     id: str
     region_id: str
     poi_name: str
-    poi_image_url: str | None
+    poi_image_url: str
     image_checksum_sha256: str | None
     poi_qr_code: str
     poi_location: str
@@ -120,7 +120,7 @@ class PoiStatusUpdate(BaseModel):
 class AdminPoiRead(PoiRead):
     poi_status: PoiStatus
     created_by: str
-    last_updated_by: str | None
+    last_updated_by: str
     category_ids: list[str] = Field(default_factory=list)
     can_activate: bool = False
 

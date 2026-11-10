@@ -23,10 +23,7 @@ class ContentAudioRepository:
                 "audio/mpeg", "audio/aac", "audio/ogg", "audio/wav", "audio/mp4", "audio/webm",
             )),
             ContentAudio.audio_checksum_sha256.regexp_match(r"^[0-9a-fA-F]{64}$"),
-            # Accept the existing seed aliases alongside the GROUP 2 names.
-            func.upper(ContentAudio.audio_source_type).in_((
-                "RECORD", "TTS", "PRE_GENERATED", "TTS_GENERATED",
-            )),
+            ContentAudio.audio_source_type.in_(("RECORD", "TTS")),
         )
         return set(self.session.scalars(statement))
 
@@ -103,8 +100,7 @@ class ContentAudioRepository:
         if poi_content_id is not None:
             filters.append(ContentAudio.poi_content_id == poi_content_id)
         if audio_source_type is not None:
-            aliases = {"RECORD": ("RECORD", "PRE_GENERATED"), "TTS": ("TTS", "TTS_GENERATED")}
-            filters.append(func.upper(ContentAudio.audio_source_type).in_(aliases[audio_source_type]))
+            filters.append(ContentAudio.audio_source_type == audio_source_type)
         if search is not None:
             escaped = escape_like_value(search)
             pattern = f"%{escaped}%"

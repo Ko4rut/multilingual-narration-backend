@@ -20,10 +20,10 @@ class PoiRepositoryStub:
         return 1
 
     poi = SimpleNamespace(
-        id="poi-010126-00000001", region_id="region-0001", poi_name="Museum", poi_image_url=None,
+        id="poi-010126-00000001", region_id="region-0001", poi_name="Museum", poi_image_url="https://assets.example/museum.webp",
         image_checksum_sha256=None, poi_qr_code="museum",
         latitude="10.000000", longitude="106.000000",
-        trigger_radius_meter="50.00", poi_location="City", poi_status="active",
+        trigger_radius_meter="50.00", poi_location="City", poi_status="ACTIVE",
         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         last_updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         created_by=123,
