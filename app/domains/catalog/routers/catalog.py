@@ -1,11 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.domains.catalog.exceptions import (
     LanguageAlreadyExists,
-    LanguageInUse,
     LanguageNotFound,
 )
 from app.domains.catalog.repositories import (
@@ -30,7 +29,6 @@ admin_router = APIRouter(prefix="/admin/catalog", tags=["admin-catalog"])
 require_language_read = require_permission("Language Management", "read")
 require_language_create = require_permission("Language Management", "create")
 require_language_update = require_permission("Language Management", "update")
-require_language_delete = require_permission("Language Management", "delete")
 
 
 def get_catalog_service(
@@ -110,21 +108,3 @@ def update_language(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except LanguageAlreadyExists as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-
-@admin_router.delete(
-    "/languages/{language_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_language_delete)],
-)
-def delete_language(
-    language_id: str,
-    service: Annotated[CatalogService, Depends(get_catalog_service)],
-) -> Response:
-    try:
-        service.delete_language(language_id)
-    except LanguageNotFound as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except LanguageInUse as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.domains.catalog.exceptions import (
     LanguageAlreadyExists,
-    LanguageInUse,
     LanguageNotFound,
 )
 from app.domains.catalog.models.language import Language, LanguageStatus
@@ -65,6 +64,12 @@ class CatalogService:
             self._translate_integrity_error(exc)
         return language
 
+    def _require_language(self, language_id: str) -> Language:
+        language = self.language_repository.get_by_id(language_id)
+        if language is None:
+            raise LanguageNotFound("Language not found")
+        return language
+
     def update_language(
         self,
         language_id: str,
@@ -85,23 +90,6 @@ class CatalogService:
                 self.session.flush()
         except IntegrityError as exc:
             self._translate_integrity_error(exc)
-        return language
-
-    def delete_language(self, language_id: str) -> None:
-        try:
-            with self.session.begin():
-                language = self._require_language(language_id)
-                if self.language_repository.is_referenced(language_id):
-                    raise LanguageInUse("Language is referenced and cannot be deleted")
-                self.language_repository.delete(language)
-                self.session.flush()
-        except IntegrityError as exc:
-            self._translate_integrity_error(exc)
-
-    def _require_language(self, language_id: str) -> Language:
-        language = self.language_repository.get_by_id(language_id)
-        if language is None:
-            raise LanguageNotFound("Language not found")
         return language
 
     def _require_available_language(
@@ -126,9 +114,4 @@ class CatalogService:
         constraint = self._constraint_name(exc)
         if constraint in {"language_language_code_key", "language_language_name_key"}:
             raise LanguageAlreadyExists("Language code or name already exists") from exc
-        if constraint in {
-            "poi_content_language_id_fkey",
-            "offline_package_language_id_fkey",
-        }:
-            raise LanguageInUse("Language is referenced and cannot be deleted") from exc
         raise exc

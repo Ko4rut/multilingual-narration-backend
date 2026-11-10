@@ -1,9 +1,7 @@
-from sqlalchemy import exists, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.domains.catalog.models.language import Language, LanguageStatus
-from app.domains.offline.models.offline_package import OfflinePackage
-from app.domains.poi.models.poi_content import PoiContent
 
 
 class LanguageRepository:
@@ -44,15 +42,3 @@ class LanguageRepository:
 
     def add(self, language: Language) -> None:
         self.session.add(language)
-
-    def delete(self, language: Language) -> None:
-        self.session.delete(language)
-
-    def is_referenced(self, language_id: str) -> bool:
-        statement = select(
-            or_(
-                exists().where(PoiContent.language_id == language_id),
-                exists().where(OfflinePackage.language_id == language_id),
-            )
-        )
-        return bool(self.session.scalar(statement))

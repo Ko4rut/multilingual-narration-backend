@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
     not os.getenv("TEST_DATABASE_URL"),
     reason="TEST_DATABASE_URL must point to an isolated PostgreSQL database",
 )
-def test_real_login_jwt_rbac_and_language_admin_crud_on_postgresql():
+def test_real_login_jwt_rbac_and_language_admin_on_postgresql():
     root = Path(__file__).resolve().parents[1]
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(root)

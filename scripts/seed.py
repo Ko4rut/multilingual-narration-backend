@@ -189,7 +189,7 @@ def seed_identity(session: Session):
         "User Management": ["create", "read", "update", "delete"],
         "Offline Package Management": ["create", "read", "update", "delete", "publish"],
         "Listening Analytics": ["read"],
-        "Language Management": ["read", "create", "update", "delete"],
+        "Language Management": ["read", "create", "update"],
     }
     permissions = {}
     for function_name, action_names in permission_matrix.items():

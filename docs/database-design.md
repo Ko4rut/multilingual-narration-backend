@@ -1172,6 +1172,11 @@ Khi chuyển `UNSUPPORTED` sang `SUPPORTED`:
 
 - Cho phép tạo nội dung mới trở lại.
 
+Language là dữ liệu tham chiếu dùng chung và không được hard-delete qua API quản
+trị. Khi cần ngừng sử dụng một ngôn ngữ, quản trị viên phải chuyển
+`language_status` sang `UNSUPPORTED` để bảo toàn nội dung, package và lịch sử đã
+tham chiếu.
+
 ## 2.6 GROUP 6: AUDIT AND TRACEABILITY
 
 Nhóm chịu trách nhiệm ghi nhận các hành động thay đổi dữ liệu do người dùng quản trị thực hiện.
