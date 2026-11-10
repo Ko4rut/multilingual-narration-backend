@@ -3,8 +3,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.domains.catalog.models.language import Language, LanguageStatus
-from app.domains.listening.models.listening_history import ListeningHistory
-from app.domains.offline.models.offline_package_item import OfflinePackageItem
 from app.domains.poi.models.poi_content import PoiContent
 from app.domains.poi.utils import escape_like_value
 
@@ -116,13 +114,6 @@ class PoiContentRepository:
                 func.upper(PoiContent.content_status) == "PUBLISHED",
             ).order_by(PoiContent.content_version.desc(), PoiContent.id)
         ))
-
-    def get_external_reference_exists(self, content_id: str) -> bool:
-        """Kiểm tra content có bị Listening hoặc Offline tham chiếu hay không."""
-        for model in (ListeningHistory, OfflinePackageItem):
-            if self.session.scalar(select(model.id).where(model.poi_content_id == content_id).limit(1)) is not None:
-                return True
-        return False
 
     def add(self, content: PoiContent) -> None:
         """Đưa content mới vào Session; service sở hữu transaction."""

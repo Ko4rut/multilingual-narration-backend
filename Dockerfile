@@ -18,6 +18,11 @@ COPY --chown=app:app app ./app
 COPY --chown=app:app scripts ./scripts
 COPY --chown=app:app alembic.ini ./
 
+# Thư mục runtime nằm trong source tree theo cấu hình hiện tại. Quyền sở hữu này
+# cũng được dùng để khởi tạo named volume trong lần chạy Docker đầu tiên.
+RUN mkdir -p /app/assets/audio/tts \
+    && chown -R app:app /app/assets
+
 USER app
 
 EXPOSE 8000

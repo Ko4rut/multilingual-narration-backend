@@ -6,7 +6,9 @@ Phạm vi ghi: `point_of_interest`, `poi_category_mapping`, `poi_content`, `cont
 Không sửa frontend, Identity, Catalog, Listening, Offline hoặc Audit.
 Dữ liệu tham chiếu ở domain khác chỉ được đọc. Tái sử dụng xác thực/phân quyền
 Identity hiện có, không sửa login hoặc cấu hình tài khoản/token của người khác.
-Các tích hợp storage/TTS, Audit và rebuild Offline vẫn chờ người phụ trách.
+TTS hiện dùng gTTS và persistent local volume gắn tại `assets/audio/tts` ở thư
+mục gốc backend; các file MP3 sinh lúc chạy không được commit.
+Object storage production, Audit và rebuild Offline vẫn chờ triển khai.
 
 ## Cách tổ chức tương tự Identity
 
@@ -196,12 +198,9 @@ Prefix `/api/v1/admin/poi-contents`; quyền thuộc `Narration Content Manageme
 | GET | `/options` | read | POI và Language cho form (chỉ đọc Catalog) |
 | GET | `/{id}` | read | Chi tiết kèm metadata audio nếu có |
 | POST | đường dẫn gốc | create | Tạo DRAFT, tự cấp số phiên bản |
-| POST | `/{id}/versions` | create | Tạo DRAFT mới từ bản cũ, không sao chép audio |
 | PATCH | `/{id}` | update | Chỉ sửa DRAFT/REJECTED |
-| DELETE | `/{id}` | delete | Chỉ xóa DRAFT/REJECTED chưa được tham chiếu |
 | POST | `/{id}/submit` | update | DRAFT/REJECTED → WAITING_APPROVAL |
-| POST | `/{id}/approve` | approve | WAITING_APPROVAL → APPROVED |
-| POST | `/{id}/reject` | approve | WAITING_APPROVAL → REJECTED |
+| POST | `/{id}/review` | approve | APPROVE hoặc REJECT content đang WAITING_APPROVAL |
 | POST | `/{id}/publish` | publish | APPROVED → PUBLISHED khi audio hợp lệ |
 
 Danh sách trả `{items,total,offset,limit}`, mặc định 0/20, limit tối đa 100.
@@ -221,22 +220,27 @@ Body tạo mới:
 
 Backend cấp ID, phiên bản và người tạo; không nhận trạng thái/version/actor từ
 client. Script không rỗng, tối đa 100.000 ký tự. Language mới phải SUPPORTED hoặc
-giá trị tương thích `active` của seed. Khi nhân bản, gửi `{}` để dùng lại văn bản
-hoặc gửi title/script thay thế. Version được cấp `max + 1` trong phạm vi
-POI–Language dưới khóa POI, chống hai request trùng version.
+giá trị tương thích `active` của seed. Mỗi request tạo mới phải gửi đầy đủ tiêu đề
+và nội dung; backend không sao chép dữ liệu từ content cũ. Version được cấp
+`max + 1` trong phạm vi POI–Language dưới khóa POI, chống hai request trùng version.
 
-Không sửa/xóa bản WAITING_APPROVAL/APPROVED/PUBLISHED/ARCHIVED; tạo phiên bản mới
-khi cần chỉnh sửa. Sửa văn bản DRAFT/REJECTED xóa metadata audio cũ không còn
-khớp nếu chưa được package tham chiếu; không xóa file storage. Lưu REJECTED đưa
-về DRAFT; có thể gửi lại trực tiếp từ REJECTED. Trường duyệt/xuất bản cũ được xóa
-khi gửi lại. Tác giả không tự phê duyệt, phù hợp luồng duyệt prototype web.
+Không cung cấp endpoint xóa content. Với WAITING_APPROVAL/APPROVED/PUBLISHED/
+ARCHIVED, cần tạo phiên bản mới khi chỉnh sửa. DRAFT/REJECTED chỉ được sửa trực
+tiếp khi chưa có audio; nếu đã có audio thì cũng phải tạo phiên bản mới để giữ
+nguyên metadata và lịch sử. Lưu REJECTED đưa về DRAFT; có thể gửi lại trực tiếp
+từ REJECTED. Trường duyệt/xuất bản cũ được xóa khi gửi lại. Endpoint review nhận
+`{"decision":"APPROVE"}` hoặc `{"decision":"REJECT"}`; tác giả không được tự
+review content của mình.
 Reject chưa nhận ghi chú vì schema hiện không lưu lý do; việc lưu reviewer/lý do
 từ chối chi tiết chờ thiết kế Audit, không nhận rồi bỏ dữ liệu.
 
-Publish chỉ dùng audio hợp lệ đã có, chưa gọi TTS. Thiếu audio trả 409 và giữ
-APPROVED; bản PUBLISHED cũ vẫn phục vụ. Khi thành công, archive bản cũ cùng
-POI–Language và publish bản mới trong một transaction. Không publish bản thấp
-hơn version đang phân phối. ARCHIVED giữ nội dung/audio cho tham chiếu lịch sử.
+Publish ưu tiên audio RECORD/TTS hợp lệ đã có. Nếu content chưa có audio hợp lệ,
+backend dùng gTTS tạo MP3 từ tiêu đề và script, lưu file bất biến theo checksum,
+tạo/cập nhật ContentAudio nguồn TTS rồi mới publish. Lời gọi TTS chạy ngoài
+transaction ghi; trước khi lưu, backend khóa content và xác minh nội dung chưa bị
+thay đổi. TTS/storage lỗi trả 503 và content vẫn APPROVED. Khi thành công, archive
+bản cũ cùng POI–Language và publish bản mới. Không publish bản thấp hơn version
+đang phân phối. ARCHIVED giữ nội dung/audio cho tham chiếu lịch sử.
 
 ## API metadata audio
 
@@ -248,7 +252,6 @@ Quyền cũng thuộc `Narration Content Management`:
 | GET | `/api/v1/admin/audios/{audio_id}` | read |
 | GET | `/api/v1/admin/poi-contents/{id}/audio` | read |
 | PUT | `/api/v1/admin/poi-contents/{id}/audio` | update |
-| DELETE | `/api/v1/admin/poi-contents/{id}/audio` | delete |
 
 Danh sách có cùng phân trang; filter `poi_id`, `language_id`, `poi_content_id`,
 `audio_source_type=RECORD|TTS`, `search` theo ID/tiêu đề content. PUT trả 200 khi
@@ -268,15 +271,16 @@ thêm hoặc thay metadata; mỗi content có tối đa một audio:
 PUT yêu cầu đủ metadata của file đã upload/xác minh trước đó: URL HTTP(S) không
 chứa credentials, size/duration dương, checksum hợp lệ. MIME hỗ trợ: audio/mpeg,
 audio/aac, audio/ogg, audio/wav, audio/mp4, audio/webm. Size dùng bigint, duration
-dùng integer. Source TTS chỉ mô tả asset TTS đã có, không tạo TTS mới.
+dùng integer. Audio sinh tự động được phục vụ tại
+`/api/v1/assets/audio/{checksum}.mp3`.
 
 Cho phép gắn/thay metadata khi DRAFT/REJECTED/APPROVED/PUBLISHED; đóng băng khi
 WAITING_APPROVAL và ARCHIVED. Thay audio PUBLISHED là đổi metadata nguyên tử sang
-asset mới hợp lệ, giữ ID bản ghi audio. Checksum đổi bắt buộc URL mới. Không xóa
-audio PUBLISHED/ARCHIVED; bản khác chỉ xóa nếu chưa có item offline tham chiếu.
-Các thao tác không làm POI ACTIVE mất audio tiếng Anh khả dụng. Không tự thay
-package hoặc xóa file storage. Hai content có thể đăng ký cùng checksum khi cùng
-tham chiếu một asset vật lý; checksum không thay thế ID của bản ghi audio.
+asset mới hợp lệ, giữ ID bản ghi audio. Checksum đổi bắt buộc URL mới. Không cung
+cấp endpoint xóa audio; metadata cũ được giữ để bảo toàn lịch sử và tham chiếu
+offline. Các thao tác không làm POI ACTIVE mất audio tiếng Anh khả dụng. Không tự
+thay package hoặc xóa file storage. Hai content có thể đăng ký cùng checksum khi
+cùng tham chiếu một asset vật lý; checksum không thay thế ID của bản ghi audio.
 
 ## Chọn thuyết minh online và fallback
 
@@ -306,7 +310,7 @@ Phần nội bộ POI đã thực hiện; các việc sau còn chờ bên phụ 
 | Identity | Dùng dependency/quyền hiện có; không sửa login, tài khoản hay khóa JWT |
 | Catalog | Chỉ đọc; chưa xử lý cascade khi bên Catalog đổi trạng thái |
 | Storage/upload | Chưa upload/đọc bytes, xác minh checksum/MIME thực hoặc dọn asset |
-| TTS | Chưa chọn provider, gọi API sinh audio, retry job hoặc tính phí |
+| TTS | Đang dùng gTTS đồng bộ; production nên thay bằng provider có SLA/job retry |
 | Offline | Chưa đánh dấu/rebuild package khi dữ liệu đổi, không tăng package_version |
 | Audit | Chưa ghi sự kiện, reviewer/lý do từ chối hoặc lịch sử thao tác |
 | Frontend | Chưa gọi API hoặc sửa giao diện/đăng nhập |

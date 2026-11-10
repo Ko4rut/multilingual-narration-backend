@@ -26,10 +26,11 @@ from app.domains.poi.schemas.poi_content import (
     PoiContentCreate,
     PoiContentOptions,
     PoiContentPage,
+    PoiContentReview,
     PoiContentUpdate,
-    PoiContentVersionCreate,
     PublishedNarration,
 )
+from app.domains.poi.tts import FileSystemTtsStorage, GttsSynthesizer, StoredTtsAudio
 from app.domains.poi.utils import generate_dated_identifier, get_constraint_name
 
 
@@ -39,11 +40,15 @@ class PoiContentService:
     def __init__(
         self, session: Session, pois: PoiRepository,
         contents: PoiContentRepository, audios: ContentAudioRepository,
+        tts: GttsSynthesizer | None = None,
+        tts_storage: FileSystemTtsStorage | None = None,
     ):
         self.session = session
         self.pois = pois
         self.contents = contents
         self.audios = audios
+        self.tts = tts
+        self.tts_storage = tts_storage
 
     def get_options(self) -> PoiContentOptions:
         return PoiContentOptions(pois=self.pois.get_all(), languages=self.contents.get_languages())
@@ -82,23 +87,6 @@ class PoiContentService:
             self._translate_integrity_error(exc)
         return result
 
-    def create_version(
-        self, content_id: str, payload: PoiContentVersionCreate, *, actor_id: str,
-    ) -> AdminPoiContentRead:
-        try:
-            with self.session.begin():
-                poi, source = self._lock_content(content_id)
-                content = self._new_content(
-                    poi.id, source.language_id,
-                    payload.narration_title or source.narration_title,
-                    payload.narration_script or source.narration_script, actor_id,
-                )
-                self.session.flush()
-                result = self._content_responses([content])[0]
-        except IntegrityError as exc:
-            self._translate_integrity_error(exc)
-        return result
-
     def update_content(self, content_id: str, payload: PoiContentUpdate) -> AdminPoiContentRead:
         try:
             with self.session.begin():
@@ -106,7 +94,11 @@ class PoiContentService:
                 self._require_status(content, {"DRAFT", "REJECTED"})
                 values = payload.model_dump(exclude_unset=True)
                 if any(getattr(content, name) != value for name, value in values.items()):
-                    self._remove_audio_if_unreferenced(content.id)
+                    if self.audios.get_for_content(content.id) is not None:
+                        raise PoiConflict(
+                            "Content with audio cannot be edited; create new content "
+                            "for the same POI and language"
+                        )
                 for name, value in values.items():
                     setattr(content, name, value)
                 content.content_status = "DRAFT"
@@ -128,37 +120,90 @@ class PoiContentService:
             result = self._content_responses([content])[0]
         return result
 
-    def approve_content(self, content_id: str, *, actor_id: str) -> AdminPoiContentRead:
+    def review_content(
+        self, content_id: str, payload: PoiContentReview, *, actor_id: str,
+    ) -> AdminPoiContentRead:
+        """Phê duyệt hoặc từ chối content trong cùng một use case review."""
         with self.session.begin():
             _, content = self._lock_content(content_id)
             self._require_status(content, {"WAITING_APPROVAL"})
             if content.created_by == actor_id:
-                raise PoiPermissionDenied("Authors cannot approve their own content")
-            content.content_status = "APPROVED"
-            content.approved_by = actor_id
-            content.approved_at = datetime.now(timezone.utc)
-            self.session.flush()
-            result = self._content_responses([content])[0]
-        return result
-
-    def reject_content(self, content_id: str) -> AdminPoiContentRead:
-        with self.session.begin():
-            _, content = self._lock_content(content_id)
-            self._require_status(content, {"WAITING_APPROVAL"})
-            content.content_status = "REJECTED"
-            self._clear_review_fields(content)
+                raise PoiPermissionDenied("Authors cannot review their own content")
+            if payload.decision == "APPROVE":
+                content.content_status = "APPROVED"
+                content.approved_by = actor_id
+                content.approved_at = datetime.now(timezone.utc)
+            else:
+                content.content_status = "REJECTED"
+                self._clear_review_fields(content)
             self.session.flush()
             result = self._content_responses([content])[0]
         return result
 
     def publish_content(self, content_id: str, *, actor_id: str) -> AdminPoiContentRead:
+        generated_audio: StoredTtsAudio | None = None
+        snapshot: tuple[str, str, str, str] | None = None
+
+        # Đọc snapshot trong transaction riêng rồi gọi TTS ngoài transaction DB.
+        # Transaction ghi bên dưới sẽ khóa và xác minh snapshot lại trước khi lưu.
+        with self.session.begin():
+            _, content = self._lock_content(content_id)
+            self._require_status(content, {"APPROVED"})
+            language = self._require_supported_language(content.language_id)
+            if content.id not in self.audios.get_content_ids_with_valid_audio([content.id]):
+                if self.tts is None or self.tts_storage is None:
+                    raise PoiConflict("Publishing requires audio or configured TTS")
+                snapshot = (
+                    content.language_id,
+                    content.narration_title,
+                    content.narration_script,
+                    language.language_code,
+                )
+
+        if snapshot is not None:
+            generated = self.tts.synthesize(
+                f"{snapshot[1]}. {snapshot[2]}", snapshot[3],
+            )
+            generated_audio = self.tts_storage.store(generated)
+
         try:
             with self.session.begin():
                 poi, content = self._lock_content(content_id)
                 self._require_status(content, {"APPROVED"})
                 self._require_supported_language(content.language_id)
+                if snapshot is not None and snapshot[:3] != (
+                    content.language_id,
+                    content.narration_title,
+                    content.narration_script,
+                ):
+                    raise PoiConflict("Content changed while TTS was being generated")
                 if content.id not in self.audios.get_content_ids_with_valid_audio([content.id]):
-                    raise PoiConflict("Publishing requires valid audio metadata; content remains APPROVED")
+                    if generated_audio is None:
+                        raise PoiConflict("Publishing requires valid audio metadata")
+                    audio = self.audios.get_for_content(content.id, for_update=True)
+                    now = datetime.now(timezone.utc)
+                    values = {
+                        "audio_url": generated_audio.url,
+                        "audio_size": generated_audio.size,
+                        "audio_source_type": "TTS",
+                        "audio_duration_sec": generated_audio.duration_sec,
+                        "audio_mime_type": "audio/mpeg",
+                        "audio_checksum_sha256": generated_audio.checksum_sha256,
+                    }
+                    if audio is None:
+                        audio = ContentAudio(
+                            id=generate_dated_identifier("audio", now),
+                            poi_content_id=content.id,
+                            **values,
+                            created_at=now,
+                            last_updated_at=now,
+                        )
+                        self.audios.add(audio)
+                    else:
+                        for name, value in values.items():
+                            setattr(audio, name, value)
+                        audio.last_updated_at = now
+                    self.session.flush()
                 previous = self.contents.get_published_versions(poi.id, content.language_id)
                 if any(item.content_version >= content.content_version for item in previous):
                     raise PoiConflict("Cannot replace a published version with an older version")
@@ -175,22 +220,6 @@ class PoiContentService:
         except IntegrityError as exc:
             self._translate_integrity_error(exc)
         return result
-
-    def delete_content(self, content_id: str) -> None:
-        try:
-            with self.session.begin():
-                poi, content = self._lock_content(content_id)
-                self._require_status(content, {"DRAFT", "REJECTED"})
-                if self.contents.get_external_reference_exists(content.id):
-                    raise PoiConflict("Content referenced by listening history or offline packages cannot be deleted")
-                self._remove_audio_if_unreferenced(content.id)
-                # Repository không cung cấp hard delete; service đánh dấu xóa
-                # trong transaction đang khóa POI và content liên quan.
-                self.session.delete(content)
-                self.session.flush()
-                self._ensure_active_english(poi)
-        except IntegrityError as exc:
-            self._translate_integrity_error(exc)
 
     def list_audios(
         self, *, offset: int, limit: int, poi_id: str | None = None,
@@ -254,16 +283,6 @@ class PoiContentService:
             self._translate_integrity_error(exc)
         return result
 
-    def delete_audio(self, content_id: str) -> None:
-        try:
-            with self.session.begin():
-                poi, content = self._lock_content(content_id)
-                self._require_status(content, {"DRAFT", "REJECTED", "APPROVED"})
-                self._remove_audio_if_unreferenced(content.id, require_exists=True)
-                self._ensure_active_english(poi)
-        except IntegrityError as exc:
-            self._translate_integrity_error(exc)
-
     def get_narration(self, poi_id: str, language_code: str) -> PublishedNarration:
         if self.pois.get_by_id(poi_id, active_only=True) is None:
             raise PoiNotFound("POI not found")
@@ -301,12 +320,13 @@ class PoiContentService:
         self.contents.add(content)
         return content
 
-    def _require_supported_language(self, language_id: str) -> None:
+    def _require_supported_language(self, language_id: str):
         language = self.contents.get_language(language_id)
         if language is None:
             raise PoiReferenceNotFound("Language not found")
         if language.language_status.lower() not in {"supported", "active"}:
             raise PoiConflict("The selected language is not supported for new content or publication")
+        return language
 
     def _require_content(self, content_id: str) -> PoiContent:
         content = self.contents.get_by_id(content_id)
@@ -333,18 +353,6 @@ class PoiContentService:
             versions = self.contents.get_published_english_contents([poi.id])
             if not self.audios.get_content_ids_with_valid_audio(list(versions)):
                 raise PoiConflict("An ACTIVE POI must retain published English content with valid audio")
-
-    def _remove_audio_if_unreferenced(self, content_id: str, *, require_exists: bool = False) -> None:
-        audio = self.audios.get_for_content(content_id, for_update=True)
-        if audio is None:
-            if require_exists:
-                raise NarrationNotFound("Audio not found")
-            return
-        if self.audios.get_external_reference_exists(audio.id):
-            raise PoiConflict("Audio referenced by an offline package cannot be deleted")
-        # Repository không cung cấp hard delete; service sở hữu transaction.
-        self.session.delete(audio)
-        self.session.flush()
 
     def _content_responses(self, contents: list[PoiContent]) -> list[AdminPoiContentRead]:
         audios = self.audios.get_for_contents([item.id for item in contents])

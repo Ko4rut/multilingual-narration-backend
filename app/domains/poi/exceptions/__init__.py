@@ -7,6 +7,7 @@ from app.domains.poi.exceptions.exceptions import (
     PoiNotFound,
     PoiPermissionDenied,
     PoiReferenceNotFound,
+    TtsGenerationFailed,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "PoiNotFound",
     "PoiPermissionDenied",
     "PoiReferenceNotFound",
+    "TtsGenerationFailed",
 ]

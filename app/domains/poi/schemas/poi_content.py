@@ -55,16 +55,11 @@ class PoiContentUpdate(BaseModel):
         return self
 
 
-class PoiContentVersionCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    narration_title: NarrationTitle | None = None
-    narration_script: NarrationScript | None = None
+class PoiContentReview(BaseModel):
+    """Quyết định của người kiểm duyệt đối với content đang chờ duyệt."""
 
-    @model_validator(mode="after")
-    def reject_explicit_null(self) -> "PoiContentVersionCreate":
-        if any(getattr(self, name) is None for name in self.model_fields_set):
-            raise ValueError("Narration fields must not be null")
-        return self
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["APPROVE", "REJECT"]
 
 
 class AdminPoiContentRead(PoiContentRead):

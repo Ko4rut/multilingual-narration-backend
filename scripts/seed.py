@@ -181,7 +181,6 @@ def seed_identity(session: Session):
             "create",
             "read",
             "update",
-            "delete",
             "approve",
             "publish",
             "generate_audio",

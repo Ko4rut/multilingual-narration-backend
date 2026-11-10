@@ -4,7 +4,6 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.domains.poi.models.content_audio import ContentAudio
 from app.domains.poi.models.poi_content import PoiContent
-from app.domains.offline.models.offline_package_item import OfflinePackageItem
 from app.domains.poi.utils import escape_like_value
 
 
@@ -109,12 +108,6 @@ class ContentAudioRepository:
                 PoiContent.narration_title.ilike(pattern, escape="\\"),
             ))
         return filters
-
-    def get_external_reference_exists(self, audio_id: str) -> bool:
-        """Kiểm tra audio có bị Offline Package tham chiếu hay không."""
-        return self.session.scalar(select(OfflinePackageItem.id).where(
-            OfflinePackageItem.audio_id == audio_id,
-        ).limit(1)) is not None
 
     def add(self, audio: ContentAudio) -> None:
         """Đưa audio mới vào Session; service sở hữu transaction."""

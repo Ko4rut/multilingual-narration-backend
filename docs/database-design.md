@@ -496,7 +496,7 @@ Trong phạm vi hiện tại, mỗi phiên bản Poi_Content có tối đa một
 Có các đặc điểm sau
     - Bắt đầu từ 1 cho phiên bản đầu tiên của một POI theo một ngôn ngữ.
     - Khi tạo nội dung thay thế cho phiên bản đã phát hành, tạo một dòng mới với content_version + 1; không ghi đè nội dung đã phát hành cũ.
-    - ách này cho phép phiên bản cũ tiếp tục phục vụ người dùng trong khi phiên bản mới đang chờ duyệt.
+    - Cách này cho phép phiên bản cũ tiếp tục phục vụ người dùng trong khi phiên bản mới đang chờ duyệt.
 ```
 
 [4.2] Trường `content_status`
@@ -511,6 +511,8 @@ Các trạng thái của content hiện tại gồm:
     - ARCHIVED: phiên bản đã từng được phát hành nhưng không còn là phiên bản đang phân phối.
 
 Quy tắc chuyển trạng thái:
+    - Người quản trị gửi một quyết định review duy nhất: APPROVE hoặc REJECT; đây là một nghiệp vụ phê duyệt, không phải hai loại tài nguyên API độc lập.
+    - Nội dung DRAFT hoặc REJECTED chỉ được sửa trực tiếp khi chưa có audio liên kết; nếu đã có audio thì phải tạo một phiên bản nội dung mới đầy đủ.
     - Khi một phiên bản mới chuyển sang `PUBLISHED`, phiên bản `PUBLISHED` cũ của cùng `poi_id`-`language_id` sẽ được chuyển sang `ARCHIVED`.
     - Chỉ nội dung `PUBLISHED` được dùng khi xây dựng Offline_Packages.
 ```
@@ -520,8 +522,8 @@ Quy tắc chuyển trạng thái:
 ```
 Nếu hệ thống áp dụng nghiệp vụ "TTS khi Publish", thao tác Publish phải được xử lý theo thứ tự:
     - 1. Kiểm tra Poi_Content đang ở trạng thái APPROVED.
-    - 2. Tạo audio TTS từ narration_title và narration_script.
-    - 3. Upload audio lên object storage.
+    - 2. Nếu content chưa có audio hợp lệ, tạo audio TTS từ narration_title và narration_script.
+    - 3. Lưu audio vào storage đã cấu hình. Bản triển khai hiện tại dùng filesystem tại `assets/audio/tts` ở thư mục gốc backend; môi trường production nên thay bằng object storage.
     - 4. Tính và xác minh audio_checksum_sha256, audio_size, audio_duration_sec và MIME type.
     - 5. Tạo hoặc cập nhật Content_Audios.
     - 6. Chỉ sau khi audio đã sẵn sàng người quản trị mới có thể chuyển Poi_Content sang PUBLISHED.
@@ -532,7 +534,7 @@ Nếu TTS hoặc upload audio thất bại:
     - Poi_Content vẫn ở trạng thái APPROVED;
     - Phiên bản PUBLISHED hiện tại vẫn tiếp tục được phục vụ;
     - Không cập nhật package đang được phân phối;
-    - Người quản trị có thể thực hiện một thao tác để retry quá trình TTS và sau đó thực hiện chuyển Poi_Content sang PUBLISHED.
+    - Người quản trị có thể gọi lại thao tác Publish để retry quá trình TTS.
 
 Nhờ đó không tồn tại trạng thái PUBLISHED nhưng chưa có audio hợp lệ.
 ```

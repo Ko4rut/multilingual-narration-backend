@@ -12,6 +12,8 @@ from app.domains.poi.repositories.poi_category_mapping import PoiCategoryMapping
 from app.domains.poi.repositories.poi_content import PoiContentRepository
 from app.domains.poi.repositories.point_of_interest import PoiRepository
 from app.domains.poi.services import PoiAdminService, PoiContentService
+from app.domains.poi.tts import FileSystemTtsStorage, GttsSynthesizer
+from app.core.config import get_settings
 from app.route.dependencies import get_session
 
 
@@ -50,9 +52,21 @@ require_poi_update = require_poi_management("update")
 def get_poi_content_service(
     session: Annotated[Session, Depends(get_session, use_cache=False)],
 ) -> PoiContentService:
+    settings = get_settings()
     return PoiContentService(
         session=session, pois=PoiRepository(session),
         contents=PoiContentRepository(session), audios=ContentAudioRepository(session),
+        tts=GttsSynthesizer(),
+        tts_storage=FileSystemTtsStorage(
+            settings.tts_audio_dir, settings.tts_audio_public_base_url,
+        ),
+    )
+
+
+def get_tts_storage() -> FileSystemTtsStorage:
+    settings = get_settings()
+    return FileSystemTtsStorage(
+        settings.tts_audio_dir, settings.tts_audio_public_base_url,
     )
 
 
@@ -72,6 +86,5 @@ def require_narration_management(action_name: str):
 require_narration_read = require_narration_management("read")
 require_narration_create = require_narration_management("create")
 require_narration_update = require_narration_management("update")
-require_narration_delete = require_narration_management("delete")
 require_narration_approve = require_narration_management("approve")
 require_narration_publish = require_narration_management("publish")

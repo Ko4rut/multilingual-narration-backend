@@ -4,7 +4,7 @@ from app.domains.poi.schemas.content_audio import (
 from app.domains.poi.schemas.poi_category_mapping import PoiCategoryMappingRead
 from app.domains.poi.schemas.poi_content import (
     AdminPoiContentRead, PoiContentCreate, PoiContentOptions, PoiContentPage,
-    PoiContentRead, PoiContentUpdate, PoiContentVersionCreate, PublishedNarration,
+    PoiContentRead, PoiContentReview, PoiContentUpdate, PublishedNarration,
 )
 from app.domains.poi.schemas.point_of_interest import (
     AdminPoiPage,
@@ -27,11 +27,11 @@ __all__ = [
     "ContentAudioRead",
     "PoiCategoryMappingRead",
     "PoiContentRead",
+    "PoiContentReview",
     "PoiContentCreate",
     "PoiContentOptions",
     "PoiContentPage",
     "PoiContentUpdate",
-    "PoiContentVersionCreate",
     "PoiCreate",
     "PoiFormOptions",
     "PoiPage",
