@@ -1,81 +1,38 @@
-# UC-IDENTITY-01 — Đăng nhập và đăng xuất hệ thống quản trị
+# UC-IDENTITY-01 — Đăng nhập, sử dụng phiên và đăng xuất hệ thống quản trị
 
 | Use case number: | UC-IDENTITY-01 |  |
 | :---- | :---- | :---- |
 | **Use case name:** | Đăng nhập, sử dụng phiên và đăng xuất hệ thống quản trị |  |
 | **Actor(s):** | Người dùng quản trị (Management User), Admin Web |  |
-| **Maturity:** | Implemented — backend đã triển khai login, refresh-token rotation, xác thực Bearer token, kiểm tra RBAC và logout |  |
-| **Summary:** | Người dùng quản trị cung cấp email và mật khẩu để tạo phiên. Backend cấp JWT Access Token và Refresh Token qua cookie HttpOnly, xác thực phiên và quyền khi người dùng thao tác, đồng thời thu hồi phiên khi đăng xuất. |  |
+| **Maturity:** | Specified — đặc tả nghiệp vụ trước khi triển khai giao diện quản trị |  |
+| **Summary:** | Người dùng quản trị nhập thông tin đăng nhập để truy cập các chức năng được phân quyền. Hệ thống kiểm tra tài khoản, quản lý hiệu lực phiên, kiểm tra quyền trước mỗi thao tác và kết thúc phiên khi người dùng đăng xuất. |  |
 | **Basic Course of Events:** | **Actor action** | **System response** |
-|  | 1\. Người dùng quản trị truy cập Admin Web. |  |
-|  |  | 2\. Admin Web hiển thị biểu mẫu đăng nhập gồm email và mật khẩu. |
+|  | 1\. Người dùng quản trị truy cập trang quản trị. |  |
+|  |  | 2\. Hệ thống hiển thị biểu mẫu đăng nhập với trường **Email**, **Mật khẩu** và nút **Đăng nhập**. |
 |  | 3\. Người dùng nhập email, mật khẩu và chọn **Đăng nhập**. |  |
-|  |  | 4\. Admin Web gửi `POST /api/v1/auth/login`; FastAPI kiểm tra trường bắt buộc, định dạng email và quy tắc mật khẩu không chứa khoảng trắng. **E1** |
-|  |  | 5\. MNR Backend chuẩn hóa email, tìm tài khoản và dùng Argon2id để xác minh mật khẩu. Khi email không tồn tại, backend vẫn thực hiện dummy hash để giảm chênh lệch thời gian phản hồi. **E2** |
-|  |  | 6\. MNR Backend kiểm tra tài khoản đang ở trạng thái `ACTIVE`. **E2** |
-|  |  | 7\. Trong một transaction, backend tạo Refresh Token, chỉ lưu SHA-256 hash vào `user_session`, đặt hạn tuyệt đối và cập nhật `last_login_at`. **E3** |
-|  |  | 8\. Backend ký JWT Access Token RS256 có `sid` liên kết với session, trả token và dữ liệu công khai của người dùng; Refresh Token gốc chỉ được đặt trong cookie HttpOnly. **E4** |
-|  |  | 9\. Admin Web chuyển người dùng đến màn hình quản trị phù hợp với vai trò. |
-|  | 10\. Người dùng chọn một chức năng quản trị và gửi Bearer Access Token. |  |
-|  |  | 11\. Backend xác minh JWT, session, trạng thái tài khoản, role hiện tại và permission theo cặp chức năng–hành động trước khi xử lý. **A1, A3, E5, E6** |
+|  |  | 4\. Hệ thống kiểm tra dữ liệu bắt buộc và định dạng thông tin đăng nhập. **E1** |
+|  |  | 5\. Hệ thống kiểm tra thông tin tài khoản và đối chiếu mật khẩu. **E2** |
+|  |  | 6\. Hệ thống kiểm tra tài khoản đang được phép sử dụng hệ thống quản trị. **E2** |
+|  |  | 7\. Hệ thống tạo và lưu phiên đăng nhập có thời hạn, gắn với tài khoản đã xác thực. **E3** |
+|  |  | 8\. Hệ thống cấp thông tin truy cập cho phiên đăng nhập. **E4** |
+|  |  | 9\. Hệ thống hiển thị thông báo “Đăng nhập thành công.” và chuyển người dùng đến trang quản trị phù hợp với vai trò. |
+|  | 10\. Người dùng chọn một chức năng quản trị trong hệ thống. **A2** |  |
+|  |  | 11\. Hệ thống xác minh phiên còn hiệu lực, kiểm tra vai trò và quyền hiện tại trước khi thực hiện chức năng được chọn. **A1, A3, E5, E6** |
 |  | 12\. Người dùng chọn **Đăng xuất**. |  |
-|  |  | 13\. Admin Web gửi `POST /api/v1/auth/logout`; backend thu hồi session, trả `204 No Content` và xóa Refresh Token cookie. Admin Web xóa Access Token cục bộ rồi trở về màn hình đăng nhập. **E7** |
-| **Alternative Paths:** | **A1 — Cấp lại Access Token:** Khi Access Token hết hạn hoặc sắp hết hạn, Admin Web gửi `POST /api/v1/auth/refresh` cùng Refresh Token cookie. Backend khóa session, kiểm tra hiệu lực, xoay Refresh Token và cấp Access Token mới. Hạn tuyệt đối `expires_at` của session không được kéo dài.<br><br>**A2 — Đóng trình duyệt:** Cookie có `Max-Age` và `Expires`, vì vậy đóng trình duyệt không tự thu hồi session. Session tồn tại đến khi hết hạn, đăng xuất, đổi mật khẩu, vô hiệu hóa tài khoản hoặc bị thu hồi bởi nghiệp vụ khác.<br><br>**A3 — Role thay đổi:** Nếu role hiện tại khác claim `role_id` trong JWT, backend từ chối token và yêu cầu cấp token mới. |  |
-| **Exception Paths:** | **E1 — Dữ liệu không hợp lệ:** Body thiếu trường, email sai định dạng hoặc mật khẩu không hợp lệ làm FastAPI trả `422 Unprocessable Entity`; không tạo session.<br><br>**E2 — Xác thực thất bại:** Email không tồn tại, mật khẩu sai hoặc tài khoản `INACTIVE` đều nhận chung `401 Authentication required`, không làm lộ nguyên nhân cụ thể.<br><br>**E3 — Không tạo được phiên:** Transaction rollback và không cấp thông tin xác thực.<br><br>**E4 — Cấu hình JWT không hợp lệ:** Thiếu hoặc sai khóa ký làm endpoint trả `503 Service Unavailable` và không hoàn thành đăng nhập.<br><br>**E5 — Token hoặc phiên không hợp lệ:** JWT sai chữ ký/claim, session không tồn tại, hết hạn, đã thu hồi hoặc role thay đổi làm backend trả `401 Authentication required`.<br><br>**E6 — Không đủ quyền:** Backend trả `403 Insufficient permission` nhưng không thu hồi session.<br><br>**E7 — Lỗi database khi đăng xuất:** Request có thể thất bại trước khi response xóa cookie được gửi; Admin Web vẫn phải xóa Access Token cục bộ. |  |
-| **Extension Points:** | Có thể bổ sung MFA, rate limiting/khóa tài khoản, đăng xuất tất cả thiết bị, refresh-token family và phát hiện replay, job dọn session, CSRF token cho topology cross-site và quy trình xoay khóa RSA hoàn chỉnh. |  |
-| **Triggers:** | Người dùng quản trị cần đăng nhập, cấp lại Access Token, truy cập chức năng được bảo vệ hoặc kết thúc phiên hiện tại. |  |
-| **Assumptions:** | Database và migration đã sẵn sàng; `DATABASE_URL`, định danh JWT và cặp khóa RSA được cấu hình hợp lệ; production sử dụng HTTPS; đồng hồ hệ thống nằm trong dung sai `JWT_LEEWAY_SECONDS`. |  |
-| **Preconditions:** | Dữ liệu `manager_user`, `role` và permission tương ứng đã tồn tại; tài khoản đăng nhập có `user_status = ACTIVE`. |  |
-| **Post Conditions:** | Login thành công tạo session, cập nhật `last_login_at`, trả Access Token và đặt Refresh Token cookie. Refresh thành công thay hash Refresh Token nhưng giữ nguyên hạn tuyệt đối. Logout thành công đặt `revoked_at` và yêu cầu trình duyệt xóa cookie. |  |
-| **Preferences:** | Không trả hoặc ghi log mật khẩu, `password_hash`, Access Token, Refresh Token hay `refresh_token_hash`; không lưu plaintext Refresh Token; không đưa dữ liệu bí mật vào payload JWT; thông báo đăng nhập sai không làm lộ sự tồn tại của email. |  |
+|  |  | 13\. Hệ thống thu hồi phiên đăng nhập, xóa thông tin truy cập trên trình duyệt, hiển thị “Đăng xuất thành công.” và đưa người dùng về màn hình đăng nhập. **E7** |
+| **Alternative Paths:** | **A1 — Gia hạn phiên đăng nhập:** Tại bước 11, nếu phiên truy cập cần được gia hạn nhưng phiên đăng nhập tổng thể vẫn hợp lệ, hệ thống thực hiện gia hạn thông tin truy cập mà không kéo dài thời hạn tối đa của phiên. Nếu thành công, quay lại bước 11 để kiểm tra quyền và tiếp tục thao tác; nếu thất bại do phiên không còn hợp lệ, chuyển sang E5 và kết thúc luồng.<br><br>**A2 — Đóng trình duyệt:** Tại bước 10, nếu người dùng đóng trình duyệt thay vì chọn Đăng xuất, hệ thống không tự coi phiên là đã được thu hồi. Khi người dùng truy cập lại, hệ thống kiểm tra hiệu lực phiên trước khi cho phép thao tác. Kết thúc lượt tương tác hiện tại.<br><br>**A3 — Quyền hoặc vai trò thay đổi:** Tại bước 11, nếu vai trò hoặc quyền của tài khoản đã thay đổi, hệ thống kiểm tra lại quyền hiện tại, không sử dụng quyền cũ để xử lý thao tác. Nếu phiên vẫn hợp lệ và còn quyền, quay lại bước 10 để người dùng chọn thao tác phù hợp; nếu không đủ quyền, chuyển sang E6; nếu cần xác thực lại, chuyển sang E5 và kết thúc luồng. |  |
+| **Exception Paths:** | **E1 — Thông tin đăng nhập không hợp lệ:** Tại bước 4, nếu bỏ trống email hoặc mật khẩu, hệ thống hiển thị “Vui lòng nhập email và mật khẩu.”; nếu email sai định dạng, hiển thị “Email không đúng định dạng.”; nếu mật khẩu vi phạm quy tắc nhập liệu, hiển thị “Mật khẩu không hợp lệ.”. Không gửi yêu cầu xác thực. Quay lại bước 3 để người dùng chỉnh sửa.<br><br>**E2 — Đăng nhập thất bại:** Tại bước 5 hoặc bước 6, nếu email không tồn tại, mật khẩu không đúng hoặc tài khoản không được phép đăng nhập, hệ thống không tiết lộ nguyên nhân cụ thể và hiển thị “Email hoặc mật khẩu không chính xác, hoặc tài khoản không khả dụng.”. Không tạo phiên đăng nhập. Quay lại bước 3 để người dùng thử lại.<br><br>**E3 — Không thể tạo phiên đăng nhập:** Tại bước 7, nếu hệ thống không thể lưu phiên đăng nhập, hệ thống hủy thao tác tạo phiên, không cấp thông tin truy cập và hiển thị “Không thể đăng nhập lúc này. Vui lòng thử lại sau.”. Quay lại bước 2.<br><br>**E4 — Dịch vụ xác thực tạm thời không khả dụng:** Tại bước 8, nếu hệ thống không thể hoàn tất việc cấp thông tin xác thực, hệ thống không cho phép truy cập trang quản trị và hiển thị “Hệ thống đăng nhập tạm thời không khả dụng. Vui lòng thử lại sau.”. Quay lại bước 2.<br><br>**E5 — Phiên đăng nhập không hợp lệ hoặc hết hạn:** Tại bước 11, nếu thông tin xác thực sai, phiên không tồn tại, hết hạn, đã bị thu hồi hoặc không thể gia hạn, hệ thống từ chối thao tác đang yêu cầu, xóa thông tin truy cập cục bộ và hiển thị “Phiên đăng nhập đã hết hạn hoặc không còn hợp lệ. Vui lòng đăng nhập lại.”. Quay lại bước 2; luồng sử dụng phiên hiện tại kết thúc.<br><br>**E6 — Không đủ quyền thực hiện thao tác:** Tại bước 11, nếu phiên hợp lệ nhưng người dùng không có quyền thực hiện chức năng đã chọn, hệ thống không thực hiện thao tác và hiển thị “Bạn không có quyền thực hiện thao tác này.”. Phiên đăng nhập vẫn được giữ. Quay lại bước 10 để người dùng chọn chức năng khác.<br><br>**E7 — Không thể xác nhận thu hồi phiên khi đăng xuất:** Tại bước 13, nếu hệ thống không thể xác nhận việc thu hồi phiên trên máy chủ, Admin Web vẫn xóa thông tin truy cập cục bộ, đưa người dùng về màn hình đăng nhập và hiển thị “Đã thoát khỏi thiết bị này, nhưng chưa thể xác nhận đăng xuất trên hệ thống.”. Không thông báo rằng phiên máy chủ đã được thu hồi thành công. Kết thúc luồng. |  |
+| **Extension Points:** | Có thể mở rộng xác thực đa yếu tố (MFA), giới hạn số lần đăng nhập sai, đăng xuất trên tất cả thiết bị hoặc cảnh báo đăng nhập bất thường theo yêu cầu trong tương lai. |  |
+| **Triggers:** | Người dùng quản trị muốn đăng nhập, truy cập chức năng được bảo vệ hoặc kết thúc phiên đăng nhập. |  |
+| **Assumptions:** | Hệ thống có khả năng truy cập dữ liệu tài khoản, vai trò, quyền và lưu trữ phiên; các thành phần xác thực hoạt động an toàn; người dùng có kết nối đến hệ thống quản trị. |  |
+| **Preconditions:** | Hệ thống quản trị có dữ liệu người dùng và phân quyền tương ứng; người dùng có thể truy cập trang đăng nhập. Trạng thái tài khoản được kiểm tra tại bước 6, không mặc định mọi tài khoản đều đang hoạt động. |  |
+| **Post Conditions:** | **Thành công:** Người dùng đăng nhập có phiên hợp lệ và chỉ sử dụng được chức năng được phân quyền; đăng xuất thành công thì phiên bị thu hồi và trình duyệt xóa thông tin truy cập. **Thất bại:** Không tạo phiên khi đăng nhập thất bại, không thực hiện thao tác khi không đủ quyền; nếu thu hồi phiên lỗi, chỉ xác nhận đã xóa thông tin trên thiết bị. |  |
+| **Preferences:** | Không hiển thị hay ghi log mật khẩu và thông tin xác thực bí mật; thông báo đăng nhập thất bại không tiết lộ email có tồn tại hay trạng thái tài khoản; việc kiểm tra quyền phải diễn ra tại hệ thống, không chỉ dựa vào việc ẩn chức năng trên giao diện. |  |
 | **Author(s):** | MNR Backend Team |  |
-| **Date:** | 31-10-2026 |  |
+| **Date:** | 10-11-2026 |  |
 
-## Trạng thái trong phiên bản hiện tại
+## Quy ước thông báo và phạm vi tài liệu
 
-Use case trên đã được triển khai với các HTTP contract sau:
+Các thông báo được đặt trong dấu ngoặc kép là **nội dung giao diện đề xuất trong đặc tả nghiệp vụ**; không được xem là xác nhận rằng giao diện hiện tại đã triển khai đúng từng câu chữ.
 
-| Method | Endpoint | Chức năng |
-| --- | --- | --- |
-| `POST` | `/api/v1/auth/login` | Xác minh email/mật khẩu, tạo session, trả Access Token và đặt Refresh Token cookie |
-| `POST` | `/api/v1/auth/refresh` | Xoay Refresh Token và cấp Access Token mới |
-| `POST` | `/api/v1/auth/logout` | Thu hồi session hiện tại và xóa Refresh Token cookie |
-| `GET` | `/api/v1/auth/me` | Trả dữ liệu công khai của người dùng hiện tại |
-
-Các cơ chế đang được sử dụng:
-
-- mật khẩu được băm và xác minh bằng Argon2id;
-- Access Token là JWT RS256, mặc định sống 900 giây;
-- JWT có `kid` và các claim bắt buộc gồm `iss`, `aud`, `sub`, `sid`, `role_id`,
-  `type`, `jti`, `iat`, `nbf`, `exp`;
-- Refresh Token là chuỗi opaque có entropy cao; database chỉ lưu SHA-256 hash;
-- session mặc định sống 2.592.000 giây và không được gia hạn khi refresh;
-- Bearer dependency kiểm tra JWT, session, tài khoản, role và permission hiện tại;
-- cookie Refresh Token dùng `HttpOnly`, `Secure`, `SameSite`, `Max-Age`, `Expires`
-  và bắt buộc có `Path=/api/v1/auth` để được gửi đến refresh và logout;
-- thay đổi mật khẩu hoặc vô hiệu hóa tài khoản sẽ thu hồi các session đang hoạt động.
-
-Các giá trị triển khai bắt buộc phải được cung cấp qua environment hoặc secret
-manager gồm `DATABASE_URL`, `JWT_ACTIVE_KEY_ID`, `JWT_ISSUER` và `JWT_AUDIENCE`.
-`JWT_PRIVATE_KEY` và `JWT_PUBLIC_KEYS` không có khóa mặc định; endpoint cần ký hoặc
-xác minh token trả `503 Service Unavailable` nếu thiếu cấu hình khóa. Private key
-thật không được commit vào Git hoặc đóng gói trong Docker image.
-
-Refresh Token cookie phải dùng:
-
-```env
-AUTH_COOKIE_PATH=/api/v1/auth
-```
-
-Ngoài phạm vi phiên bản hiện tại:
-
-- MFA và chính sách khóa tài khoản theo số lần đăng nhập sai;
-- logout tất cả thiết bị bằng endpoint riêng;
-- phát hiện replay theo refresh-token family;
-- job dọn dẹp session hết hạn hoặc đã thu hồi;
-- CSRF token riêng cho topology cross-site;
-- quy trình vận hành hoàn chỉnh cho xoay khóa RSA;
-- quy ước lưu Access Token và tự động refresh ở Admin Web.
-
-API quản trị manager user, role và permission được mô tả riêng trong
-`app/domains/identity/README.md`.
+Use Case này mô tả **hành vi tương tác giữa người dùng và hệ thống**, không quy định đường dẫn API, phương thức HTTP, mã lỗi HTTP, cấu trúc token, thuật toán băm hay cấu hình máy chủ. Những chi tiết triển khai được quản lý trong tài liệu kỹ thuật riêng.
