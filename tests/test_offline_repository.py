@@ -72,7 +72,11 @@ def test_candidate_query_requires_active_exact_language_published_and_valid_audi
 def test_package_read_filters_out_building_and_missing_manifest():
     session = MagicMock(spec=Session)
     session.scalars.return_value = []
-    assert OfflinePackageRepository(session).list_published(region_id="region-1") == []
+    repository = OfflinePackageRepository(session)
+    assert repository.get_all(
+        published_only=True,
+        region_id="region-1",
+    ) == []
     sql = str(session.scalars.call_args.args[0].compile(
         dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
     ))
@@ -80,7 +84,26 @@ def test_package_read_filters_out_building_and_missing_manifest():
     assert "offline_package.package_url IS NOT NULL" in sql
     assert "offline_package.package_checksum_sha256 IS NOT NULL" in sql
     with pytest.raises(ValueError):
-        OfflinePackageRepository(session).list_published(limit=0)
+        repository.get_all(limit=0)
+
+
+def test_package_count_uses_the_same_published_filters():
+    session = MagicMock(spec=Session)
+    session.scalar.return_value = 2
+    repository = OfflinePackageRepository(session)
+
+    result = repository.get_count(
+        published_only=True,
+        region_id="region-1",
+    )
+
+    assert result == 2
+    sql = str(session.scalar.call_args.args[0].compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
+    ))
+    assert "count" in sql.lower()
+    assert "'PUBLISHED'" in sql
+    assert "offline_package.region_id = 'region-1'" in sql
 
 
 def test_manifest_is_deterministic_and_contains_download_metadata():

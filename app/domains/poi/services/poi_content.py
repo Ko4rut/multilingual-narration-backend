@@ -46,17 +46,23 @@ class PoiContentService:
         self.audios = audios
 
     def get_options(self) -> PoiContentOptions:
-        return PoiContentOptions(pois=self.pois.get_choices(), languages=self.contents.get_languages())
+        return PoiContentOptions(pois=self.pois.get_all(), languages=self.contents.get_languages())
 
     def list_contents(
         self, *, offset: int, limit: int, poi_id: str | None = None,
         language_id: str | None = None, content_status: str | None = None, search: str | None = None,
     ) -> PoiContentPage:
         search = self._validate_filters(offset, limit, search)
-        items, total = self.contents.get_page(
-            offset=offset, limit=limit, poi_id=poi_id, language_id=language_id,
-            content_status=content_status, search=search,
+        filters = {
+            "poi_id": poi_id,
+            "language_id": language_id,
+            "content_status": content_status,
+            "search": search,
+        }
+        items = self.contents.get_all(
+            offset=offset, limit=limit, **filters,
         )
+        total = self.contents.get_count(**filters)
         return PoiContentPage(items=self._content_responses(items), total=total, offset=offset, limit=limit)
 
     def get_content(self, content_id: str) -> AdminPoiContentRead:
@@ -175,10 +181,12 @@ class PoiContentService:
             with self.session.begin():
                 poi, content = self._lock_content(content_id)
                 self._require_status(content, {"DRAFT", "REJECTED"})
-                if self.contents.has_external_references(content.id):
+                if self.contents.get_external_reference_exists(content.id):
                     raise PoiConflict("Content referenced by listening history or offline packages cannot be deleted")
                 self._remove_audio_if_unreferenced(content.id)
-                self.contents.delete(content)
+                # Repository không cung cấp hard delete; service đánh dấu xóa
+                # trong transaction đang khóa POI và content liên quan.
+                self.session.delete(content)
                 self.session.flush()
                 self._ensure_active_english(poi)
         except IntegrityError as exc:
@@ -190,10 +198,17 @@ class PoiContentService:
         audio_source_type: str | None = None, search: str | None = None,
     ) -> ContentAudioPage:
         search = self._validate_filters(offset, limit, search)
-        items, total = self.audios.get_page(
-            offset=offset, limit=limit, poi_id=poi_id, language_id=language_id,
-            poi_content_id=poi_content_id, audio_source_type=audio_source_type, search=search,
+        filters = {
+            "poi_id": poi_id,
+            "language_id": language_id,
+            "poi_content_id": poi_content_id,
+            "audio_source_type": audio_source_type,
+            "search": search,
+        }
+        items = self.audios.get_all(
+            offset=offset, limit=limit, **filters,
         )
+        total = self.audios.get_count(**filters)
         return ContentAudioPage(
             items=[AdminContentAudioRead.model_validate(item) for item in items],
             total=total, offset=offset, limit=limit,
@@ -250,7 +265,7 @@ class PoiContentService:
             self._translate_integrity_error(exc)
 
     def get_narration(self, poi_id: str, language_code: str) -> PublishedNarration:
-        if self.pois.get_active(poi_id) is None:
+        if self.pois.get_by_id(poi_id, active_only=True) is None:
             raise PoiNotFound("POI not found")
         requested = language_code.lower()
         languages = list(dict.fromkeys((requested, "en")))
@@ -272,7 +287,7 @@ class PoiContentService:
 
     def _new_content(self, poi_id: str, language_id: str, title: str, script: str, actor_id: str) -> PoiContent:
         self._require_supported_language(language_id)
-        version = self.contents.next_version(poi_id, language_id)
+        version = self.contents.get_next_version(poi_id, language_id)
         if version > 2_147_483_647:
             raise PoiConflict("Content version limit exceeded")
         now = datetime.now(timezone.utc)
@@ -325,9 +340,10 @@ class PoiContentService:
             if require_exists:
                 raise NarrationNotFound("Audio not found")
             return
-        if self.audios.has_external_references(audio.id):
+        if self.audios.get_external_reference_exists(audio.id):
             raise PoiConflict("Audio referenced by an offline package cannot be deleted")
-        self.audios.delete(audio)
+        # Repository không cung cấp hard delete; service sở hữu transaction.
+        self.session.delete(audio)
         self.session.flush()
 
     def _content_responses(self, contents: list[PoiContent]) -> list[AdminPoiContentRead]:

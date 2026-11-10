@@ -31,6 +31,13 @@ class PoiRead(BaseModel):
     last_updated_at: datetime
 
 
+class PoiPage(BaseModel):
+    items: list[PoiRead]
+    total: int
+    offset: int
+    limit: int
+
+
 Identifier = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Location = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]

@@ -247,7 +247,8 @@ Implemented HTTP endpoints:
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/me` with a Bearer Access Token
 - `GET|POST /api/v1/manager-users`; GET hỗ trợ `search`,
-  `user_status=ACTIVE|INACTIVE`, `offset` và `limit`
+  `user_status=ACTIVE|INACTIVE`, `offset` và `limit`, đồng thời trả
+  `{items, total, offset, limit}`
 - `GET|PATCH /api/v1/manager-users/{user_id}`; PATCH có thể đổi mật
   khẩu, khi đó backend băm Argon2id và thu hồi toàn bộ session của tài khoản
 - `GET|POST /api/v1/identity/roles`
@@ -264,13 +265,14 @@ Implemented HTTP endpoints:
 Language codes retain a database format check for two or three lowercase letters.
 The backend additionally validates that submitted codes really belong to ISO
 639-1 or ISO 639-2 (including bibliographic and terminology variants).
-- `GET /api/v1/pois?offset=0&limit=20`
+- `GET /api/v1/pois?offset=0&limit=20` trả
+  `{items, total, offset, limit}`
 - `GET /api/v1/pois/{poi_id}` where `poi_id` is a string such as
   `poi-010926-951c03a1`
 
 POI management endpoints are available under `/api/v1/admin/pois` with
 `POI Management` permissions. They support list/detail, create/update/status,
-guarded deletion, and region/category form options. Apply migration
+vô hiệu hóa bằng trạng thái, và region/category form options. Apply migration
 `0005_poi_management` before administrative writes. Contracts, architecture,
 GROUP 2 compatibility decisions and integration limits are documented in
 [the POI domain guide](app/domains/poi/README.md). Narration version/workflow APIs
@@ -278,7 +280,8 @@ are available under `/api/v1/admin/poi-contents`, audio metadata under
 `/api/v1/admin/audios`, and online narration selection with English fallback at
 `GET /api/v1/pois/{poi_id}/narration`. Apply `0006_poi_content_audio` for narration
 and audio constraints. Storage/TTS, offline rebuild and audit integration remain
-pending. Frontend and other domains are unchanged.
+pending. Frontend callers phải đọc danh sách phân trang từ trường `items` và dùng
+`total` để tính tổng số trang.
 
 POI reads return only records with `poi_status = 'active'`. Identity models,
 repositories and management services exist. Passwords are hashed and verified
@@ -416,9 +419,9 @@ and rebuilding the API image, open `http://localhost:8000/docs` and expand
 
 | Method | Path | Access | Contract |
 | --- | --- | --- | --- |
-| GET | `/api/v1/offline/packages` | Public | Published package list (filter by region/language/category IDs; paginate) |
+| GET | `/api/v1/offline/packages` | Public | Published package page with `items`, `total`, `offset`, `limit` (filter by region/language/category IDs) |
 | GET | `/api/v1/offline/packages/{package_id}` | Public | Published package metadata including manifest URL/checksum |
-| GET | `/api/v1/admin/offline/packages` | Offline Package Management: read | All statuses |
+| GET | `/api/v1/admin/offline/packages` | Offline Package Management: read | All-status page with `items`, `total`, `offset`, `limit` |
 | GET | `/api/v1/admin/offline/packages/{package_id}` | Offline Package Management: read | Package detail |
 | GET | `/api/v1/admin/offline/packages/{package_id}/items` | Offline Package Management: read | Stored package memberships |
 | POST | `/api/v1/admin/offline/packages/prepare` | Offline Package Management: create | Create BUILDING package and return a **nonpublished** manifest preview |

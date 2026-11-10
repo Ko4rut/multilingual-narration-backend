@@ -78,6 +78,26 @@ def test_get_all_searches_identity_fields_and_filters_status():
     assert ManagerUserStatus.ACTIVE in parameters.values()
 
 
+def test_get_count_uses_the_same_search_and_status_filters():
+    session = MagicMock(spec=Session)
+    session.scalar.return_value = 3
+    repository = ManagerUserRepository(session)
+
+    result = repository.get_count(
+        search="admin%_",
+        user_status=ManagerUserStatus.ACTIVE,
+    )
+
+    assert result == 3
+    statement = session.scalar.call_args.args[0]
+    statement_text = str(statement)
+    parameters = statement.compile().params
+    assert "count" in statement_text.lower()
+    assert "manager_user.email" in statement_text
+    assert "%admin\\%\\_%" in parameters.values()
+    assert ManagerUserStatus.ACTIVE in parameters.values()
+
+
 def test_add_does_not_commit_the_service_transaction():
     session = MagicMock(spec=Session)
     manager_user = MagicMock(spec=ManagerUserModel)

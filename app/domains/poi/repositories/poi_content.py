@@ -1,5 +1,6 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.domains.catalog.models.language import Language, LanguageStatus
 from app.domains.listening.models.listening_history import ListeningHistory
@@ -11,10 +12,6 @@ from app.domains.poi.utils import escape_like_value
 class PoiContentRepository:
     def __init__(self, session: Session):
         self.session = session
-
-    def has_content(self, poi_id: str) -> bool:
-        statement = select(PoiContent.id).where(PoiContent.poi_id == poi_id).limit(1)
-        return self.session.scalar(statement) is not None
 
     def get_published_english_contents(self, poi_ids: list[str]) -> dict[str, str]:
         """Map content ID to POI ID for the requested published English versions."""
@@ -35,11 +32,45 @@ class PoiContentRepository:
             statement = statement.with_for_update().execution_options(populate_existing=True)
         return self.session.scalar(statement)
 
-    def get_page(
+    def get_all(
         self, *, offset: int, limit: int, poi_id: str | None,
         language_id: str | None, content_status: str | None, search: str | None,
-    ) -> tuple[list[PoiContent], int]:
-        filters = []
+    ) -> list[PoiContent]:
+        """Lấy một trang nội dung theo các bộ lọc quản trị."""
+        filters = self._get_filters(
+            poi_id=poi_id,
+            language_id=language_id,
+            content_status=content_status,
+            search=search,
+        )
+        return list(self.session.scalars(
+            select(PoiContent).where(*filters)
+            .order_by(PoiContent.created_at.desc(), PoiContent.id)
+            .offset(offset).limit(limit)
+        ))
+
+    def get_count(
+        self, *, poi_id: str | None, language_id: str | None,
+        content_status: str | None, search: str | None,
+    ) -> int:
+        """Đếm nội dung theo cùng bộ lọc của ``get_all``."""
+        filters = self._get_filters(
+            poi_id=poi_id,
+            language_id=language_id,
+            content_status=content_status,
+            search=search,
+        )
+        return self.session.scalar(
+            select(func.count()).select_from(PoiContent).where(*filters)
+        )
+
+    @staticmethod
+    def _get_filters(
+        *, poi_id: str | None, language_id: str | None,
+        content_status: str | None, search: str | None,
+    ) -> list[ColumnElement[bool]]:
+        """Tạo bộ lọc dùng chung cho danh sách và tổng số nội dung."""
+        filters: list[ColumnElement[bool]] = []
         if poi_id is not None:
             filters.append(PoiContent.poi_id == poi_id)
         if language_id is not None:
@@ -53,16 +84,10 @@ class PoiContentRepository:
                 PoiContent.id.ilike(pattern, escape="\\"),
                 PoiContent.narration_title.ilike(pattern, escape="\\"),
             ))
-        total = self.session.scalar(select(func.count()).select_from(PoiContent).where(*filters))
-        items = list(self.session.scalars(
-            select(PoiContent).where(*filters)
-            .order_by(PoiContent.created_at.desc(), PoiContent.id)
-            .offset(offset).limit(limit)
-        ))
-        return items, total
+        return filters
 
-    def next_version(self, poi_id: str, language_id: str) -> int:
-        # The service must hold the parent POI lock before allocating a version.
+    def get_next_version(self, poi_id: str, language_id: str) -> int:
+        """Lấy số phiên bản kế tiếp khi service đang giữ khóa POI cha."""
         latest = self.session.scalar(select(func.max(PoiContent.content_version)).where(
             PoiContent.poi_id == poi_id, PoiContent.language_id == language_id,
         ))
@@ -92,14 +117,13 @@ class PoiContentRepository:
             ).order_by(PoiContent.content_version.desc(), PoiContent.id)
         ))
 
-    def has_external_references(self, content_id: str) -> bool:
+    def get_external_reference_exists(self, content_id: str) -> bool:
+        """Kiểm tra content có bị Listening hoặc Offline tham chiếu hay không."""
         for model in (ListeningHistory, OfflinePackageItem):
             if self.session.scalar(select(model.id).where(model.poi_content_id == content_id).limit(1)) is not None:
                 return True
         return False
 
     def add(self, content: PoiContent) -> None:
+        """Đưa content mới vào Session; service sở hữu transaction."""
         self.session.add(content)
-
-    def delete(self, content: PoiContent) -> None:
-        self.session.delete(content)

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.domains.identity.services.authentication import AuthenticatedIdentity
 from app.domains.poi.repositories.point_of_interest import PoiRepository
 from app.domains.poi.routers.dependencies import (
-    get_poi_admin_service, require_poi_create, require_poi_delete,
+    get_poi_admin_service, require_poi_create,
     require_poi_read, require_poi_update,
     get_poi_content_service, require_narration_read, require_narration_create,
     require_narration_update, require_narration_delete, require_narration_approve,
@@ -15,7 +15,7 @@ from app.domains.poi.routers.dependencies import (
 from app.domains.poi.routers.http import poi_http_errors
 from app.domains.poi.schemas.point_of_interest import (
     AdminPoiPage, AdminPoiRead, PoiCreate, PoiFormOptions, PoiRead,
-    PoiStatus, PoiStatusUpdate, PoiUpdate,
+    PoiPage, PoiStatus, PoiStatusUpdate, PoiUpdate,
 )
 from app.domains.poi.schemas.content_audio import (
     AdminContentAudioRead, AudioMetadataWrite, AudioSource, ContentAudioPage,
@@ -37,12 +37,12 @@ def get_poi_service(
     return PoiService(PoiRepository(session))
 
 
-@router.get("", response_model=list[PoiRead])
+@router.get("", response_model=PoiPage)
 def list_pois(
     service: Annotated[PoiService, Depends(get_poi_service)],
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
-):
+) -> PoiPage:
     return service.list_pois(offset=offset, limit=limit)
 
 
@@ -60,7 +60,6 @@ PoiId = Annotated[str, Path(min_length=1, max_length=50)]
 ReadAccess = Annotated[AuthenticatedIdentity, Depends(require_poi_read)]
 CreateAccess = Annotated[AuthenticatedIdentity, Depends(require_poi_create)]
 UpdateAccess = Annotated[AuthenticatedIdentity, Depends(require_poi_update)]
-DeleteAccess = Annotated[AuthenticatedIdentity, Depends(require_poi_delete)]
 
 
 @admin_router.get(
@@ -120,13 +119,6 @@ def update_status(
         return service.update_poi(
             poi_id, PoiUpdate(poi_status=payload.poi_status), actor_id=identity.manager_user.id,
         )
-
-
-@admin_router.delete("/{poi_id}", status_code=204, response_class=Response)
-def delete_poi(poi_id: PoiId, identity: DeleteAccess, service: Service) -> Response:
-    with poi_http_errors():
-        service.delete_poi(poi_id)
-    return Response(status_code=204)
 
 
 content_router = APIRouter(prefix="/admin/poi-contents", tags=["Narration Content Management"])

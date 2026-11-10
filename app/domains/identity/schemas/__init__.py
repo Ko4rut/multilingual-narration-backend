@@ -7,6 +7,7 @@ from app.domains.identity.schemas.authentication import (
 from app.domains.identity.schemas.management_function import ManagementFunctionRead
 from app.domains.identity.schemas.manager_user import (
     ManagerUserCreate,
+    ManagerUserPage,
     ManagerUserRead,
     ManagerUserUpdate,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "LoginResponse",
     "ManagementFunctionRead",
     "ManagerUserCreate",
+    "ManagerUserPage",
     "ManagerUserRead",
     "ManagerUserUpdate",
     "PermissionRead",

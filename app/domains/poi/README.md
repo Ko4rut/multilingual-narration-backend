@@ -20,7 +20,7 @@ services/poi_management.py PoiAdminService: quản trị POI, transaction
 services/poi_content.py    PoiContentService: nội dung và audio đi kèm, transaction
 repositories/point_of_interest.py   Truy vấn/lưu POI, dùng chung public và quản trị
 repositories/poi_category_mapping.py Đọc và thay toàn bộ category mapping của POI
-repositories/poi_content.py         Đọc content tiếng Anh đã publish, chặn xóa POI có content
+repositories/poi_content.py         Truy vấn nội dung thuyết minh và ngôn ngữ
 repositories/content_audio.py       Kiểm tra metadata audio của content
 exceptions/               Lỗi nghiệp vụ và public exports của domain
 utils/utils.py            Sinh ID, escape LIKE và đọc tên database constraint
@@ -28,14 +28,15 @@ models/                   ORM POI hiện có
 ```
 
 Luồng tạo mới: router kiểm tra quyền → schema validate body → service bắt đầu
-transaction → repository POI/Catalog kiểm tra region/category và dữ liệu trùng → thêm POI
+transaction → repository POI/Catalog kiểm tra region/category → thêm POI
 và mapping → flush → commit → trả response. Lỗi sẽ rollback toàn bộ transaction.
-PATCH/DELETE khóa dòng POI bằng `FOR UPDATE` để tuần tự hóa thay đổi cùng POI.
+PATCH khóa dòng POI bằng `FOR UPDATE` để tuần tự hóa thay đổi cùng POI.
 Session ghi tách khỏi Session xác thực, tương tự dependency quản trị Identity.
 
 `app/route/api.py` chỉ được thêm đăng ký router mới. API public hiện có và các
-service public được giữ nguyên. Repository POI có sẵn được mở rộng, giữ nguyên
-hai truy vấn public `list_active()` và `get_active()`. Các repository chia theo
+service public được giữ nguyên. Repository POI dùng `get_all()` chung cho danh sách
+public, quản trị và dữ liệu chọn; `get_by_id(active_only=True)` bảo vệ API public.
+Các repository chia theo
 bảng như Identity; service phối hợp repository POI với repository Catalog đọc-only
 bằng cùng Session/transaction. Repository mapping không truy vấn trực tiếp bảng
 `poi_category`.
@@ -45,6 +46,9 @@ trách nhiệm: `services/poi.py` giữ `PoiService` đọc public,
 `services/poi_content.py` chứa `PoiContentService` quản lý nội dung và audio.
 Các class được export qua `services/__init__.py`. Trong `routers/poi.py`,
 `router` và `admin_router` giữ hai nhóm endpoint với quyền truy cập riêng.
+Mọi endpoint danh sách có `offset/limit` trả cùng cấu trúc
+`{"items": [], "total": 0, "offset": 0, "limit": 20}`; frontend không tự
+đếm từ một trang dữ liệu.
 
 ## Danh sách endpoint
 
@@ -58,7 +62,6 @@ Prefix: `/api/v1/admin/pois`.
 | POST | `/api/v1/admin/pois` | create | 201, POI vừa tạo |
 | PATCH | `/api/v1/admin/pois/{id}` | update | 200, POI sau cập nhật |
 | PATCH | `/api/v1/admin/pois/{id}/status` | update | 200, POI sau đổi trạng thái |
-| DELETE | `/api/v1/admin/pois/{id}` | delete | 204, không có body |
 
 Tất cả endpoint yêu cầu Bearer token và session hợp lệ qua dependency Identity
 hiện có; không mở public endpoint quản trị hoặc tắt phân quyền để chạy demo.
@@ -132,18 +135,18 @@ nguồn RECORD/TTS. Kiểm tra chấp nhận tên nguồn seed cũ
 PATCH giữ POI ACTIVE cũng kiểm tra điều kiện này. Từ chối thì trả 409 và không
 lưu một phần thay đổi. Không có request mạng đến storage trong transaction.
 
-### Xóa và lỗi
+### Vô hiệu hóa và lỗi
 
-POI còn content hoặc được lịch sử nghe/item offline tham chiếu không thể xóa.
-Nên chuyển INACTIVE trong trường hợp này. Chỉ xóa POI độc lập và mapping của nó;
-không cascade xóa dữ liệu của người khác qua API này.
+Phiên bản hiện tại không cung cấp endpoint hard delete POI. Khi một địa điểm
+không còn được sử dụng, quản trị viên đổi trạng thái sang `INACTIVE` để giữ lịch
+sử nghe, nội dung thuyết minh và dữ liệu offline liên quan.
 
 | HTTP | Ý nghĩa |
 | --- | --- |
 | 401 | Token/session không hợp lệ, theo Identity hiện có |
 | 403 | Thiếu permission tương ứng |
 | 404 | Không có POI, region hoặc category được tham chiếu |
-| 409 | QR/địa chỉ trùng, không đủ điều kiện active hoặc bị chặn xóa |
+| 409 | QR/địa chỉ trùng hoặc không đủ điều kiện active |
 | 422 | Body/filter không hợp lệ |
 | 503 | Thiếu cấu hình JWT theo dependency Identity |
 
@@ -165,8 +168,8 @@ bại; không tự sửa địa chỉ hoặc xóa bản ghi. Không chỉnh lị
 
 Những khác biệt với tài liệu được giữ để không phá contract hiện tại:
 
-- API quản trị nhận/trả ACTIVE/INACTIVE, nhưng lưu `active`/`inactive`. Các giá trị
-  cũ khác như `maintenance` được xem là INACTIVE; không đổi hàng loạt dữ liệu seed.
+- API quản trị nhận/trả ACTIVE/INACTIVE, nhưng lưu `active`/`inactive`. Bộ lọc trạng
+  thái chỉ khớp đúng hai giá trị này, không gom giá trị cũ khác vào INACTIVE.
 - API public `/api/v1/pois` vẫn chỉ trả bản ghi có `poi_status='active'`, schema và
   phân trang như trước. Không thêm CHECK uppercase lên cột trạng thái hiện có.
 - Không siết nullability của ảnh/người cập nhật cho bản ghi cũ. API tạo mới yêu

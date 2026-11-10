@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.domains.catalog.repositories.poi_category import PoiCategoryRepository
+from app.domains.catalog.repositories.region import RegionRepository
 from app.domains.identity.routers.dependencies import get_authentication_service, get_current_identity
 from app.domains.identity.services.authentication import AuthenticatedIdentity, AuthenticationService
 from app.domains.poi.repositories.content_audio import ContentAudioRepository
@@ -24,6 +25,7 @@ def get_poi_admin_service(
         mappings=PoiCategoryMappingRepository(session), contents=PoiContentRepository(session),
         audios=ContentAudioRepository(session),
         categories=PoiCategoryRepository(session),
+        regions=RegionRepository(session),
     )
 
 
@@ -43,7 +45,6 @@ def require_poi_management(action_name: str):
 require_poi_read = require_poi_management("read")
 require_poi_create = require_poi_management("create")
 require_poi_update = require_poi_management("update")
-require_poi_delete = require_poi_management("delete")
 
 
 def get_poi_content_service(

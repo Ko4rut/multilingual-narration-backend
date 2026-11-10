@@ -10,11 +10,14 @@ from app.main import create_app
 
 
 class PoiRepositoryStub:
-    def list_active(self, *, offset, limit):
+    def get_all(self, *, offset, limit, poi_status, sort_by):
         return [self.poi][offset:offset + limit]
 
-    def get_active(self, poi_id):
+    def get_by_id(self, poi_id, *, active_only=False, for_update=False):
         return self.poi if poi_id == self.poi.id else None
+
+    def get_count(self, *, poi_status=None, **filters):
+        return 1
 
     poi = SimpleNamespace(
         id="poi-010126-00000001", region_id="region-0001", poi_name="Museum", poi_image_url=None,
@@ -42,10 +45,14 @@ def test_health_without_database(client):
 def test_poi_response_and_pagination(client):
     response = client.get("/api/v1/pois")
     assert response.status_code == 200
-    assert response.json()[0]["poi_name"] == "Museum"
-    assert "created_by" not in response.json()[0]
-    assert client.get("/api/v1/pois?offset=1").json() == []
-    assert client.get("/api/v1/pois/poi-010126-00000001").json() == response.json()[0]
+    body = response.json()
+    assert body["items"][0]["poi_name"] == "Museum"
+    assert body["total"] == 1
+    assert body["offset"] == 0
+    assert body["limit"] == 20
+    assert "created_by" not in body["items"][0]
+    assert client.get("/api/v1/pois?offset=1").json()["items"] == []
+    assert client.get("/api/v1/pois/poi-010126-00000001").json() == body["items"][0]
 
 
 def test_missing_poi_maps_domain_error_to_404(client):

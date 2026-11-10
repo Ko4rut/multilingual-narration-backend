@@ -518,11 +518,13 @@ def test_list_manager_users_rejects_invalid_pagination(offset, limit):
         service.list_manager_users(offset=offset, limit=limit)
 
     users.get_all.assert_not_called()
+    users.get_count.assert_not_called()
 
 
 def test_list_manager_users_normalizes_search_and_status():
     service, _session, users, _roles, _user_sessions = build_manager_user_service()
     users.get_all.return_value = []
+    users.get_count.return_value = 0
 
     result = service.list_manager_users(
         offset=10,
@@ -531,10 +533,17 @@ def test_list_manager_users_normalizes_search_and_status():
         user_status=" active ",
     )
 
-    assert result == []
+    assert result.items == []
+    assert result.total == 0
+    assert result.offset == 10
+    assert result.limit == 25
     users.get_all.assert_called_once_with(
         offset=10,
         limit=25,
+        search="Admin@MNR.Local",
+        user_status=ManagerUserStatus.ACTIVE,
+    )
+    users.get_count.assert_called_once_with(
         search="Admin@MNR.Local",
         user_status=ManagerUserStatus.ACTIVE,
     )
@@ -548,6 +557,7 @@ def test_list_manager_users_rejects_invalid_search(search):
         service.list_manager_users(search=search)
 
     users.get_all.assert_not_called()
+    users.get_count.assert_not_called()
 
 
 def test_role_service_gets_role_and_permissions():

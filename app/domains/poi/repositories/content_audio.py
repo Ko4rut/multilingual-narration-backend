@@ -1,5 +1,6 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.domains.poi.models.content_audio import ContentAudio
 from app.domains.poi.models.poi_content import PoiContent
@@ -43,12 +44,58 @@ class ContentAudioRepository:
             select(ContentAudio).where(ContentAudio.poi_content_id.in_(content_ids))
         )}
 
-    def get_page(
+    def get_all(
         self, *, offset: int, limit: int, poi_id: str | None,
         language_id: str | None, poi_content_id: str | None,
         audio_source_type: str | None, search: str | None,
-    ) -> tuple[list[ContentAudio], int]:
-        filters = []
+    ) -> list[ContentAudio]:
+        """Lấy một trang audio theo các bộ lọc quản trị."""
+        filters = self._get_filters(
+            poi_id=poi_id,
+            language_id=language_id,
+            poi_content_id=poi_content_id,
+            audio_source_type=audio_source_type,
+            search=search,
+        )
+        statement = (
+            select(ContentAudio)
+            .join(PoiContent, PoiContent.id == ContentAudio.poi_content_id)
+            .where(*filters)
+            .order_by(ContentAudio.created_at.desc(), ContentAudio.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(self.session.scalars(statement))
+
+    def get_count(
+        self, *, poi_id: str | None, language_id: str | None,
+        poi_content_id: str | None, audio_source_type: str | None,
+        search: str | None,
+    ) -> int:
+        """Đếm audio theo cùng bộ lọc của ``get_all``."""
+        filters = self._get_filters(
+            poi_id=poi_id,
+            language_id=language_id,
+            poi_content_id=poi_content_id,
+            audio_source_type=audio_source_type,
+            search=search,
+        )
+        statement = (
+            select(func.count())
+            .select_from(ContentAudio)
+            .join(PoiContent, PoiContent.id == ContentAudio.poi_content_id)
+            .where(*filters)
+        )
+        return self.session.scalar(statement)
+
+    @staticmethod
+    def _get_filters(
+        *, poi_id: str | None, language_id: str | None,
+        poi_content_id: str | None, audio_source_type: str | None,
+        search: str | None,
+    ) -> list[ColumnElement[bool]]:
+        """Tạo bộ lọc dùng chung cho danh sách và tổng số audio."""
+        filters: list[ColumnElement[bool]] = []
         if poi_id is not None:
             filters.append(PoiContent.poi_id == poi_id)
         if language_id is not None:
@@ -65,20 +112,14 @@ class ContentAudioRepository:
                 ContentAudio.id.ilike(pattern, escape="\\"),
                 PoiContent.narration_title.ilike(pattern, escape="\\"),
             ))
-        joined = select(ContentAudio).join(PoiContent, PoiContent.id == ContentAudio.poi_content_id).where(*filters)
-        total = self.session.scalar(select(func.count()).select_from(joined.subquery()))
-        items = list(self.session.scalars(
-            joined.order_by(ContentAudio.created_at.desc(), ContentAudio.id).offset(offset).limit(limit)
-        ))
-        return items, total
+        return filters
 
-    def has_external_references(self, audio_id: str) -> bool:
+    def get_external_reference_exists(self, audio_id: str) -> bool:
+        """Kiểm tra audio có bị Offline Package tham chiếu hay không."""
         return self.session.scalar(select(OfflinePackageItem.id).where(
             OfflinePackageItem.audio_id == audio_id,
         ).limit(1)) is not None
 
     def add(self, audio: ContentAudio) -> None:
+        """Đưa audio mới vào Session; service sở hữu transaction."""
         self.session.add(audio)
-
-    def delete(self, audio: ContentAudio) -> None:
-        self.session.delete(audio)

@@ -7,7 +7,7 @@ from app.domains.catalog.repositories import (
     PoiCategoryRepository,
     RegionRepository,
 )
-from app.domains.catalog.models import LanguageStatus
+from app.domains.catalog.models import LanguageStatus, Region
 
 
 def test_region_get_all_orders_by_id_without_pagination():
@@ -22,6 +22,29 @@ def test_region_get_all_orders_by_id_without_pagination():
     assert "ORDER BY region.id" in str(statement)
     assert statement._limit_clause is None
     assert statement._offset_clause is None
+
+
+def test_region_get_choices_orders_by_name_then_id():
+    session = MagicMock(spec=Session)
+    expected = [MagicMock()]
+    session.scalars.return_value = expected
+
+    result = RegionRepository(session).get_choices()
+
+    assert result == expected
+    statement = session.scalars.call_args.args[0]
+    assert "ORDER BY region.region_name, region.id" in str(statement)
+
+
+def test_region_get_by_id_uses_primary_key_lookup():
+    session = MagicMock(spec=Session)
+    expected = MagicMock()
+    session.get.return_value = expected
+
+    result = RegionRepository(session).get_by_id("region-1")
+
+    assert result is expected
+    session.get.assert_called_once_with(Region, "region-1")
 
 
 def test_category_get_all_orders_by_id_without_pagination():

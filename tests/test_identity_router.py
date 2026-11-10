@@ -28,6 +28,7 @@ from app.domains.identity.routers.identity import (
 from app.domains.identity.schemas.authentication import LoginRequest
 from app.domains.identity.schemas.manager_user import (
     ManagerUserCreate,
+    ManagerUserPage,
     ManagerUserUpdate,
 )
 from app.main import create_app
@@ -144,9 +145,12 @@ class ManagerUserServiceStub:
         self.list_filters: dict[str, object] | None = None
         self.updated_values: dict[str, object] | None = None
 
-    def list_manager_users(self, **filters: object) -> list[SimpleNamespace]:
+    def list_manager_users(self, **filters: object) -> ManagerUserPage:
         self.list_filters = filters
-        return [_manager_user()]
+        return ManagerUserPage(
+            items=[_manager_user()], total=1,
+            offset=int(filters["offset"]), limit=int(filters["limit"]),
+        )
 
     def create_manager_user(self, **values: object) -> SimpleNamespace:
         self.password = str(values["password"])
@@ -341,7 +345,10 @@ def test_manager_user_list_passes_search_status_and_pagination() -> None:
         user_status=ManagerUserStatus.ACTIVE,
     )
 
-    assert [user.id for user in result] == ["user-281026-12345678"]
+    assert [user.id for user in result.items] == ["user-281026-12345678"]
+    assert result.total == 1
+    assert result.offset == 20
+    assert result.limit == 10
     assert service.list_filters == {
         "offset": 20,
         "limit": 10,
