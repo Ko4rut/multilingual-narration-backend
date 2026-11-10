@@ -8,7 +8,7 @@ class LanguageRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def list_supported(self) -> list[Language]:
+    def get_supported(self) -> list[Language]:
         return list(
             self.session.scalars(
                 select(Language)
@@ -17,13 +17,13 @@ class LanguageRepository:
             )
         )
 
-    def list_all(self) -> list[Language]:
+    def get_all(self) -> list[Language]:
         return list(self.session.scalars(select(Language).order_by(Language.id)))
 
     def get_by_id(self, language_id: str) -> Language | None:
         return self.session.get(Language, language_id)
 
-    def find_conflict(
+    def get_conflict(
         self,
         *,
         language_code: str | None = None,

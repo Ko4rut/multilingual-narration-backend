@@ -15,10 +15,10 @@ class CatalogRepositoryStub:
     def __init__(self, records):
         self.records = records
 
-    def list_all(self):
+    def get_all(self):
         return self.records
 
-    def list_supported(self):
+    def get_supported(self):
         return [
             record
             for record in self.records

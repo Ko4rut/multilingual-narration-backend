@@ -10,12 +10,12 @@ from app.domains.catalog.repositories import (
 from app.domains.catalog.models import LanguageStatus
 
 
-def test_region_list_all_orders_by_id_without_pagination():
+def test_region_get_all_orders_by_id_without_pagination():
     session = MagicMock(spec=Session)
     expected = [MagicMock()]
     session.scalars.return_value = expected
 
-    result = RegionRepository(session).list_all()
+    result = RegionRepository(session).get_all()
 
     assert result == expected
     statement = session.scalars.call_args.args[0]
@@ -24,12 +24,12 @@ def test_region_list_all_orders_by_id_without_pagination():
     assert statement._offset_clause is None
 
 
-def test_category_list_all_orders_by_id_without_pagination():
+def test_category_get_all_orders_by_id_without_pagination():
     session = MagicMock(spec=Session)
     expected = [MagicMock()]
     session.scalars.return_value = expected
 
-    result = PoiCategoryRepository(session).list_all()
+    result = PoiCategoryRepository(session).get_all()
 
     assert result == expected
     statement = session.scalars.call_args.args[0]
@@ -38,12 +38,12 @@ def test_category_list_all_orders_by_id_without_pagination():
     assert statement._offset_clause is None
 
 
-def test_language_list_supported_filters_status_and_orders_by_id():
+def test_language_get_supported_filters_status_and_orders_by_id():
     session = MagicMock(spec=Session)
     expected = [MagicMock()]
     session.scalars.return_value = expected
 
-    result = LanguageRepository(session).list_supported()
+    result = LanguageRepository(session).get_supported()
 
     assert result == expected
     statement = session.scalars.call_args.args[0]
@@ -55,12 +55,12 @@ def test_language_list_supported_filters_status_and_orders_by_id():
     assert statement._offset_clause is None
 
 
-def test_language_list_all_orders_by_id_without_pagination():
+def test_language_get_all_orders_by_id_without_pagination():
     session = MagicMock(spec=Session)
     expected = [MagicMock()]
     session.scalars.return_value = expected
 
-    result = LanguageRepository(session).list_all()
+    result = LanguageRepository(session).get_all()
 
     assert result == expected
     statement = session.scalars.call_args.args[0]

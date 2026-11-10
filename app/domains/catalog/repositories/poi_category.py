@@ -8,7 +8,7 @@ class PoiCategoryRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def list_all(self) -> list[PoiCategory]:
+    def get_all(self) -> list[PoiCategory]:
         return list(
             self.session.scalars(select(PoiCategory).order_by(PoiCategory.id))
         )

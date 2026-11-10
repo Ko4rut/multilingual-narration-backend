@@ -25,12 +25,8 @@ class Language(Base):
     )
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
-    language_code: Mapped[str] = mapped_column(
-        String(10), nullable=False, unique=True
-    )
-    language_name: Mapped[str] = mapped_column(
-        String(100), nullable=False, unique=True
-    )
+    language_code: Mapped[str] = mapped_column(String(10), nullable=False, unique=True)
+    language_name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     language_status: Mapped[LanguageStatus] = mapped_column(
         Enum(
             LanguageStatus,

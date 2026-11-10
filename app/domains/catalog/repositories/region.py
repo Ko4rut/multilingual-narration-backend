@@ -8,7 +8,7 @@ class RegionRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def list_all(self) -> list[Region]:
+    def get_all(self) -> list[Region]:
         return list(
             self.session.scalars(select(Region).order_by(Region.id))
         )

@@ -28,7 +28,7 @@ class RepositoryStub:
     def get_by_id(self, language_id):
         return self.record
 
-    def find_conflict(self, **kwargs):
+    def get_conflict(self, **kwargs):
         return self.conflict
 
     def add(self, record):
