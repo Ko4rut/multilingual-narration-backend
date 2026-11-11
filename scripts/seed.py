@@ -40,6 +40,10 @@ SEED_TIME = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc)
 DUMMY_PASSWORD_HASH = (
     "$2b$12$DEVELOPMENT_ONLY_DUMMY_HASH_REPLACE_BEFORE_REAL_AUTH"
 )
+ADMIN_PASSWORD_HASH = (
+    "$argon2id$v=19$m=65536,t=3,p=4$MBA3ufhYonLR6S0cMESUKg$"
+    "JSXmlpA9uSTQXM6a39wsgBLu5GF01LC3/rQKmEmL768"
+)
 
 STRING_ID_PREFIXES = {
     Action: "acts",
@@ -285,6 +289,11 @@ def seed_identity(session: Session):
                 "last_login_at": last_login_at,
             },
         )
+
+    # Seed phải khôi phục được mật khẩu đăng nhập của admin ngay cả khi tài
+    # khoản đã tồn tại từ lần chạy trước; các tài khoản mẫu khác vẫn bị khóa
+    # đăng nhập bằng dummy hash cho đến khi được cấp mật khẩu qua API quản trị.
+    users["admin@mnr.local"].password_hash = ADMIN_PASSWORD_HASH
 
     administrator_id = users["admin@mnr.local"].id
     for role in roles.values():
