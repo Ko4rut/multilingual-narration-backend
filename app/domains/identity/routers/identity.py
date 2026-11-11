@@ -19,6 +19,7 @@ from app.domains.identity.exceptions import (
     RefreshTokenAlreadyExists,
     RoleNameAlreadyExists,
     UserSessionNotFound,
+    InvalidCredentials
 )
 from app.domains.identity.models.manager_user import ManagerUserStatus
 from app.domains.identity.routers.dependencies import (
@@ -64,16 +65,21 @@ from app.domains.identity.services.role import RoleService
 
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
-manager_user_router = APIRouter(prefix="/manager-users", tags=["Manager Users"])
+manager_user_router = APIRouter(
+    prefix="/manager-users", tags=["Manager Users"])
 role_router = APIRouter(prefix="/roles", tags=["Roles & Permissions"])
 
-UserManagementRead = Annotated[AuthenticatedIdentity, Depends(require_user_management_read)]
-UserManagementCreate = Annotated[AuthenticatedIdentity, Depends(require_user_management_create)]
-UserManagementUpdate = Annotated[AuthenticatedIdentity, Depends(require_user_management_update)]
+UserManagementRead = Annotated[AuthenticatedIdentity, Depends(
+    require_user_management_read)]
+UserManagementCreate = Annotated[AuthenticatedIdentity, Depends(
+    require_user_management_create)]
+UserManagementUpdate = Annotated[AuthenticatedIdentity, Depends(
+    require_user_management_update)]
 
 # ==============================================================================================================
 # Các endpoint thuộc về AuthenticationService.
 # ==============================================================================================================
+
 
 @auth_router.post("/login", response_model=LoginResponse)
 def login(
@@ -89,6 +95,13 @@ def login(
             email=payload.email,
             password=payload.password.get_secret_value(),
         )
+    except InvalidCredentials as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
     except AUTHENTICATION_ERRORS as exc:
         raise_unauthorized(exc)
     except ValueError as exc:
@@ -168,7 +181,6 @@ def logout(
     delete_refresh_cookie(response, settings)
 
 
-
 @auth_router.get("/me", response_model=ManagerUserRead)
 def get_me(identity: Annotated[AuthenticatedIdentity, Depends(get_current_identity)]) -> ManagerUserRead:
     return ManagerUserRead.model_validate(identity.manager_user)
@@ -176,6 +188,7 @@ def get_me(identity: Annotated[AuthenticatedIdentity, Depends(get_current_identi
 # ==============================================================================================================
 # Các endpoint thuộc về ManagerUserService.
 # ==============================================================================================================
+
 
 @manager_user_router.get("", response_model=ManagerUserPage)
 def list_manager_users(
@@ -286,6 +299,7 @@ def create_role(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return RoleRead.model_validate(role)
 
+
 @role_router.get("/permissions", response_model=list[PermissionRead])
 def list_permissions(
     _identity: UserManagementRead,
@@ -295,6 +309,7 @@ def list_permissions(
         PermissionRead.model_validate(permission)
         for permission in service.list_permissions()
     ]
+
 
 @role_router.get("/{role_id}", response_model=RoleRead)
 def get_role(
