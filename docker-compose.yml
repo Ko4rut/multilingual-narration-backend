@@ -2,7 +2,7 @@ x-backend: &backend
   image: mnr-backend:local
   build:
     context: .
-  environment:
+  environment: &backend-environment
     DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-narration_app}:${POSTGRES_PASSWORD:-narration_dev_password}@postgres:5432/${POSTGRES_DB:-narration_db}
     JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
     JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-{}}
@@ -13,7 +13,7 @@ x-backend: &backend
     ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
     REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-2592000}
     AUTH_REFRESH_COOKIE_NAME: ${AUTH_REFRESH_COOKIE_NAME:-refresh_token}
-    AUTH_COOKIE_PATH: ${AUTH_COOKIE_PATH:-/api/v1/identity}
+    AUTH_COOKIE_PATH: ${AUTH_COOKIE_PATH:-/api/v1/auth}
     AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
     AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
     AUTH_COOKIE_SAMESITE: ${AUTH_COOKIE_SAMESITE:-strict}
@@ -46,6 +46,9 @@ services:
 
   migrate:
     <<: *backend
+    environment:
+      <<: *backend-environment
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-admin123}
     # One-shot initialization: pre-0005 legacy statuses are normalized first.
     # On a fresh volume the reconciliation step is a no-op (no language table).
     command:
@@ -63,6 +66,8 @@ services:
 
   api:
     <<: *backend
+    # Optional: use --profile api only when running the API inside Docker.
+    profiles: ["api"]
     volumes:
       - offline-manifests:/var/lib/mnr/offline-manifests
       - tts-audio:/app/assets/audio/tts

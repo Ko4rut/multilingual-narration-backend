@@ -89,52 +89,61 @@ SQL `trim()` so SQLite-based unit tests and PostgreSQL agree.
 
 ## Docker setup
 
-Copy the non-secret development defaults and start the complete stack:
+Copy development defaults and start PostgreSQL plus the one-shot migration/seed
+service. The containerized API is **optional** to avoid occupying port 8000
+while developing with Uvicorn from the source tree:
 
 ```bash
 cp .env.example .env
 docker compose up --build -d
+docker compose ps -a
+docker compose logs migrate
 ```
 
-Compose starts the services in dependency order:
+By default, `postgres` is available on host port **5433** and `migrate`
+waits for its healthcheck, reconciles old language statuses, runs
+`alembic upgrade head`, `alembic check`, and seeds baseline data.
+The `api` service is under the `api` Compose profile and is **not started**
+by the default `up`.
 
-1. `postgres` becomes healthy.
-2. `migrate` first reconciles known legacy Language status values when
-   the old VARCHAR column exists (no-op on an empty database or after
-   migration 0005), upgrades to Alembic head, checks ORM/migration drift,
-   then runs the idempotent seed.
-3. `api` starts only after migration and seed succeed.
-
-Default endpoints:
-
-- API: http://localhost:8000
-- Swagger UI: http://localhost:8000/docs
-- Health check: http://localhost:8000/health
-- PostgreSQL host port: `5433`
-
-For a disposable **development** database, a full reset can be performed with:
+Start the FastAPI development server in a separate shell:
 
 ```bash
-docker compose down -v
-docker compose up --build -d
-docker compose ps
-docker compose logs --no-log-prefix migrate
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
-`down -v` **permanently deletes the PostgreSQL named volume** and all
-previously stored data; do not use it for databases containing valuable
-records. For a normal code/schema update, only use
-`docker compose up --build -d`; the migration service upgrades the existing
-database in place. The seed populates **demo DB rows only**: audio and offline
-manifest URLs at `cdn.example.local` are not real uploaded media, and this
-workflow does not run offline package build/publish.
+To run the **entire** stack inside Docker instead, stop the local Uvicorn
+process and explicitly enable the API profile:
+
+```bash
+docker compose --profile api up --build -d
+docker compose --profile api ps
+```
+
+The API is then available at http://localhost:8000 and Swagger UI at
+http://localhost:8000/docs. The database is still on host port 5433.
+If the API container was previously running, use `docker compose stop api`
+before starting Uvicorn locally.
+
+For a disposable development database only, `docker compose down -v`
+resets volumes **and permanently destroys all saved data**. An existing
+database is never pruned by the seed: old demo users, POIs and packages
+will remain until explicitly reviewed and cleaned up. Do not reset a
+database with valuable data.
+
+The seed uses `SEED_ADMIN_PASSWORD` (development default: `admin123`)
+only when creating `admin@mnr.com`; the password is hashed with Argon2id.
+Do not use this default credential in production. Login requires actual
+JWT signing and verification keys; the placeholders in `.env.example`
+are not usable keys. For local HTTP cookie testing set
+`AUTH_COOKIE_SECURE=false`.
 
 Useful commands:
 
 ```bash
-docker compose ps
+docker compose ps -a
 docker compose logs migrate
-docker compose logs api
+docker compose --profile api logs api
 docker compose down
 ```
 
@@ -164,22 +173,31 @@ Schema changes are applied explicitly with Alembic and are never run at API star
 
 ## Sample data
 
-The seed is deterministic and idempotent. It creates a deliberately varied dataset:
+On a **fresh empty database**, the seed creates 99 records in 12 tables:
 
-- 7 actions, 5 management functions, 3 roles, and 21 permissions
-- 4 manager users and 3 sessions, including inactive and revoked examples
-- 5 languages, 6 regions, and 6 POI categories
-- 12 POIs spread across Hà Nội, Ninh Bình, Huế, Đà Nẵng, Hồ Chí Minh City,
-  and Cần Thơ
-- 37 narration records covering published and draft versions
-- 36 audio records split between pre-generated and TTS-generated sources
-- 36 listening records across GPS, QR-code, and manual triggers
-- 6 offline packages with package items and published/building states
-- 5 representative audit records
+- 6 actions (no `generate_audio`), 6 management functions, 22 permissions.
+- 1 `Super Administrator` role initially assigned all 22 permissions.
+- 1 manager account: `admin@mnr.com`. Its bootstrap password is hashed
+  with `Argon2PasswordHasher` only on account creation and is never reset
+  by a later seed.
+- 5 languages (vi/en/ja/fr/ko), 6 regions and 6 POI categories.
+- 3 INACTIVE POIs: Văn Miếu – Quốc Tử Giám, Tràng An, and Bảo tàng Chứng
+  tích Chiến tranh, each mapped to two appropriate categories.
+- 15 DRAFT narration records (one per POI and language, version 1).
+- No content audio, login sessions, listening history, offline packages,
+  offline package items or audit logs. These records arise from actual use.
 
-Seed URLs use the reserved `example.local` domain and are metadata only. Password
-and refresh-token hash values are non-production placeholders, so the sample users
-cannot be used as real login credentials without first assigning Argon2id hashes.
+POI image URLs at `cdn.example.local` remain placeholders; no image assets
+are included. Audio is created by the existing TTS flow after content approval
+and publication, not by the seed. The existing self-review restriction is
+unchanged: an author cannot approve their own narration, including the
+sole admin account. Permission changes made later through the UI are
+preserved on re-seeding because initial grants occur only when creating
+the role.
+
+Re-running seed inserts missing baseline records but does **not** remove
+obsolete demo rows from a pre-existing database. To get the exact 99-record
+baseline, start with a new/empty disposable database.
 
 Run the seed again to verify idempotency:
 
