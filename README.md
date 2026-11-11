@@ -173,7 +173,7 @@ Schema changes are applied explicitly with Alembic and are never run at API star
 
 ## Sample data
 
-On a **fresh empty database**, the seed creates 99 records in 13 tables:
+On a **fresh empty database**, the seed creates 99 records in 12 tables:
 
 - 6 actions (no `generate_audio`), 6 management functions, 22 permissions.
 - 1 `Super Administrator` role initially assigned all 22 permissions.
