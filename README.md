@@ -295,8 +295,16 @@ and binds the Access Token to the session through its `sid` claim. Refresh rotat
 logout revokes the session so its Access Tokens stop working immediately.
 Manager-user and role routes require the matching `User Management` permission
 (`read`, `create`, or `update`). Accounts are deactivated through `user_status`
-instead of hard-deleted. Nearby search, QR activation,
-listening ingestion, and offline package generation remain future use cases.
+instead of hard-deleted. Nearby search, QR activation, and offline package
+generation remain future use cases.
+
+QR-triggered listening ingestion is available at
+`POST /api/v1/listening/qr-scans`. The anonymous endpoint resolves an active POI
+from `qr_code`, forces `trigger_type=QR_CODE`, and inserts an idempotent
+`listening_history` row. Dashboard QR totals should count rows whose trigger is
+`QR_CODE`; retry the same request with the same event `id` to avoid double-counting.
+Managers with `Listening Analytics/read` can retrieve the all-time listening count
+from `GET /api/v1/listening/dashboard`.
 
 ## Group 3 — first-build offline package staging
 

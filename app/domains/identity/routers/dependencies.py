@@ -164,3 +164,12 @@ def require_user_management(action_name: str):
 require_user_management_read = require_user_management("read")
 require_user_management_create = require_user_management("create")
 require_user_management_update = require_user_management("update")
+
+
+def require_listening_analytics(action_name: str):
+    """Create an RBAC dependency for listening analytics."""
+
+    return require_permission("Listening Analytics", action_name)
+
+
+require_listening_analytics_read = require_listening_analytics("read")

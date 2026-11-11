@@ -12,7 +12,7 @@ from app.domains.listening.exceptions import (
     ListeningReferenceNotFound,
 )
 from app.domains.listening.models import ListeningHistory
-from app.domains.listening.schemas import ListeningEventCreate
+from app.domains.listening.schemas import ListeningEventCreate, QrScanCreate
 from app.domains.listening.services import ListeningService
 
 
@@ -41,6 +41,18 @@ def stored_event(**changes):
     return ListeningHistory(**values)
 
 
+def qr_scan_payload(**changes):
+    values = {
+        "id": "listen-091126-5678abcd",
+        "installation_id": UUID("c0a80121-7ac0-4f20-90a0-52df3b17e901"),
+        "qr_code": "museum-qr",
+        "poi_content_id": "cont-091126-1234abcd",
+        "scanned_at": datetime(2026, 11, 9, 3, tzinfo=timezone.utc),
+    }
+    values.update(changes)
+    return QrScanCreate(**values)
+
+
 class SessionStub:
     def __init__(self):
         self.flush_error = None
@@ -59,7 +71,9 @@ class RepositoryStub:
     def __init__(self):
         self.event = None
         self.poi_found = True
+        self.qr_poi = SimpleNamespace(id=payload().poi_id)
         self.content = SimpleNamespace(poi_id=payload().poi_id)
+        self.total_count = 0
 
     def get_by_id(self, event_id, *, for_update=False):
         return self.event
@@ -67,11 +81,17 @@ class RepositoryStub:
     def poi_exists(self, poi_id):
         return self.poi_found
 
+    def get_active_poi_by_qr_code(self, qr_code):
+        return self.qr_poi
+
     def get_content(self, content_id):
         return self.content
 
     def add(self, event):
         self.event = event
+
+    def count_all(self):
+        return self.total_count
 
 
 def build_service(repository=None, session=None):
@@ -88,6 +108,52 @@ def test_create_event_uses_server_created_at():
     assert ack.result.value == "CREATED"
     assert repository.event.duration_sec == 12
     assert repository.event.created_at.tzinfo is timezone.utc
+
+
+def test_dashboard_summary_counts_all_listening_events():
+    service, repository, _session = build_service()
+    repository.total_count = 123
+
+    summary = service.get_dashboard_summary()
+
+    assert summary.total_listening_sessions == 123
+
+
+def test_qr_scan_creates_qr_triggered_event_and_returns_resolved_poi():
+    service, repository, _session = build_service()
+
+    ack = service.save_qr_scan(qr_scan_payload())
+
+    assert ack.result.value == "CREATED"
+    assert ack.poi_id == payload().poi_id
+    assert ack.poi_content_id == qr_scan_payload().poi_content_id
+    assert repository.event.trigger_type == "QR_CODE"
+    assert repository.event.started_at == qr_scan_payload().scanned_at
+
+
+def test_qr_scan_requires_active_poi_for_code():
+    service, repository, _session = build_service()
+    repository.qr_poi = None
+
+    with pytest.raises(
+        ListeningReferenceNotFound,
+        match="Active POI for QR code not found",
+    ):
+        service.save_qr_scan(qr_scan_payload())
+
+
+def test_retry_same_qr_scan_does_not_create_another_event():
+    repository = RepositoryStub()
+    repository.event = stored_event(
+        id=qr_scan_payload().id,
+        trigger_type="QR_CODE",
+    )
+    service, _repository, _session = build_service(repository)
+
+    ack = service.save_qr_scan(qr_scan_payload())
+
+    assert ack.result.value == "UNCHANGED"
+    assert repository.event.id == qr_scan_payload().id
 
 
 def test_retry_same_event_is_unchanged():
