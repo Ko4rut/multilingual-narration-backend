@@ -117,8 +117,8 @@ def build_service(record: PointOfInterest | None = None):
         mappings=mappings,
         contents=contents,
         audios=AudioRepositoryStub(),
-        categories=CategoryRepositoryStub(),
-        regions=RegionRepositoryStub(),
+        category_repository=CategoryRepositoryStub(),
+        region_repository=RegionRepositoryStub(),
         image_checksums=image_checksums,
     )
     return service, session, repository, mappings, contents, image_checksums

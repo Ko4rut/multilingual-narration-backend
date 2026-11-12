@@ -16,6 +16,7 @@ from app.domains.poi.models.point_of_interest import PointOfInterest
 from app.domains.poi.repositories.content_audio import ContentAudioRepository
 from app.domains.poi.repositories.poi_content import PoiContentRepository
 from app.domains.poi.repositories.point_of_interest import PoiRepository
+from app.domains.poi.providers.audio_asset import RemoteAudioAssetProvider
 from app.domains.poi.schemas.content_audio import (
     AdminContentAudioRead,
     AudioMetadataWrite,
@@ -33,11 +34,13 @@ class ContentAudioService:
         pois: PoiRepository,
         contents: PoiContentRepository,
         audios: ContentAudioRepository,
+        audio_assets: RemoteAudioAssetProvider,
     ):
         self.session = session
         self.pois = pois
         self.contents = contents
         self.audios = audios
+        self.audio_assets = audio_assets
 
     def list_audios(
         self,
@@ -85,42 +88,58 @@ class ContentAudioService:
         content_id: str,
         payload: AudioMetadataWrite,
     ) -> AdminContentAudioRead:
+        # Bước 1: Tải audio và tự xác minh bytes ngoài transaction database.
+        verified = self.audio_assets.verify(payload.audio_url)
         try:
             with self.session.begin():
+                # Bước 2: Khóa POI/content để tránh thay đổi đồng thời.
                 poi, content = self._lock_content(content_id)
+                # Bước 3: Chỉ cho phép gắn audio ở các trạng thái được hỗ trợ.
                 self._require_status(
                     content,
                     {"DRAFT", "REJECTED", "APPROVED", "PUBLISHED"},
                 )
+                # Bước 4: Khóa audio hiện có hoặc chuẩn bị tạo bản ghi mới.
                 audio = self.audios.get_for_content(content.id, for_update=True)
                 now = datetime.now(timezone.utc)
+                # Bước 5: Tạo mới hoặc cập nhật bằng metadata đã được xác minh.
                 if audio is None:
                     audio = ContentAudio(
                         id=generate_dated_identifier("audio", now),
                         poi_content_id=content.id,
-                        **payload.model_dump(),
+                        audio_url=verified.url,
+                        audio_size=verified.size,
+                        audio_source_type=payload.audio_source_type,
+                        audio_duration_sec=verified.duration_sec,
+                        audio_mime_type=verified.mime_type,
+                        audio_checksum_sha256=verified.checksum_sha256,
                         created_at=now,
                         last_updated_at=now,
                     )
                     self.audios.add(audio)
                 else:
-                    if audio.audio_url != payload.audio_url:
+                    # Không cho URL/checksum của asset đã lưu bị thay thế.
+                    if audio.audio_url != verified.url:
                         raise PoiConflict(
                             "Audio asset URL is immutable; use a verified upload/import "
                             "workflow for a new asset"
                         )
                     if (
                         audio.audio_checksum_sha256.lower()
-                        != payload.audio_checksum_sha256
+                        != verified.checksum_sha256
                     ):
                         raise PoiConflict(
                             "Stored audio checksum cannot be changed without replacing the asset"
                         )
-                    for name, value in payload.model_dump().items():
-                        setattr(audio, name, value)
+                    audio.audio_source_type = payload.audio_source_type
+                    audio.audio_size = verified.size
+                    audio.audio_duration_sec = verified.duration_sec
+                    audio.audio_mime_type = verified.mime_type
                     audio.last_updated_at = now
+                # Bước 6: Flush và bảo vệ điều kiện audio tiếng Anh của POI ACTIVE.
                 self.session.flush()
                 self._ensure_active_english(poi)
+                # Bước 7: Trả metadata đã xác minh sau khi transaction thành công.
                 result = AdminContentAudioRead.model_validate(audio)
         except IntegrityError as exc:
             self._translate_integrity_error(exc)

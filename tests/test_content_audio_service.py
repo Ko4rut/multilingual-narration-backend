@@ -9,6 +9,7 @@ from app.domains.poi.models.content_audio import ContentAudio
 from app.domains.poi.models.poi_content import PoiContent
 from app.domains.poi.schemas.content_audio import AudioMetadataWrite
 from app.domains.poi.services.content_audio import ContentAudioService
+from app.domains.poi.providers.audio_asset import VerifiedAudioAsset
 
 
 class SessionStub:
@@ -42,6 +43,14 @@ class AudioRepositoryStub:
         return self.audio
 
 
+class AudioAssetStub:
+    def verify(self, url: str) -> VerifiedAudioAsset:
+        return VerifiedAudioAsset(
+            url=url, size=2048, duration_sec=12, mime_type="audio/mpeg",
+            checksum_sha256="b" * 64,
+        )
+
+
 def test_existing_audio_url_is_immutable() -> None:
     now = datetime.now(timezone.utc)
     content = PoiContent(
@@ -72,14 +81,11 @@ def test_existing_audio_url_is_immutable() -> None:
         PoiRepositoryStub(),
         ContentRepositoryStub(content),
         AudioRepositoryStub(audio),
+        AudioAssetStub(),
     )
     payload = AudioMetadataWrite(
         audio_url="https://assets.example/replacement.mp3",
-        audio_size=audio.audio_size,
         audio_source_type="RECORD",
-        audio_duration_sec=audio.audio_duration_sec,
-        audio_mime_type=audio.audio_mime_type,
-        audio_checksum_sha256=audio.audio_checksum_sha256,
     )
 
     with pytest.raises(PoiConflict, match="URL is immutable"):

@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.domains.poi.exceptions import (
     InvalidPoiFilter,
+    InvalidPoiQrCode,
     NarrationNotFound,
     PoiConflict,
     PoiNotFound,
-    PoiPermissionDenied,
     PoiReferenceNotFound,
 )
 from app.domains.poi.models.content_audio import ContentAudio
@@ -27,7 +27,10 @@ from app.domains.poi.schemas.poi_content import (
     PoiContentReview,
     PoiContentUpdate,
     PublishedNarration,
+    QrNarrationRead,
 )
+from app.domains.poi.schemas.point_of_interest import PoiRead
+from app.domains.poi.providers.qr_code import parse_poi_qr_payload
 from app.domains.poi.providers.tts import (
     FileSystemTtsStorage,
     GttsSynthesizer,
@@ -78,12 +81,16 @@ class PoiContentService:
     def create_content(self, payload: PoiContentCreate, *, actor_id: str) -> AdminPoiContentRead:
         try:
             with self.session.begin():
+                # Bước 1: Khóa POI cha để tuần tự hóa việc cấp version.
                 self._lock_poi(payload.poi_id)
+                # Bước 2: Kiểm tra Language, cấp version và tạo content DRAFT.
                 content = self._new_content(
                     payload.poi_id, payload.language_id, payload.narration_title,
                     payload.narration_script, actor_id,
                 )
+                # Bước 3: Flush để database kiểm tra FK và version duy nhất.
                 self.session.flush()
+                # Bước 4: Trả content vừa tạo sau khi transaction thành công.
                 result = self._content_responses([content])[0]
         except IntegrityError as exc:
             self._translate_integrity_error(exc)
@@ -92,19 +99,24 @@ class PoiContentService:
     def update_content(self, content_id: str, payload: PoiContentUpdate) -> AdminPoiContentRead:
         try:
             with self.session.begin():
+                # Bước 1: Khóa POI và content cần chỉnh sửa.
                 poi, content = self._lock_content(content_id)
+                # Bước 2: Chỉ DRAFT/REJECTED mới được sửa trực tiếp.
                 self._require_status(content, {"DRAFT", "REJECTED"})
                 values = payload.model_dump(exclude_unset=True)
+                # Bước 3: Content đã gắn audio phải tạo version mới thay vì sửa.
                 if any(getattr(content, name) != value for name, value in values.items()):
                     if self.audios.get_for_content(content.id) is not None:
                         raise PoiConflict(
                             "Content with audio cannot be edited; create new content "
                             "for the same POI and language"
                         )
+                # Bước 4: Áp dụng nội dung mới và đưa REJECTED trở lại DRAFT.
                 for name, value in values.items():
                     setattr(content, name, value)
                 content.content_status = "DRAFT"
                 self._clear_review_fields(content)
+                # Bước 5: Flush và bảo vệ điều kiện của POI đang ACTIVE.
                 self.session.flush()
                 self._ensure_active_english(poi)
                 result = self._content_responses([content])[0]
@@ -114,10 +126,13 @@ class PoiContentService:
 
     def submit_content(self, content_id: str) -> AdminPoiContentRead:
         with self.session.begin():
+            # Bước 1: Khóa POI/content và kiểm tra trạng thái nguồn.
             _, content = self._lock_content(content_id)
             self._require_status(content, {"DRAFT", "REJECTED"})
+            # Bước 2: Chuyển sang WAITING_APPROVAL và xóa metadata cũ.
             content.content_status = "WAITING_APPROVAL"
             self._clear_review_fields(content)
+            # Bước 3: Flush rồi trả content đã submit.
             self.session.flush()
             result = self._content_responses([content])[0]
         return result
@@ -127,10 +142,11 @@ class PoiContentService:
     ) -> AdminPoiContentRead:
         """Phê duyệt hoặc từ chối content trong cùng một use case review."""
         with self.session.begin():
+            # Bước 1: Khóa POI/content đang chờ duyệt.
             _, content = self._lock_content(content_id)
             self._require_status(content, {"WAITING_APPROVAL"})
-            if content.created_by == actor_id:
-                raise PoiPermissionDenied("Authors cannot review their own content")
+            # Bước 2: Áp dụng quyết định APPROVE hoặc REJECT.
+            # Phiên bản demo cho phép tác giả tự duyệt bằng cùng một tài khoản.
             if payload.decision == "APPROVE":
                 content.content_status = "APPROVED"
                 content.approved_by = actor_id
@@ -138,6 +154,7 @@ class PoiContentService:
             else:
                 content.content_status = "REJECTED"
                 self._clear_review_fields(content)
+            # Bước 3: Flush và trả trạng thái review mới.
             self.session.flush()
             result = self._content_responses([content])[0]
         return result
@@ -146,8 +163,7 @@ class PoiContentService:
         generated_audio: StoredTtsAudio | None = None
         snapshot: tuple[str, str, str, str] | None = None
 
-        # Đọc snapshot trong transaction riêng rồi gọi TTS ngoài transaction DB.
-        # Transaction ghi bên dưới sẽ khóa và xác minh snapshot lại trước khi lưu.
+        # Bước 1: Khóa content, kiểm tra APPROVED/Language và chụp snapshot.
         with self.session.begin():
             _, content = self._lock_content(content_id)
             self._require_status(content, {"APPROVED"})
@@ -162,6 +178,7 @@ class PoiContentService:
                     language.language_code,
                 )
 
+        # Bước 2: Nếu thiếu audio, sinh và lưu TTS ngoài transaction database.
         if snapshot is not None:
             generated = self.tts.synthesize(
                 f"{snapshot[1]}. {snapshot[2]}", snapshot[3],
@@ -170,15 +187,18 @@ class PoiContentService:
 
         try:
             with self.session.begin():
+                # Bước 3: Khóa lại POI/content trước khi ghi kết quả publish.
                 poi, content = self._lock_content(content_id)
                 self._require_status(content, {"APPROVED"})
                 self._require_supported_language(content.language_id)
+                # Bước 4: Hủy publish nếu content đổi trong lúc tạo TTS.
                 if snapshot is not None and snapshot[:3] != (
                     content.language_id,
                     content.narration_title,
                     content.narration_script,
                 ):
                     raise PoiConflict("Content changed while TTS was being generated")
+                # Bước 5: Tạo/cập nhật ContentAudio từ file TTS khi cần.
                 if content.id not in self.audios.get_content_ids_with_valid_audio([content.id]):
                     if generated_audio is None:
                         raise PoiConflict("Publishing requires valid audio metadata")
@@ -206,6 +226,7 @@ class PoiContentService:
                             setattr(audio, name, value)
                         audio.last_updated_at = now
                     self.session.flush()
+                # Bước 6: Khóa và archive phiên bản PUBLISHED cũ.
                 previous = self.contents.get_published_versions(poi.id, content.language_id)
                 if any(item.content_version >= content.content_version for item in previous):
                     raise PoiConflict("Cannot replace a published version with an older version")
@@ -213,10 +234,12 @@ class PoiContentService:
                     item.content_status = "ARCHIVED"
                 # Free the partial unique index first, within the same transaction.
                 self.session.flush()
+                # Bước 7: Publish phiên bản mới và ghi người/thời điểm thực hiện.
                 content.content_status = "PUBLISHED"
                 content.published_by = actor_id
                 content.published_at = datetime.now(timezone.utc)
                 self.session.flush()
+                # Bước 8: Bảo đảm POI ACTIVE vẫn có English narration khả dụng.
                 self._ensure_active_english(poi)
                 result = self._content_responses([content])[0]
         except IntegrityError as exc:
@@ -224,17 +247,43 @@ class PoiContentService:
         return result
 
     def get_narration(self, poi_id: str, language_code: str) -> PublishedNarration:
+        # Bước 1: Chỉ phục vụ POI đang ACTIVE.
         if self.pois.get_by_id(poi_id, active_only=True) is None:
             raise PoiNotFound("POI not found")
+        return self._get_published_narration(poi_id, language_code)
+
+    def resolve_qr(self, qr_code: str, language_code: str) -> QrNarrationRead:
+        """Xác thực QR rồi trả POI ACTIVE cùng narration sẵn sàng phát."""
+        # Bước 1: Chỉ chấp nhận deep-link QR do hệ thống phát hành.
+        poi_id = parse_poi_qr_payload(qr_code)
+        if poi_id is None:
+            raise InvalidPoiQrCode("Invalid POI QR code")
+        # Bước 2: Server online là nguồn quyết định POI còn ACTIVE hay không.
+        poi = self.pois.get_by_id(poi_id, active_only=True)
+        if poi is None:
+            raise PoiNotFound("POI not found")
+        # Bước 3: Chọn narration theo ngôn ngữ yêu cầu và fallback tiếng Anh.
+        narration = self._get_published_narration(poi_id, language_code)
+        return QrNarrationRead(
+            poi=PoiRead.model_validate(poi),
+            narration=narration,
+        )
+
+    def _get_published_narration(
+        self, poi_id: str, language_code: str,
+    ) -> PublishedNarration:
+        # Bước 1: Chuẩn hóa ngôn ngữ và thêm tiếng Anh làm fallback.
         requested = language_code.lower()
         languages = list(dict.fromkeys((requested, "en")))
         for selected in languages:
+            # Bước 2: Lấy các bản PUBLISHED theo thứ tự version mới nhất.
             contents = self.contents.get_published_for_language(poi_id, selected)
             ids = [content.id for content in contents]
             valid_ids = self.audios.get_content_ids_with_valid_audio(ids)
             audios = self.audios.get_for_contents(list(valid_ids))
             for content in contents:
                 if content.id in valid_ids:
+                    # Bước 3: Trả bản đầu tiên có audio hợp lệ và đánh dấu fallback.
                     return PublishedNarration(
                         poi_id=poi_id, content_id=content.id, language_code=selected,
                         requested_language_code=requested, is_fallback=selected != requested,
@@ -242,6 +291,7 @@ class PoiContentService:
                         content_version=content.content_version,
                         audio=AdminContentAudioRead.model_validate(audios[content.id]),
                     )
+        # Bước 4: Không có cả ngôn ngữ yêu cầu lẫn tiếng Anh khả dụng.
         raise NarrationNotFound("No published narration with usable audio is available")
 
     def _new_content(self, poi_id: str, language_id: str, title: str, script: str, actor_id: str) -> PoiContent:

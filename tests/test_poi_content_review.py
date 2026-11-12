@@ -2,8 +2,6 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 
 import pytest
-
-from app.domains.poi.exceptions import PoiPermissionDenied
 from app.domains.poi.models.poi_content import PoiContent
 from app.domains.poi.schemas.poi_content import PoiContentReview
 from app.domains.poi.services.poi_content import PoiContentService
@@ -81,12 +79,14 @@ def test_review_applies_decision(decision: str, expected_status: str) -> None:
         assert content.approved_at is None
 
 
-def test_author_cannot_review_own_content() -> None:
+def test_author_can_review_own_content_for_demo_workflow() -> None:
     content = make_content()
 
-    with pytest.raises(PoiPermissionDenied):
-        build_service(content).review_content(
-            content.id,
-            PoiContentReview(decision="APPROVE"),
-            actor_id=content.created_by,
-        )
+    result = build_service(content).review_content(
+        content.id,
+        PoiContentReview(decision="APPROVE"),
+        actor_id=content.created_by,
+    )
+
+    assert result.content_status == "APPROVED"
+    assert result.approved_by == content.created_by

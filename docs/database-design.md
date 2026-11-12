@@ -628,6 +628,10 @@ Asset cũ có thể được garbage-collect sau khi không còn manifest/packag
 
 ```
 
+Client chỉ gửi `audio_url` và `audio_source_type`. Backend tải file từ URL công
+khai, chặn mạng private/loopback và redirect, giới hạn 100 MiB, kiểm tra MIME,
+đọc thời lượng rồi tự tính `audio_size` và `audio_checksum_sha256` từ bytes thật.
+
 ## 2.3 GROUP 3: OFFLINE CONTENT DISTRIBUTION
 
 Nhóm chịu trách nhiệm quản lý các gói dữ liệu được chuẩn bị để ứng dụng mobile có thể tải xuống và sử dụng khi không có kết nối Internet.

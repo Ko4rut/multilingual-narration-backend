@@ -21,11 +21,15 @@ class InvalidPoiImage(Exception):
     """Ảnh POI không thể tải hoặc không đáp ứng yêu cầu an toàn."""
 
 
+class InvalidAudioAsset(Exception):
+    """Audio không thể tải hoặc metadata thực tế không hợp lệ."""
+
+
+class InvalidPoiQrCode(Exception):
+    """Payload QR không thuộc định dạng POI do hệ thống phát hành."""
+
+
 class NarrationNotFound(ResourceNotFound):
-    pass
-
-
-class PoiPermissionDenied(Exception):
     pass
 
 
