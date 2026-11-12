@@ -20,7 +20,7 @@ from app.domains.listening.schemas.listening_history import (
 from app.domains.listening.services.listening import ListeningService
 from app.route.dependencies import get_session
 
-router = APIRouter(prefix="/listening", tags=["listening"])
+router = APIRouter(prefix="/listening", tags=["Listening History (Public)"])
 
 
 def get_listening_service(

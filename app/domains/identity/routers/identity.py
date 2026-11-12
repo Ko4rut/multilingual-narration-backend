@@ -64,8 +64,8 @@ from app.domains.identity.services.role import RoleService
 
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
-manager_user_router = APIRouter(prefix="/manager-users", tags=["Manager Users"])
-role_router = APIRouter(prefix="/roles", tags=["Roles & Permissions"])
+manager_user_router = APIRouter(prefix="/manager-users", tags=["Manager User"])
+role_router = APIRouter(prefix="/roles")
 
 UserManagementRead = Annotated[AuthenticatedIdentity, Depends(require_user_management_read)]
 UserManagementCreate = Annotated[AuthenticatedIdentity, Depends(require_user_management_create)]
@@ -255,7 +255,7 @@ def update_manager_user(
 # Các endpoint thuộc về RoleService.
 # ==============================================================================================================
 
-@role_router.get("", response_model=list[RoleRead])
+@role_router.get("", response_model=list[RoleRead], tags=["Role"])
 def list_roles(
     _identity: UserManagementRead,
     service: Annotated[RoleService, Depends(get_role_service)],
@@ -267,7 +267,10 @@ def list_roles(
     ]
 
 
-@role_router.post("", response_model=RoleRead, status_code=status.HTTP_201_CREATED)
+@role_router.post(
+    "", response_model=RoleRead, status_code=status.HTTP_201_CREATED,
+    tags=["Role"],
+)
 def create_role(
     payload: RoleCreate,
     identity: UserManagementCreate,
@@ -286,7 +289,9 @@ def create_role(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return RoleRead.model_validate(role)
 
-@role_router.get("/permissions", response_model=list[PermissionRead])
+@role_router.get(
+    "/permissions", response_model=list[PermissionRead], tags=["Permission"],
+)
 def list_permissions(
     _identity: UserManagementRead,
     service: Annotated[RoleService, Depends(get_role_service)],
@@ -296,7 +301,7 @@ def list_permissions(
         for permission in service.list_permissions()
     ]
 
-@role_router.get("/{role_id}", response_model=RoleRead)
+@role_router.get("/{role_id}", response_model=RoleRead, tags=["Role"])
 def get_role(
     role_id: Annotated[str, Path(min_length=1, max_length=50)],
     _identity: UserManagementRead,
@@ -305,7 +310,7 @@ def get_role(
     return RoleRead.model_validate(service.get_role(role_id))
 
 
-@role_router.patch("/{role_id}", response_model=RoleRead)
+@role_router.patch("/{role_id}", response_model=RoleRead, tags=["Role"])
 def update_role(
     role_id: Annotated[str, Path(min_length=1, max_length=50)],
     payload: RoleUpdate,
@@ -327,7 +332,11 @@ def update_role(
     return RoleRead.model_validate(role)
 
 
-@role_router.get("/{role_id}/permissions", response_model=list[PermissionRead])
+@role_router.get(
+    "/{role_id}/permissions",
+    response_model=list[PermissionRead],
+    tags=["Role Permission"],
+)
 def list_role_permissions(
     role_id: Annotated[str, Path(min_length=1, max_length=50)],
     _identity: UserManagementRead,
@@ -339,7 +348,11 @@ def list_role_permissions(
     ]
 
 
-@role_router.put("/{role_id}/permissions", response_model=list[PermissionRead])
+@role_router.put(
+    "/{role_id}/permissions",
+    response_model=list[PermissionRead],
+    tags=["Role Permission"],
+)
 def replace_role_permissions(
     role_id: Annotated[str, Path(min_length=1, max_length=50)],
     payload: RolePermissionsUpdate,
