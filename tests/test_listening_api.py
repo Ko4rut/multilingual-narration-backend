@@ -15,7 +15,11 @@ from app.domains.listening.schemas import (
     ListeningSaveResult,
     QrScanAck,
 )
-from app.domains.identity.routers.dependencies import require_listening_analytics_read
+from app.domains.identity.routers.dependencies import (
+    get_authentication_service,
+    get_current_identity,
+    require_listening_analytics_read,
+)
 from app.main import create_app
 
 
@@ -192,3 +196,54 @@ def test_save_qr_scan_maps_domain_errors(listening_client, error, status_code):
 
     assert response.status_code == status_code
     assert response.json() == {"detail": str(error)}
+
+class PermissionServiceStub:
+    def __init__(self, *, allowed: bool):
+        self.allowed = allowed
+        self.calls = []
+
+    def has_permission(self, user_id, *, function_name, action_name):
+        self.calls.append((user_id, function_name, action_name))
+        return self.allowed
+
+
+def test_dashboard_returns_401_without_bearer_token():
+    application = create_app()
+    permission_service = PermissionServiceStub(allowed=True)
+    application.dependency_overrides[get_listening_service] = ListeningServiceStub
+    application.dependency_overrides[get_authentication_service] = (
+        lambda: permission_service
+    )
+
+    with TestClient(application) as client:
+        response = client.get("/api/v1/listening/dashboard")
+
+    assert response.status_code == 401
+    assert permission_service.calls == []
+
+
+@pytest.mark.parametrize(("allowed", "expected_status"), [(True, 200), (False, 403)])
+def test_dashboard_checks_seeded_listening_analytics_read_permission(
+    allowed, expected_status
+):
+    application = create_app()
+    permission_service = PermissionServiceStub(allowed=allowed)
+    application.dependency_overrides[get_listening_service] = ListeningServiceStub
+    application.dependency_overrides[get_current_identity] = (
+        lambda: SimpleNamespace(manager_user=SimpleNamespace(id="user-test"))
+    )
+    application.dependency_overrides[get_authentication_service] = (
+        lambda: permission_service
+    )
+
+    with TestClient(application) as client:
+        response = client.get("/api/v1/listening/dashboard")
+
+    assert response.status_code == expected_status
+    assert permission_service.calls == [
+        ("user-test", "Listening Analytics", "read")
+    ]
+    if allowed:
+        assert response.json() == {"total_listening_sessions": 42}
+    else:
+        assert response.json() == {"detail": "Insufficient permission"}

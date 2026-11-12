@@ -27,6 +27,12 @@ from app.route.dependencies import get_session
 
 router = APIRouter(prefix="/listening", tags=["Listening History (Public)"])
 
+# The seed defines Listening Analytics:read; keep dashboard RBAC-protected.
+DashboardAccess = Annotated[
+    AuthenticatedIdentity,
+    Depends(require_listening_analytics_read),
+]
+
 
 def get_listening_service(
     session: Annotated[Session, Depends(get_session, use_cache=False)],
@@ -34,7 +40,7 @@ def get_listening_service(
     return ListeningService(session, ListeningHistoryRepository(session))
 
 
-@router.get("/dashboard", response_model=ListeningDashboardSummary)
+@router.get("/dashboard", response_model=ListeningDashboardSummary, tags=["Listening Analytics"])
 def get_listening_dashboard(
     _identity: DashboardAccess,
     service: Annotated[ListeningService, Depends(get_listening_service)],
