@@ -40,7 +40,7 @@ def build_service(repository):
         session=SessionStub(),
         language_repository=repository,
         region_repository=SimpleNamespace(),
-        poi_category_repository=SimpleNamespace(),
+        category_repository=SimpleNamespace(),
         id_factory=lambda prefix: f"{prefix}-12345678",
     )
 

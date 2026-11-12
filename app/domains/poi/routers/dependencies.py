@@ -12,6 +12,7 @@ from app.domains.poi.repositories.poi_category_mapping import PoiCategoryMapping
 from app.domains.poi.repositories.poi_content import PoiContentRepository
 from app.domains.poi.repositories.point_of_interest import PoiRepository
 from app.domains.poi.providers.image_checksum import RemoteImageChecksumProvider
+from app.domains.poi.providers.audio_asset import RemoteAudioAssetProvider
 from app.domains.poi.services import (
     ContentAudioService,
     PointOfInterestService,
@@ -31,8 +32,8 @@ def get_point_of_interest_service(
         session=session, repository=PoiRepository(session),
         mappings=PoiCategoryMappingRepository(session), contents=PoiContentRepository(session),
         audios=ContentAudioRepository(session),
-        categories=PoiCategoryRepository(session),
-        regions=RegionRepository(session),
+        category_repository=PoiCategoryRepository(session),
+        region_repository=RegionRepository(session),
         image_checksums=RemoteImageChecksumProvider(),
     )
 
@@ -77,6 +78,7 @@ def get_content_audio_service(
         pois=PoiRepository(session),
         contents=PoiContentRepository(session),
         audios=ContentAudioRepository(session),
+        audio_assets=RemoteAudioAssetProvider(),
     )
 
 

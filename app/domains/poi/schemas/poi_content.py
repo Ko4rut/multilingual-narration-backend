@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 from app.domains.catalog.schemas.language import LanguageRead
 from app.domains.poi.schemas.content_audio import AdminContentAudioRead
+from app.domains.poi.schemas.point_of_interest import PoiRead
 
 
 class PoiContentRead(BaseModel):
@@ -100,3 +101,28 @@ class PublishedNarration(BaseModel):
     narration_script: str
     content_version: int
     audio: AdminContentAudioRead
+
+
+class QrNarrationResolve(BaseModel):
+    """Dữ liệu QR và ngôn ngữ do ứng dụng gửi sau khi quét."""
+
+    model_config = ConfigDict(extra="forbid")
+    qr_code: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
+    ]
+    language_code: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            to_lower=True,
+            pattern=r"^[a-z]{2,3}$",
+        ),
+    ] = "en"
+
+
+class QrNarrationRead(BaseModel):
+    """POI công khai và narration sẵn sàng phát từ một QR hợp lệ."""
+
+    poi: PoiRead
+    narration: PublishedNarration

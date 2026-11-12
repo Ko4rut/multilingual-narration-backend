@@ -11,7 +11,7 @@
 |  |  | 2\. Ứng dụng yêu cầu quyền camera (nếu chưa có) và mở màn hình quét. **E1** |
 |  | 3\. Du khách đưa mã QR vào vùng quét. |  |
 |  |  | 4\. Ứng dụng đọc mã, kiểm tra định dạng và ngăn xử lý nhiều lần cùng một mã trong khi yêu cầu trước chưa hoàn tất. **E2** |
-|  |  | 5\. Ứng dụng xác định POI: ưu tiên tra cứu thông tin POI **ACTIVE** khi truy cập được hệ thống trực tuyến; nếu mất kết nối hoặc truy vấn thất bại, tra cứu `poi_qr_code` trong dữ liệu offline thuộc package **READY**. **A1, A2, E3, E4** |
+|  |  | 5\. Ứng dụng xác định POI: khi online, gửi payload tới `POST /api/v1/pois/qr/resolve` để backend xác thực QR, POI **ACTIVE** và narration có audio; nếu mất kết nối hoặc truy vấn thất bại, tra cứu `poi_qr_code` trong dữ liệu offline thuộc package **READY**. **A1, A2, E3, E4** |
 |  |  | 6\. Ứng dụng kiểm tra nội dung và âm thanh thuyết minh phù hợp với ngôn ngữ người dùng: ưu tiên audio local **VERIFIED**; nếu không có và đang online, dùng audio **PUBLISHED** hợp lệ, có thể fallback tiếng Anh theo quy tắc online. **A3, E5** |
 |  |  | 7\. Ứng dụng xác nhận audio đích đã sẵn sàng để bắt đầu. Nếu player đang phát hoặc tạm dừng nội dung khác, chốt thời lượng nghe của phiên cũ, dừng và thay thế phiên cũ bằng nội dung QR. **A4, E6** |
 |  |  | 8\. Ứng dụng bắt đầu phát audio của POI vừa quét, hiển thị tên POI và điều khiển phát. Chỉ khi audio thực sự bắt đầu, tạo một lịch sử nghe mới với `trigger_type = QR_CODE`. **E7** |

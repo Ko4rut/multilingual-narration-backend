@@ -26,6 +26,7 @@ from app.domains.poi.schemas.content_audio import (
 from app.domains.poi.schemas.poi_content import (
     AdminPoiContentRead, ContentStatus, PoiContentCreate, PoiContentOptions,
     PoiContentPage, PoiContentReview, PoiContentUpdate, PublishedNarration,
+    QrNarrationRead, QrNarrationResolve,
 )
 from app.domains.poi.services import (
     ContentAudioService,
@@ -37,11 +38,15 @@ from app.domains.poi.providers.tts import FileSystemTtsStorage
 from app.route.dependencies import get_session
 
 
-router = APIRouter(prefix="/pois", tags=["POI"])
-asset_router = APIRouter(prefix="/assets/audio", tags=["Audio Assets"])
+router = APIRouter(prefix="/pois")
+asset_router = APIRouter(prefix="/assets/audio", tags=["Content Audio (Public)"])
 
 
-@asset_router.get("/{checksum}.mp3", response_class=FileResponse)
+@asset_router.get(
+    "/{checksum}.mp3",
+    response_class=FileResponse,
+    summary="Download generated narration audio",
+)
 def get_tts_audio(
     checksum: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$")],
     storage: Annotated[FileSystemTtsStorage, Depends(get_tts_storage)],
@@ -58,7 +63,10 @@ def get_public_point_of_interest_service(
     return PublicPointOfInterestService(PoiRepository(session))
 
 
-@router.get("", response_model=PoiPage)
+@router.get(
+    "", response_model=PoiPage, summary="List active POIs",
+    tags=["Point Of Interest (Public)"],
+)
 def list_pois(
     service: Annotated[
         PublicPointOfInterestService,
@@ -70,7 +78,10 @@ def list_pois(
     return service.list_pois(offset=offset, limit=limit)
 
 
-@router.get("/{poi_id}", response_model=PoiRead)
+@router.get(
+    "/{poi_id}", response_model=PoiRead, summary="Get an active POI",
+    tags=["Point Of Interest (Public)"],
+)
 def get_poi(
     poi_id: Annotated[str, Path(min_length=1, max_length=50)],
     service: Annotated[
@@ -81,7 +92,22 @@ def get_poi(
     return service.get_poi(poi_id)
 
 
-admin_router = APIRouter(prefix="/admin/pois", tags=["POI Management"])
+@router.post(
+    "/qr/resolve",
+    response_model=QrNarrationRead,
+    summary="Resolve a POI QR code",
+    tags=["Point Of Interest (Public)"],
+)
+def resolve_poi_qr(
+    payload: QrNarrationResolve,
+    service: Annotated[PoiContentService, Depends(get_poi_content_service)],
+) -> QrNarrationRead:
+    """Resolve a system QR to an active POI and playable online narration."""
+    with poi_http_errors():
+        return service.resolve_qr(payload.qr_code, payload.language_code)
+
+
+admin_router = APIRouter(prefix="/admin/pois", tags=["Point Of Interest"])
 Service = Annotated[
     PointOfInterestService,
     Depends(get_point_of_interest_service),
@@ -94,7 +120,7 @@ UpdateAccess = Annotated[AuthenticatedIdentity, Depends(require_poi_update)]
 
 @admin_router.get(
     "", response_model=AdminPoiPage,
-    summary="List Pois", operation_id="list_pois_api_v1_admin_pois_get",
+    summary="List POIs", operation_id="list_pois_api_v1_admin_pois_get",
 )
 def list_admin_pois(
     identity: ReadAccess, service: Service,
@@ -112,7 +138,11 @@ def list_admin_pois(
         )
 
 
-@admin_router.get("/options", response_model=PoiFormOptions)
+@admin_router.get(
+    "/options",
+    response_model=PoiFormOptions,
+    summary="Get POI form options",
+)
 def get_options(identity: ReadAccess, service: Service) -> PoiFormOptions:
     """Read region/category data for the existing POI form."""
     return service.get_options()
@@ -120,7 +150,7 @@ def get_options(identity: ReadAccess, service: Service) -> PoiFormOptions:
 
 @admin_router.get(
     "/{poi_id}", response_model=AdminPoiRead,
-    summary="Get Poi", operation_id="get_poi_api_v1_admin_pois__poi_id__get",
+    summary="Get a POI", operation_id="get_poi_api_v1_admin_pois__poi_id__get",
 )
 def get_admin_poi(poi_id: PoiId, identity: ReadAccess, service: Service) -> AdminPoiRead:
     with poi_http_errors():
@@ -130,6 +160,7 @@ def get_admin_poi(poi_id: PoiId, identity: ReadAccess, service: Service) -> Admi
 @admin_router.get(
     "/{poi_id}/qr-code",
     response_class=Response,
+    summary="Get a POI QR code",
     responses={200: {"content": {"image/png": {}}}},
 )
 def get_poi_qr_code(
@@ -151,13 +182,17 @@ def get_poi_qr_code(
         )
 
 
-@admin_router.post("", response_model=AdminPoiRead, status_code=201)
+@admin_router.post(
+    "", response_model=AdminPoiRead, status_code=201, summary="Create a POI"
+)
 def create_poi(payload: PoiCreate, identity: CreateAccess, service: Service) -> AdminPoiRead:
     with poi_http_errors():
         return service.create_poi(payload, actor_id=identity.manager_user.id)
 
 
-@admin_router.patch("/{poi_id}", response_model=AdminPoiRead)
+@admin_router.patch(
+    "/{poi_id}", response_model=AdminPoiRead, summary="Update a POI"
+)
 def update_poi(
     poi_id: PoiId, payload: PoiUpdate, identity: UpdateAccess, service: Service,
 ) -> AdminPoiRead:
@@ -165,7 +200,11 @@ def update_poi(
         return service.update_poi(poi_id, payload, actor_id=identity.manager_user.id)
 
 
-@admin_router.patch("/{poi_id}/status", response_model=AdminPoiRead)
+@admin_router.patch(
+    "/{poi_id}/status",
+    response_model=AdminPoiRead,
+    summary="Update POI status",
+)
 def update_status(
     poi_id: PoiId, payload: PoiStatusUpdate, identity: UpdateAccess, service: Service,
 ) -> AdminPoiRead:
@@ -175,8 +214,8 @@ def update_status(
         )
 
 
-content_router = APIRouter(prefix="/admin/poi-contents", tags=["Narration Content Management"])
-audio_router = APIRouter(prefix="/admin/audios", tags=["Narration Audio Metadata"])
+content_router = APIRouter(prefix="/admin/poi-contents", tags=["POI Content"])
+audio_router = APIRouter(prefix="/admin/audios", tags=["Content Audio"])
 ContentService = Annotated[PoiContentService, Depends(get_poi_content_service)]
 AudioService = Annotated[ContentAudioService, Depends(get_content_audio_service)]
 ContentId = Annotated[str, Path(min_length=1, max_length=50)]
@@ -188,7 +227,7 @@ ContentApproveAccess = Annotated[AuthenticatedIdentity, Depends(require_narratio
 ContentPublishAccess = Annotated[AuthenticatedIdentity, Depends(require_narration_publish)]
 
 
-@content_router.get("", response_model=PoiContentPage)
+@content_router.get("", response_model=PoiContentPage, summary="List narration contents")
 def list_contents(
     identity: ContentReadAccess, service: ContentService,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -204,18 +243,31 @@ def list_contents(
         )
 
 
-@content_router.get("/options", response_model=PoiContentOptions)
+@content_router.get(
+    "/options",
+    response_model=PoiContentOptions,
+    summary="Get narration content form options",
+)
 def get_content_options(identity: ContentReadAccess, service: ContentService) -> PoiContentOptions:
     return service.get_options()
 
 
-@content_router.get("/{content_id}", response_model=AdminPoiContentRead)
+@content_router.get(
+    "/{content_id}",
+    response_model=AdminPoiContentRead,
+    summary="Get narration content",
+)
 def get_content(content_id: ContentId, identity: ContentReadAccess, service: ContentService) -> AdminPoiContentRead:
     with poi_http_errors():
         return service.get_content(content_id)
 
 
-@content_router.post("", response_model=AdminPoiContentRead, status_code=201)
+@content_router.post(
+    "",
+    response_model=AdminPoiContentRead,
+    status_code=201,
+    summary="Create narration content",
+)
 def create_content(
     payload: PoiContentCreate, identity: ContentCreateAccess, service: ContentService,
 ) -> AdminPoiContentRead:
@@ -223,7 +275,11 @@ def create_content(
         return service.create_content(payload, actor_id=identity.manager_user.id)
 
 
-@content_router.patch("/{content_id}", response_model=AdminPoiContentRead)
+@content_router.patch(
+    "/{content_id}",
+    response_model=AdminPoiContentRead,
+    summary="Update narration content",
+)
 def update_content(
     content_id: ContentId, payload: PoiContentUpdate,
     identity: ContentUpdateAccess, service: ContentService,
@@ -232,13 +288,21 @@ def update_content(
         return service.update_content(content_id, payload)
 
 
-@content_router.post("/{content_id}/submit", response_model=AdminPoiContentRead)
+@content_router.post(
+    "/{content_id}/submit",
+    response_model=AdminPoiContentRead,
+    summary="Submit narration content for review",
+)
 def submit_content(content_id: ContentId, identity: ContentUpdateAccess, service: ContentService) -> AdminPoiContentRead:
     with poi_http_errors():
         return service.submit_content(content_id)
 
 
-@content_router.post("/{content_id}/review", response_model=AdminPoiContentRead)
+@content_router.post(
+    "/{content_id}/review",
+    response_model=AdminPoiContentRead,
+    summary="Review narration content",
+)
 def review_content(
     content_id: ContentId, payload: PoiContentReview,
     identity: ContentApproveAccess, service: ContentService,
@@ -249,13 +313,21 @@ def review_content(
         )
 
 
-@content_router.post("/{content_id}/publish", response_model=AdminPoiContentRead)
+@content_router.post(
+    "/{content_id}/publish",
+    response_model=AdminPoiContentRead,
+    summary="Publish narration content",
+)
 def publish_content(content_id: ContentId, identity: ContentPublishAccess, service: ContentService) -> AdminPoiContentRead:
     with poi_http_errors():
         return service.publish_content(content_id, actor_id=identity.manager_user.id)
 
 
-@content_router.get("/{content_id}/audio", response_model=AdminContentAudioRead)
+@content_router.get(
+    "/{content_id}/audio",
+    response_model=AdminContentAudioRead,
+    summary="Get narration content audio",
+)
 def get_content_audio(
     content_id: ContentId,
     identity: ContentReadAccess,
@@ -265,7 +337,11 @@ def get_content_audio(
         return service.get_content_audio(content_id)
 
 
-@content_router.put("/{content_id}/audio", response_model=AdminContentAudioRead)
+@content_router.put(
+    "/{content_id}/audio",
+    response_model=AdminContentAudioRead,
+    summary="Register or replace narration content audio",
+)
 def save_content_audio(
     content_id: ContentId, payload: AudioMetadataWrite,
     identity: ContentUpdateAccess, service: AudioService,
@@ -275,7 +351,7 @@ def save_content_audio(
         return service.save_audio(content_id, payload)
 
 
-@audio_router.get("", response_model=ContentAudioPage)
+@audio_router.get("", response_model=ContentAudioPage, summary="List narration audios")
 def list_audios(
     identity: ContentReadAccess, service: AudioService,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -291,7 +367,11 @@ def list_audios(
         )
 
 
-@audio_router.get("/{audio_id}", response_model=AdminContentAudioRead)
+@audio_router.get(
+    "/{audio_id}",
+    response_model=AdminContentAudioRead,
+    summary="Get narration audio",
+)
 def get_audio(
     audio_id: ContentId,
     identity: ContentReadAccess,
@@ -301,7 +381,12 @@ def get_audio(
         return service.get_audio(audio_id)
 
 
-@router.get("/{poi_id}/narration", response_model=PublishedNarration)
+@router.get(
+    "/{poi_id}/narration",
+    response_model=PublishedNarration,
+    summary="Get published POI narration",
+    tags=["POI Content (Public)"],
+)
 def get_narration(
     poi_id: PoiId, service: ContentService,
     language_code: Annotated[str, Query(pattern=r"^[A-Za-z]{2,3}$")] = "en",

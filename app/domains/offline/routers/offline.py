@@ -28,8 +28,8 @@ from app.domains.offline.services.offline import (
 from app.domains.offline.utils.manifest_diff import InvalidOfflineManifest
 
 
-router = APIRouter(prefix="/offline", tags=["Offline Packages"])
-admin_router = APIRouter(prefix="/admin/offline/packages", tags=["Offline Package Management"])
+router = APIRouter(prefix="/offline", tags=["Offline Package (Public)"])
+admin_router = APIRouter(prefix="/admin/offline/packages")
 
 OfflineService = Annotated[OfflinePackageService, Depends(get_offline_service)]
 PackageId = Annotated[str, Path(min_length=1, max_length=50)]
@@ -81,7 +81,8 @@ def get_published_package(package_id: PackageId, service: OfflineService):
 
 
 @admin_router.get("", response_model=OfflinePackagePage,
-                  summary="Admin: list all offline packages")
+                  summary="Admin: list all offline packages",
+                  tags=["Offline Package"])
 def list_admin_packages(
     identity: ReadAccess, service: OfflineService,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -91,14 +92,16 @@ def list_admin_packages(
 
 
 @admin_router.get("/{package_id}", response_model=OfflinePackageRead,
-                  summary="Admin: get offline package details")
+                  summary="Admin: get offline package details",
+                  tags=["Offline Package"])
 def get_admin_package(package_id: PackageId, identity: ReadAccess, service: OfflineService):
     with offline_http_errors():
         return service.get_admin_package(package_id)
 
 
 @admin_router.get("/{package_id}/items", response_model=list[OfflinePackageItemRead],
-                  summary="Admin: list offline package memberships")
+                  summary="Admin: list offline package memberships",
+                  tags=["Offline Package Item"])
 def get_admin_package_items(
     package_id: PackageId, identity: ReadAccess, service: OfflineService,
 ):
@@ -108,7 +111,8 @@ def get_admin_package_items(
 
 @admin_router.post("/prepare", response_model=OfflinePackagePreparationRead,
                    status_code=status.HTTP_201_CREATED,
-                   summary="Admin: prepare a new BUILDING offline package")
+                   summary="Admin: prepare a new BUILDING offline package",
+                   tags=["Offline Package"])
 def prepare_offline_package(
     payload: OfflinePackagePrepareRequest, identity: CreateAccess, service: OfflineService,
 ):
@@ -126,7 +130,8 @@ def prepare_offline_package(
 
 @admin_router.post("/{package_id}/rebuild/preview",
                    response_model=OfflineRebuildPreviewRead,
-                   summary="Admin: preview changes against a verified published manifest")
+                   summary="Admin: preview changes against a verified published manifest",
+                   tags=["Offline Package"])
 def preview_offline_rebuild(
     package_id: PackageId, payload: OfflineRebuildPreviewRequest,
     identity: UpdateAccess, service: OfflineService,

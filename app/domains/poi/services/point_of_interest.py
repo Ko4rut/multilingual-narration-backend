@@ -57,8 +57,9 @@ class PointOfInterestService:
     def __init__(
         self, session: Session, repository: PoiRepository,
         mappings: PoiCategoryMappingRepository, contents: PoiContentRepository,
-        audios: ContentAudioRepository, categories: PoiCategoryRepository,
-        regions: RegionRepository,
+        audios: ContentAudioRepository,
+        category_repository: PoiCategoryRepository,
+        region_repository: RegionRepository,
         image_checksums: RemoteImageChecksumProvider,
     ):
         self.session = session
@@ -66,15 +67,15 @@ class PointOfInterestService:
         self.mappings = mappings
         self.contents = contents
         self.audios = audios
-        self.categories = categories
-        self.regions = regions
+        self.category_repository = category_repository
+        self.region_repository = region_repository
         self.image_checksums = image_checksums
 
     def get_options(self) -> PoiFormOptions:
         """Lấy Region và Category tham chiếu cho form quản trị POI."""
         return PoiFormOptions(
-            regions=self.regions.get_choices(),
-            categories=self.categories.get_choices(),
+            regions=self.region_repository.get_choices(),
+            categories=self.category_repository.get_choices(),
         )
 
     def list_pois(
@@ -110,10 +111,13 @@ class PointOfInterestService:
 
     def create_poi(self, payload: PoiCreate, *, actor_id: str) -> AdminPoiRead:
         """Tạo POI INACTIVE cùng category mapping trong một transaction."""
+        # Bước 1: Tải ảnh và tính checksum trước khi mở transaction database.
         image_checksum = self.image_checksums.calculate(payload.poi_image_url)
         try:
             with self.session.begin():
+                # Bước 2: Kiểm tra Region và toàn bộ Category được tham chiếu.
                 self._require_references(payload.region_id, payload.category_ids)
+                # Bước 3: Sinh ID, QR và metadata quản trị do backend sở hữu.
                 now = datetime.now(timezone.utc)
                 poi_id = generate_dated_identifier("poi", now)
                 poi = PointOfInterest(
@@ -124,35 +128,45 @@ class PointOfInterestService:
                     poi_status="INACTIVE", created_by=actor_id, last_updated_by=actor_id,
                     created_at=now, last_updated_at=now,
                 )
+                # Bước 4: Thêm POI và buộc database kiểm tra các constraint.
                 self.repository.add(poi)
                 # UNIQUE constraint là nguồn kiểm tra cuối cùng, tránh race condition
                 # giữa bước kiểm tra trước và hai request tạo đồng thời.
                 self.session.flush()
+                # Bước 5: Lưu category mapping trong cùng transaction với POI.
                 self.mappings.replace_for_poi(poi.id, payload.category_ids)
                 self.session.flush()
+                # Bước 6: Chuẩn bị response; context manager sẽ commit khi thoát.
                 result = self._responses([poi])[0]
         except IntegrityError as exc:
+            # Bước 7: Chuyển lỗi constraint đã biết thành lỗi nghiệp vụ phù hợp.
             self._translate_integrity_error(exc)
         return result
 
     def update_poi(self, poi_id: str, payload: PoiUpdate, *, actor_id: str) -> AdminPoiRead:
         """Cập nhật POI và mapping sau khi khóa dòng POI hiện tại."""
+        # Bước 1: Nếu ảnh thay đổi, tải và tính checksum trước transaction.
         image_checksum = None
         if "poi_image_url" in payload.model_fields_set:
             image_checksum = self.image_checksums.calculate(payload.poi_image_url)
         try:
             with self.session.begin():
+                # Bước 2: Khóa POI để tuần tự hóa các request cập nhật đồng thời.
                 poi = self._require_poi(poi_id, for_update=True)
+                # Bước 3: Tách dữ liệu POI, category và trạng thái từ PATCH.
                 values = payload.model_dump(exclude_unset=True)
                 if image_checksum is not None:
                     values["image_checksum_sha256"] = image_checksum
                 category_ids = values.pop("category_ids", None)
                 target_status = values.pop("poi_status", None)
+                # Bước 4: Xác minh Region/Category mới vẫn tồn tại.
                 self._require_references(values.get("region_id", poi.region_id), category_ids)
+                # Bước 5: POI ACTIVE phải tiếp tục có English content và audio hợp lệ.
                 remains_active = target_status == "ACTIVE" or (target_status is None and poi.poi_status == "ACTIVE")
                 if remains_active and poi.id not in self._get_activatable_ids([poi.id]):
                     raise PoiConflict("An ACTIVE POI requires published English content with valid audio metadata")
                 changed = any(getattr(poi, name) != value for name, value in values.items())
+                # Bước 6: Áp dụng các field được gửi và thay mapping khi cần.
                 for name, value in values.items():
                     setattr(poi, name, value)
                 if target_status is not None:
@@ -166,9 +180,11 @@ class PointOfInterestService:
                         self.mappings.replace_for_poi(poi.id, category_ids)
                         changed = True
                 if changed:
+                    # Bước 7: Chỉ cập nhật audit metadata khi dữ liệu thực sự đổi.
                     poi.last_updated_by = actor_id
                     poi.last_updated_at = datetime.now(timezone.utc)
                 self.session.flush()
+                # Bước 8: Chuẩn bị response; transaction commit khi thoát context.
                 result = self._responses([poi])[0]
         except IntegrityError as exc:
             self._translate_integrity_error(exc)
@@ -181,10 +197,12 @@ class PointOfInterestService:
         return poi
 
     def _require_references(self, region_id: str, category_ids: list[str] | None) -> None:
-        if self.regions.get_by_id(region_id) is None:
+        if self.region_repository.get_by_id(region_id) is None:
             raise PoiReferenceNotFound("Region not found")
         if category_ids is not None:
-            missing = set(category_ids) - self.categories.get_existing_ids(category_ids)
+            missing = set(category_ids) - self.category_repository.get_existing_ids(
+                category_ids
+            )
             if missing:
                 raise PoiReferenceNotFound("Unknown category IDs: " + ", ".join(sorted(missing)))
 

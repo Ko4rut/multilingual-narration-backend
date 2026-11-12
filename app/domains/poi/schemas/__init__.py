@@ -5,6 +5,7 @@ from app.domains.poi.schemas.poi_category_mapping import PoiCategoryMappingRead
 from app.domains.poi.schemas.poi_content import (
     AdminPoiContentRead, PoiContentCreate, PoiContentOptions, PoiContentPage,
     PoiContentRead, PoiContentReview, PoiContentUpdate, PublishedNarration,
+    QrNarrationRead, QrNarrationResolve,
 )
 from app.domains.poi.schemas.point_of_interest import (
     AdminPoiPage,
@@ -39,4 +40,6 @@ __all__ = [
     "PoiStatusUpdate",
     "PoiUpdate",
     "PublishedNarration",
+    "QrNarrationRead",
+    "QrNarrationResolve",
 ]

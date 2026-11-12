@@ -2,13 +2,25 @@ from io import BytesIO
 
 from PIL import Image
 
-from app.domains.poi.providers.qr_code import create_poi_qr_payload, render_qr_png
+from app.domains.poi.providers.qr_code import (
+    create_poi_qr_payload,
+    parse_poi_qr_payload,
+    render_qr_png,
+)
 
 
 def test_create_poi_qr_payload_uses_stable_deep_link() -> None:
     poi_id = "poi-111126-12345678"
 
     assert create_poi_qr_payload(poi_id) == "mnr://pois/poi-111126-12345678"
+
+
+def test_parse_poi_qr_payload_accepts_only_system_deep_link() -> None:
+    assert parse_poi_qr_payload("mnr://pois/poi-111126-12345678") == (
+        "poi-111126-12345678"
+    )
+    assert parse_poi_qr_payload("https://example.com/poi-111126-12345678") is None
+    assert parse_poi_qr_payload("mnr://pois/other-111126-12345678") is None
 
 
 def test_render_qr_png_returns_valid_png() -> None:

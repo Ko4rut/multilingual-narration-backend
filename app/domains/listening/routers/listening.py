@@ -25,11 +25,7 @@ from app.domains.identity.routers.dependencies import require_listening_analytic
 from app.domains.identity.services.authentication import AuthenticatedIdentity
 from app.route.dependencies import get_session
 
-router = APIRouter(prefix="/listening", tags=["listening"])
-DashboardAccess = Annotated[
-    AuthenticatedIdentity,
-    Depends(require_listening_analytics_read),
-]
+router = APIRouter(prefix="/listening", tags=["Listening History (Public)"])
 
 
 def get_listening_service(

@@ -28,6 +28,7 @@ repositories/content_audio.py       Kiểm tra metadata audio của content
 providers/tts.py          Sinh TTS và lưu file audio cục bộ
 providers/qr_code.py      Sinh payload và render ảnh QR của POI
 providers/image_checksum.py Tải ảnh an toàn và tính checksum SHA-256
+providers/audio_asset.py Tải audio an toàn và tự xác minh metadata/checksum
 exceptions/               Lỗi nghiệp vụ và public exports của domain
 utils/utils.py            Sinh ID, escape LIKE và đọc tên database constraint
 models/                   ORM POI hiện có
@@ -58,6 +59,96 @@ Mọi endpoint danh sách có `offset/limit` trả cùng cấu trúc
 `{"items": [], "total": 0, "offset": 0, "limit": 20}`; frontend không tự
 đếm từ một trang dữ liệu.
 
+## Các luồng nghiệp vụ quan trọng
+
+### 1. Tạo POI mới
+
+1. Web lấy Region và Category từ `GET /api/v1/admin/pois/options`.
+2. Web gửi thông tin POI và `category_ids`; không gửi ID, QR, checksum hoặc trạng thái ACTIVE.
+3. Router xác thực Bearer token và quyền `POI Management:create`.
+4. Pydantic kiểm tra URL ảnh, tọa độ, bán kính và dữ liệu bắt buộc.
+5. Backend tải ảnh ngoài transaction, chặn địa chỉ private/loopback và tính SHA-256 từ bytes thật.
+6. Service mở transaction, kiểm tra Region/Category còn tồn tại và khóa phạm vi ghi cần thiết.
+7. Backend sinh ID, deep-link QR, timestamp, người tạo và đặt trạng thái `INACTIVE`.
+8. Repository thêm POI và category mapping; database kiểm tra FK/UNIQUE/CHECK.
+9. Thành công thì commit và trả `201`; lỗi thì rollback toàn bộ.
+
+### 2. Cập nhật POI
+
+1. Router xác thực quyền `POI Management:update` và schema từ chối body rỗng.
+2. Nếu URL ảnh được gửi, backend tải ảnh và tính checksum mới trước transaction.
+3. Service khóa POI bằng `FOR UPDATE` để tránh hai request ghi đè nhau.
+4. Backend kiểm tra Region/Category mới và chỉ thay các field có trong PATCH.
+5. Nếu POI sẽ tiếp tục `ACTIVE`, backend kiểm tra lại content tiếng Anh và audio.
+6. Category mapping chỉ bị thay khi request có `category_ids`; `[]` nghĩa là bỏ hết.
+7. Backend cập nhật người sửa/thời gian sửa khi dữ liệu thực sự thay đổi rồi commit.
+
+### 3. Đăng ký audio thu âm
+
+1. File audio phải được upload tới một URL HTTP(S) công khai và bất biến trước.
+2. Web gửi `audio_url` và `audio_source_type=RECORD` tới endpoint audio của content.
+3. Router xác thực quyền `Narration Content Management:update`.
+4. Backend tải audio ngoài transaction, chặn mạng private/loopback và redirect, giới hạn 100 MiB.
+5. Backend kiểm tra MIME, đọc thời lượng, tính kích thước và SHA-256 từ bytes thật.
+6. Service khóa POI và content; chỉ chấp nhận trạng thái content được phép gắn audio.
+7. Repository tạo ContentAudio bằng metadata đã xác minh; client không quyết định checksum.
+8. Nếu POI đang ACTIVE, service kiểm tra thay đổi không làm mất audio tiếng Anh khả dụng.
+
+### 4. Tạo và quản lý phiên bản nội dung
+
+1. Người soạn tạo content mới với POI, Language, tiêu đề và kịch bản đầy đủ.
+2. Service khóa POI cha, kiểm tra Language đang SUPPORTED và cấp `content_version = max + 1`.
+3. Content mới luôn ở `DRAFT`; backend tự sinh ID, người tạo và thời điểm tạo.
+4. `DRAFT` hoặc `REJECTED` chưa có audio có thể PATCH trực tiếp; lưu REJECTED đưa về DRAFT.
+5. Content đã có audio hoặc đã qua các trạng thái tiếp theo phải tạo phiên bản mới để chỉnh sửa.
+6. Không xóa phiên bản cũ; `ARCHIVED` tiếp tục được giữ cho lịch sử và offline reference.
+
+### 5. Submit và review nội dung
+
+1. Tác giả submit `DRAFT/REJECTED`, content chuyển sang `WAITING_APPROVAL`.
+2. Reviewer cần quyền `approve` và không được duyệt content do chính mình tạo.
+3. Quyết định `APPROVE` chuyển content sang `APPROVED`, ghi người và thời điểm duyệt.
+4. Quyết định `REJECT` chuyển content sang `REJECTED` và xóa metadata duyệt/xuất bản cũ.
+5. Mọi bước khóa cùng POI/content để tránh submit, review và update chạy chồng nhau.
+
+### 6. Publish và sinh TTS
+
+1. Chỉ content `APPROVED` của Language đang SUPPORTED được publish.
+2. Nếu đã có audio RECORD/TTS hợp lệ, backend bỏ qua bước sinh TTS.
+3. Nếu chưa có audio, backend chụp snapshot nội dung rồi gọi gTTS ngoài transaction ghi.
+4. MP3 được lưu theo checksum vào storage; URL asset không thay đổi theo tên content.
+5. Service khóa lại POI/content và xác minh snapshot chưa bị sửa trong lúc tạo TTS.
+6. Backend tạo ContentAudio nguồn `TTS`, archive bản PUBLISHED cũ cùng POI–Language.
+7. Content mới chuyển sang `PUBLISHED`, ghi người/thời điểm publish rồi commit.
+8. Nếu TTS hoặc storage lỗi, request trả lỗi và content vẫn giữ `APPROVED`.
+
+### 7. Kích hoạt hoặc vô hiệu hóa POI
+
+1. POI mới luôn `INACTIVE`; quản trị viên kích hoạt qua PATCH trạng thái.
+2. Service khóa POI và tìm content tiếng Anh `PUBLISHED`.
+3. Content tiếng Anh phải có audio hợp lệ với URL, MIME, size, duration và checksum.
+4. Đủ điều kiện thì chuyển sang `ACTIVE`; thiếu điều kiện trả `409` và rollback.
+5. Chuyển về `INACTIVE` không xóa POI, content, audio hoặc lịch sử nghe.
+
+### 8. Lấy narration cho mobile
+
+1. Mobile gọi `GET /api/v1/pois/{poi_id}/narration?language_code=<code>`.
+2. Backend chỉ chấp nhận POI đang `ACTIVE`; POI ẩn được trả như không tồn tại.
+3. Backend ưu tiên bản `PUBLISHED` có audio hợp lệ của ngôn ngữ yêu cầu.
+4. Nếu không có, backend fallback sang tiếng Anh.
+5. Response trả nội dung, version, metadata audio và cờ `is_fallback`; không trả dữ liệu quản trị.
+
+### 9. Phân giải QR online cho mobile
+
+1. Mobile gửi payload đã quét tới `POST /api/v1/pois/qr/resolve` cùng mã ngôn ngữ.
+2. Backend chỉ chấp nhận định dạng `mnr://pois/poi-ddmmyy-xxxxxxxx`; QR khác hệ
+   thống trả 422.
+3. Backend chỉ trả POI đang `ACTIVE`; POI không tồn tại hoặc `INACTIVE` trả 404.
+4. Backend chọn content `PUBLISHED` có audio hợp lệ theo ngôn ngữ yêu cầu và
+   fallback tiếng Anh giống endpoint narration.
+5. Response gộp dữ liệu POI công khai và narration sẵn sàng phát. Mobile, player
+   và xử lý offline không thuộc endpoint này.
+
 ## Danh sách endpoint
 
 Prefix: `/api/v1/admin/pois`.
@@ -71,6 +162,24 @@ Prefix: `/api/v1/admin/pois`.
 | POST | `/api/v1/admin/pois` | create | 201, POI vừa tạo |
 | PATCH | `/api/v1/admin/pois/{id}` | update | 200, POI sau cập nhật |
 | PATCH | `/api/v1/admin/pois/{id}/status` | update | 200, POI sau đổi trạng thái |
+
+Endpoint public không yêu cầu Bearer token:
+
+| Method | Path | Kết quả |
+| --- | --- | --- |
+| GET | `/api/v1/pois` | Danh sách POI ACTIVE |
+| GET | `/api/v1/pois/{id}` | Chi tiết POI ACTIVE |
+| GET | `/api/v1/pois/{id}/narration` | Narration PUBLISHED có audio hợp lệ |
+| POST | `/api/v1/pois/qr/resolve` | POI ACTIVE và narration từ payload QR |
+
+Body phân giải QR:
+
+```json
+{
+  "qr_code": "mnr://pois/poi-111126-12345678",
+  "language_code": "vi"
+}
+```
 
 Tất cả endpoint yêu cầu Bearer token và session hợp lệ qua dependency Identity
 hiện có; không mở public endpoint quản trị hoặc tắt phân quyền để chạy demo.
@@ -190,13 +299,14 @@ URL trong màn hình metadata.
 
 ## Phần phối hợp sau này
 
-- API nhận metadata của ảnh đã upload; chưa upload ảnh hoặc tính/xác minh checksum
-  từ bytes. Caller phải dùng asset mới tại URL bất biến; không ghi đè file cũ.
-- `can_activate` kiểm tra metadata audio, chưa xác minh file thực trên storage.
+- API chưa upload ảnh/audio trực tiếp; asset phải tồn tại tại URL công khai trước.
+  Backend đã tải và xác minh bytes/checksum khi đăng ký asset.
+- `can_activate` kiểm tra metadata audio đã xác minh lúc đăng ký, nhưng không tải
+  lại file từ storage trong mỗi lần kích hoạt.
 - Rebuild Offline Package khi metadata/category thay đổi cần tích hợp với domain
   Offline. API hiện chưa đánh dấu/tạo job rebuild hay tăng `package_version`.
 - Chưa tự ghi AuditLog. API content/audio được mô tả ở phần bên dưới.
-- Chưa gọi API ở web, chưa sửa CORS, đăng nhập hoặc cấu hình token của frontend.
+- Web đã gọi API quản trị; CORS và cấu hình triển khai vẫn phụ thuộc môi trường.
 
 Khi viết tiếp, làm từng use case theo thứ tự schema → repository → service →
 dependency/router → đăng ký route, giống Identity. Các thao tác thay content/audio
@@ -269,23 +379,19 @@ Quyền cũng thuộc `Narration Content Management`:
 
 Danh sách có cùng phân trang; filter `poi_id`, `language_id`, `poi_content_id`,
 `audio_source_type=RECORD|TTS`, `search` theo ID/tiêu đề content. PUT trả 200 khi
-thêm hoặc thay metadata; mỗi content có tối đa một audio:
+đăng ký asset đã được backend xác minh; mỗi content có tối đa một audio:
 
 ```json
 {
-  "audio_url": "https://assets.example/audio/<checksum>.mp3",
-  "audio_size": 100000,
-  "audio_source_type": "RECORD",
-  "audio_duration_sec": 30,
-  "audio_mime_type": "audio/mpeg",
-  "audio_checksum_sha256": "<64 ký tự hex SHA-256 thật của file>"
+  "audio_url": "https://assets.example/audio/recording.mp3",
+  "audio_source_type": "RECORD"
 }
 ```
 
-PUT yêu cầu đủ metadata của file đã upload/xác minh trước đó: URL HTTP(S) không
-chứa credentials, size/duration dương, checksum hợp lệ. MIME hỗ trợ: audio/mpeg,
-audio/aac, audio/ogg, audio/wav, audio/mp4, audio/webm. Size dùng bigint, duration
-dùng integer. Audio sinh tự động được phục vụ tại
+Backend chặn URL private/loopback và redirect, tải tối đa 100 MiB, kiểm tra MIME,
+đọc thời lượng và tự tính kích thước/checksum SHA-256 từ bytes thực tế trước khi
+mở transaction ghi. MIME hỗ trợ: audio/mpeg, audio/aac, audio/ogg, audio/wav,
+audio/mp4, audio/webm. Audio sinh tự động được phục vụ tại
 `/api/v1/assets/audio/{checksum}.mp3`.
 
 Cho phép gắn/thay metadata khi DRAFT/REJECTED/APPROVED/PUBLISHED; đóng băng khi
@@ -323,11 +429,11 @@ Phần nội bộ POI đã thực hiện; các việc sau còn chờ bên phụ 
 | --- | --- |
 | Identity | Dùng dependency/quyền hiện có; không sửa login, tài khoản hay khóa JWT |
 | Catalog | Chỉ đọc; chưa xử lý cascade khi bên Catalog đổi trạng thái |
-| Storage/upload | Chưa upload/đọc bytes, xác minh checksum/MIME thực hoặc dọn asset |
+| Storage/upload | Đã đọc/xác minh audio từ URL; chưa có endpoint upload hoặc dọn asset |
 | TTS | Đang dùng gTTS đồng bộ; production nên thay bằng provider có SLA/job retry |
 | Offline | Chưa đánh dấu/rebuild package khi dữ liệu đổi, không tăng package_version |
 | Audit | Chưa ghi sự kiện, reviewer/lý do từ chối hoặc lịch sử thao tác |
-| Frontend | Chưa gọi API hoặc sửa giao diện/đăng nhập |
+| Frontend | Đã gọi API; form audio cần gửi contract rút gọn URL + source |
 
 Khi nối các phần này, dùng service collaborator rõ ràng và giữ transaction/khóa
 POI; không dùng endpoint giả thành công hoặc bỏ kiểm tra quyền thay cho tích hợp.

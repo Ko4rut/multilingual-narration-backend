@@ -1,14 +1,24 @@
 """Tạo payload và ảnh QR ổn định dùng để nhận diện POI."""
 
 from io import BytesIO
+import re
 
 import qrcode
 from qrcode.constants import ERROR_CORRECT_M
 
 
+POI_QR_PATTERN = re.compile(r"^mnr://pois/(poi-\d{6}-[a-z0-9]{8})$")
+
+
 def create_poi_qr_payload(poi_id: str) -> str:
     """Tạo deep-link ổn định để ứng dụng nhận diện POI sau khi quét QR."""
     return f"mnr://pois/{poi_id}"
+
+
+def parse_poi_qr_payload(payload: str) -> str | None:
+    """Trích POI ID khi payload đúng định dạng QR do hệ thống phát hành."""
+    match = POI_QR_PATTERN.fullmatch(payload.strip())
+    return match.group(1) if match is not None else None
 
 
 def render_qr_png(payload: str) -> bytes:

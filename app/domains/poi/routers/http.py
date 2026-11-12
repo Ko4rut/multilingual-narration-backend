@@ -3,8 +3,8 @@ from contextlib import contextmanager
 from fastapi import HTTPException
 
 from app.domains.poi.exceptions import (
-    InvalidPoiFilter, InvalidPoiImage, NarrationNotFound, PoiConflict, PoiNotFound,
-    PoiPermissionDenied, PoiReferenceNotFound,
+    InvalidAudioAsset, InvalidPoiFilter, InvalidPoiImage, InvalidPoiQrCode,
+    NarrationNotFound, PoiConflict, PoiNotFound, PoiReferenceNotFound,
     TtsGenerationFailed,
 )
 
@@ -18,9 +18,7 @@ def poi_http_errors():
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PoiConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except (InvalidPoiFilter, InvalidPoiImage) as exc:
+    except (InvalidAudioAsset, InvalidPoiFilter, InvalidPoiImage, InvalidPoiQrCode) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except PoiPermissionDenied as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except TtsGenerationFailed as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

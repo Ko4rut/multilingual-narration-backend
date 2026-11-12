@@ -3,10 +3,11 @@
 from app.domains.poi.exceptions.exceptions import (
     InvalidPoiFilter,
     InvalidPoiImage,
+    InvalidAudioAsset,
+    InvalidPoiQrCode,
     NarrationNotFound,
     PoiConflict,
     PoiNotFound,
-    PoiPermissionDenied,
     PoiReferenceNotFound,
     TtsGenerationFailed,
 )
@@ -14,10 +15,11 @@ from app.domains.poi.exceptions.exceptions import (
 __all__ = [
     "InvalidPoiFilter",
     "InvalidPoiImage",
+    "InvalidAudioAsset",
+    "InvalidPoiQrCode",
     "NarrationNotFound",
     "PoiConflict",
     "PoiNotFound",
-    "PoiPermissionDenied",
     "PoiReferenceNotFound",
     "TtsGenerationFailed",
 ]

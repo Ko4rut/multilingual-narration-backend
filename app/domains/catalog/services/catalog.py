@@ -19,21 +19,21 @@ class CatalogService:
         session: Session,
         language_repository: LanguageRepository,
         region_repository: RegionRepository,
-        poi_category_repository: PoiCategoryRepository,
+        category_repository: PoiCategoryRepository,
         *,
         id_factory: Callable[[str], str] = generate_catalog_identifier,
     ):
         self.session = session
         self.language_repository = language_repository
         self.region_repository = region_repository
-        self.poi_category_repository = poi_category_repository
+        self.category_repository = category_repository
         self.id_factory = id_factory
 
     def list_regions(self) -> list[Region]:
         return self.region_repository.get_all()
 
     def list_categories(self) -> list[PoiCategory]:
-        return self.poi_category_repository.get_all()
+        return self.category_repository.get_all()
 
     def list_supported_languages(self) -> list[Language]:
         return self.language_repository.get_supported()
