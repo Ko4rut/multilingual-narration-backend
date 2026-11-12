@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import ResourceNotFound
 from app.domains.catalog.repositories.poi_category import PoiCategoryRepository
 from app.domains.catalog.repositories.region import RegionRepository
 from app.domains.poi.exceptions import (
@@ -10,28 +11,55 @@ from app.domains.poi.exceptions import (
     PoiNotFound,
     PoiReferenceNotFound,
 )
+from app.domains.poi.providers.image_checksum import RemoteImageChecksumProvider
 from app.domains.poi.models.point_of_interest import PointOfInterest
 from app.domains.poi.repositories.content_audio import ContentAudioRepository
 from app.domains.poi.repositories.poi_category_mapping import PoiCategoryMappingRepository
 from app.domains.poi.repositories.poi_content import PoiContentRepository
 from app.domains.poi.repositories.point_of_interest import PoiRepository
+from app.domains.poi.providers.qr_code import create_poi_qr_payload
 from app.domains.poi.schemas.point_of_interest import (
     AdminPoiPage,
     AdminPoiRead,
     PoiCreate,
     PoiFormOptions,
+    PoiPage,
     PoiRead,
     PoiUpdate,
 )
 from app.domains.poi.utils import generate_dated_identifier, get_constraint_name
 
 
-class PoiAdminService:
+class PublicPointOfInterestService:
+    """Cung cấp các truy vấn POI công khai."""
+
+    def __init__(self, repository: PoiRepository):
+        self.repository = repository
+
+    def list_pois(self, *, offset: int, limit: int) -> PoiPage:
+        items = self.repository.get_all(
+            offset=offset,
+            limit=limit,
+            poi_status="ACTIVE",
+            sort_by="id",
+        )
+        total = self.repository.get_count(poi_status="ACTIVE")
+        return PoiPage(items=items, total=total, offset=offset, limit=limit)
+
+    def get_poi(self, poi_id: str) -> PointOfInterest:
+        poi = self.repository.get_by_id(poi_id, active_only=True)
+        if poi is None:
+            raise ResourceNotFound("POI not found")
+        return poi
+
+
+class PointOfInterestService:
     def __init__(
         self, session: Session, repository: PoiRepository,
         mappings: PoiCategoryMappingRepository, contents: PoiContentRepository,
         audios: ContentAudioRepository, categories: PoiCategoryRepository,
         regions: RegionRepository,
+        image_checksums: RemoteImageChecksumProvider,
     ):
         self.session = session
         self.repository = repository
@@ -40,6 +68,7 @@ class PoiAdminService:
         self.audios = audios
         self.categories = categories
         self.regions = regions
+        self.image_checksums = image_checksums
 
     def get_options(self) -> PoiFormOptions:
         """Lấy Region và Category tham chiếu cho form quản trị POI."""
@@ -81,13 +110,17 @@ class PoiAdminService:
 
     def create_poi(self, payload: PoiCreate, *, actor_id: str) -> AdminPoiRead:
         """Tạo POI INACTIVE cùng category mapping trong một transaction."""
+        image_checksum = self.image_checksums.calculate(payload.poi_image_url)
         try:
             with self.session.begin():
                 self._require_references(payload.region_id, payload.category_ids)
                 now = datetime.now(timezone.utc)
+                poi_id = generate_dated_identifier("poi", now)
                 poi = PointOfInterest(
-                    id=generate_dated_identifier("poi", now),
+                    id=poi_id,
                     **payload.model_dump(exclude={"category_ids", "poi_status"}),
+                    image_checksum_sha256=image_checksum,
+                    poi_qr_code=create_poi_qr_payload(poi_id),
                     poi_status="INACTIVE", created_by=actor_id, last_updated_by=actor_id,
                     created_at=now, last_updated_at=now,
                 )
@@ -104,18 +137,21 @@ class PoiAdminService:
 
     def update_poi(self, poi_id: str, payload: PoiUpdate, *, actor_id: str) -> AdminPoiRead:
         """Cập nhật POI và mapping sau khi khóa dòng POI hiện tại."""
+        image_checksum = None
+        if "poi_image_url" in payload.model_fields_set:
+            image_checksum = self.image_checksums.calculate(payload.poi_image_url)
         try:
             with self.session.begin():
                 poi = self._require_poi(poi_id, for_update=True)
                 values = payload.model_dump(exclude_unset=True)
+                if image_checksum is not None:
+                    values["image_checksum_sha256"] = image_checksum
                 category_ids = values.pop("category_ids", None)
                 target_status = values.pop("poi_status", None)
                 self._require_references(values.get("region_id", poi.region_id), category_ids)
                 remains_active = target_status == "ACTIVE" or (target_status is None and poi.poi_status == "ACTIVE")
                 if remains_active and poi.id not in self._get_activatable_ids([poi.id]):
                     raise PoiConflict("An ACTIVE POI requires published English content with valid audio metadata")
-                if "poi_image_url" in values and values["poi_image_url"] != poi.poi_image_url:
-                    values.setdefault("image_checksum_sha256", None)
                 changed = any(getattr(poi, name) != value for name, value in values.items())
                 for name, value in values.items():
                     setattr(poi, name, value)
@@ -165,6 +201,7 @@ class PoiAdminService:
             results.append(AdminPoiRead(
                 **values, created_by=poi.created_by, last_updated_by=poi.last_updated_by,
                 category_ids=mappings[poi.id], can_activate=poi.id in activatable,
+                qr_code_url=f"/api/v1/admin/pois/{poi.id}/qr-code",
             ))
         return results
 

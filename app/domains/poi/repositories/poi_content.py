@@ -12,7 +12,7 @@ class PoiContentRepository:
         self.session = session
 
     def get_published_english_contents(self, poi_ids: list[str]) -> dict[str, str]:
-        """Map content ID to POI ID for the requested published English versions."""
+        # Lấy các POI content tiếng Anh đã được publish; trả về dict {poi_id: content_id}.
         statement = (
             select(PoiContent.id, PoiContent.poi_id)
             .join(Language, Language.id == PoiContent.language_id)
@@ -25,16 +25,23 @@ class PoiContentRepository:
         return dict(self.session.execute(statement).all())
 
     def get_by_id(self, content_id: str, *, for_update: bool = False) -> PoiContent | None:
+        # Lấy content theo ID; có thể khóa row để update.
         statement = select(PoiContent).where(PoiContent.id == content_id)
         if for_update:
             statement = statement.with_for_update().execution_options(populate_existing=True)
         return self.session.scalar(statement)
 
     def get_all(
-        self, *, offset: int, limit: int, poi_id: str | None,
-        language_id: str | None, content_status: str | None, search: str | None,
+        self,
+        *,
+        offset: int,
+        limit: int,
+        poi_id: str | None,
+        language_id: str | None,
+        content_status: str | None,
+        search: str | None,
     ) -> list[PoiContent]:
-        """Lấy một trang nội dung theo các bộ lọc quản trị."""
+        # Lấy một trang nội dung theo các bộ lọc quản trị.
         filters = self._get_filters(
             poi_id=poi_id,
             language_id=language_id,
@@ -48,10 +55,14 @@ class PoiContentRepository:
         ))
 
     def get_count(
-        self, *, poi_id: str | None, language_id: str | None,
-        content_status: str | None, search: str | None,
+        self,
+        *,
+        poi_id: str | None,
+        language_id: str | None,
+        content_status: str | None,
+        search: str | None,
     ) -> int:
-        """Đếm nội dung theo cùng bộ lọc của ``get_all``."""
+        # Đếm nội dung theo cùng bộ lọc của ``get_all``.
         filters = self._get_filters(
             poi_id=poi_id,
             language_id=language_id,
@@ -64,10 +75,12 @@ class PoiContentRepository:
 
     @staticmethod
     def _get_filters(
-        *, poi_id: str | None, language_id: str | None,
-        content_status: str | None, search: str | None,
+        *, poi_id: str | None,
+        language_id: str | None,
+        content_status: str | None,
+        search: str | None,
     ) -> list[ColumnElement[bool]]:
-        """Tạo bộ lọc dùng chung cho danh sách và tổng số nội dung."""
+        # Tạo bộ lọc dùng chung cho danh sách và tổng số nội dung.
         filters: list[ColumnElement[bool]] = []
         if poi_id is not None:
             filters.append(PoiContent.poi_id == poi_id)
@@ -85,16 +98,18 @@ class PoiContentRepository:
         return filters
 
     def get_next_version(self, poi_id: str, language_id: str) -> int:
-        """Lấy số phiên bản kế tiếp khi service đang giữ khóa POI cha."""
+        # Lấy số phiên bản kế tiếp khi service đang giữ khóa POI cha.
         latest = self.session.scalar(select(func.max(PoiContent.content_version)).where(
             PoiContent.poi_id == poi_id, PoiContent.language_id == language_id,
         ))
         return (latest or 0) + 1
 
     def get_language(self, language_id: str) -> Language | None:
+        # Lấy thông tin ngôn ngữ theo ID.
         return self.session.get(Language, language_id)
 
     def get_languages(self) -> list[Language]:
+        # Lấy danh sách ngôn ngữ đã được khai báo; không phân trang.
         return list(self.session.scalars(select(Language).order_by(Language.language_name, Language.id)))
 
     def get_published_versions(self, poi_id: str, language_id: str) -> list[PoiContent]:

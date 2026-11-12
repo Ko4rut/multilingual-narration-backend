@@ -17,6 +17,10 @@ class InvalidPoiFilter(Exception):
     pass
 
 
+class InvalidPoiImage(Exception):
+    """Ảnh POI không thể tải hoặc không đáp ứng yêu cầu an toàn."""
+
+
 class NarrationNotFound(ResourceNotFound):
     pass
 

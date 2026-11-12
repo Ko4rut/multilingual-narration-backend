@@ -4,8 +4,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app.domains.poi.routers import get_poi_service
-from app.domains.poi.services import PoiService
+from app.domains.poi.routers import get_public_point_of_interest_service
+from app.domains.poi.services import PublicPointOfInterestService
 from app.main import create_app
 
 
@@ -33,7 +33,9 @@ class PoiRepositoryStub:
 @pytest.fixture
 def client():
     application = create_app()
-    application.dependency_overrides[get_poi_service] = lambda: PoiService(PoiRepositoryStub())
+    application.dependency_overrides[get_public_point_of_interest_service] = (
+        lambda: PublicPointOfInterestService(PoiRepositoryStub())
+    )
     with TestClient(application) as client:
         yield client
 

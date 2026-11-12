@@ -12,7 +12,7 @@ class ContentAudioRepository:
         self.session = session
 
     def get_content_ids_with_valid_audio(self, content_ids: list[str]) -> set[str]:
-        """Check audio metadata without making storage/network requests."""
+        # Check audio metadata without making storage/network requests.
         statement = select(ContentAudio.poi_content_id).distinct().where(
             ContentAudio.poi_content_id.in_(content_ids),
             ContentAudio.audio_url.regexp_match(r"^https?://[^/\s]+"),
@@ -27,25 +27,34 @@ class ContentAudioRepository:
         return set(self.session.scalars(statement))
 
     def get_by_id(self, audio_id: str) -> ContentAudio | None:
+        # Lấy audio theo ID; không kiểm tra quyền sở hữu POI.
         return self.session.get(ContentAudio, audio_id)
 
     def get_for_content(self, content_id: str, *, for_update: bool = False) -> ContentAudio | None:
+        # Lấy audio của một POI content; có thể khóa row để update.
         statement = select(ContentAudio).where(ContentAudio.poi_content_id == content_id)
         if for_update:
             statement = statement.with_for_update().execution_options(populate_existing=True)
         return self.session.scalar(statement)
 
     def get_for_contents(self, content_ids: list[str]) -> dict[str, ContentAudio]:
+        # Lấy audio của nhiều POI content; trả về dict {content_id: audio}.
         return {audio.poi_content_id: audio for audio in self.session.scalars(
             select(ContentAudio).where(ContentAudio.poi_content_id.in_(content_ids))
         )}
 
     def get_all(
-        self, *, offset: int, limit: int, poi_id: str | None,
-        language_id: str | None, poi_content_id: str | None,
-        audio_source_type: str | None, search: str | None,
+        self,
+        *,
+        offset: int,
+        limit: int,
+        poi_id: str | None,
+        language_id: str | None,
+        poi_content_id: str | None,
+        audio_source_type: str | None,
+        search: str | None,
     ) -> list[ContentAudio]:
-        """Lấy một trang audio theo các bộ lọc quản trị."""
+        # Lấy một trang audio theo các bộ lọc quản trị.
         filters = self._get_filters(
             poi_id=poi_id,
             language_id=language_id,
@@ -68,7 +77,7 @@ class ContentAudioRepository:
         poi_content_id: str | None, audio_source_type: str | None,
         search: str | None,
     ) -> int:
-        """Đếm audio theo cùng bộ lọc của ``get_all``."""
+        # Đếm audio theo cùng bộ lọc của ``get_all``.
         filters = self._get_filters(
             poi_id=poi_id,
             language_id=language_id,
@@ -90,7 +99,7 @@ class ContentAudioRepository:
         poi_content_id: str | None, audio_source_type: str | None,
         search: str | None,
     ) -> list[ColumnElement[bool]]:
-        """Tạo bộ lọc dùng chung cho danh sách và tổng số audio."""
+        # Tạo bộ lọc dùng chung cho danh sách và tổng số audio.
         filters: list[ColumnElement[bool]] = []
         if poi_id is not None:
             filters.append(PoiContent.poi_id == poi_id)
@@ -110,5 +119,5 @@ class ContentAudioRepository:
         return filters
 
     def add(self, audio: ContentAudio) -> None:
-        """Đưa audio mới vào Session; service sở hữu transaction."""
+        # Đưa audio mới vào Session; service sở hữu transaction.
         self.session.add(audio)

@@ -18,8 +18,6 @@ from app.domains.poi.repositories.poi_content import PoiContentRepository
 from app.domains.poi.repositories.point_of_interest import PoiRepository
 from app.domains.poi.schemas.content_audio import (
     AdminContentAudioRead,
-    AudioMetadataWrite,
-    ContentAudioPage,
 )
 from app.domains.poi.schemas.poi_content import (
     AdminPoiContentRead,
@@ -30,7 +28,11 @@ from app.domains.poi.schemas.poi_content import (
     PoiContentUpdate,
     PublishedNarration,
 )
-from app.domains.poi.tts import FileSystemTtsStorage, GttsSynthesizer, StoredTtsAudio
+from app.domains.poi.providers.tts import (
+    FileSystemTtsStorage,
+    GttsSynthesizer,
+    StoredTtsAudio,
+)
 from app.domains.poi.utils import generate_dated_identifier, get_constraint_name
 
 
@@ -217,68 +219,6 @@ class PoiContentService:
                 self.session.flush()
                 self._ensure_active_english(poi)
                 result = self._content_responses([content])[0]
-        except IntegrityError as exc:
-            self._translate_integrity_error(exc)
-        return result
-
-    def list_audios(
-        self, *, offset: int, limit: int, poi_id: str | None = None,
-        language_id: str | None = None, poi_content_id: str | None = None,
-        audio_source_type: str | None = None, search: str | None = None,
-    ) -> ContentAudioPage:
-        search = self._validate_filters(offset, limit, search)
-        filters = {
-            "poi_id": poi_id,
-            "language_id": language_id,
-            "poi_content_id": poi_content_id,
-            "audio_source_type": audio_source_type,
-            "search": search,
-        }
-        items = self.audios.get_all(
-            offset=offset, limit=limit, **filters,
-        )
-        total = self.audios.get_count(**filters)
-        return ContentAudioPage(
-            items=[AdminContentAudioRead.model_validate(item) for item in items],
-            total=total, offset=offset, limit=limit,
-        )
-
-    def get_audio(self, audio_id: str) -> AdminContentAudioRead:
-        audio = self.audios.get_by_id(audio_id)
-        if audio is None:
-            raise NarrationNotFound("Audio not found")
-        return AdminContentAudioRead.model_validate(audio)
-
-    def get_content_audio(self, content_id: str) -> AdminContentAudioRead:
-        self._require_content(content_id)
-        audio = self.audios.get_for_content(content_id)
-        if audio is None:
-            raise NarrationNotFound("Audio not found")
-        return AdminContentAudioRead.model_validate(audio)
-
-    def save_audio(self, content_id: str, payload: AudioMetadataWrite) -> AdminContentAudioRead:
-        try:
-            with self.session.begin():
-                poi, content = self._lock_content(content_id)
-                self._require_status(content, {"DRAFT", "REJECTED", "APPROVED", "PUBLISHED"})
-                audio = self.audios.get_for_content(content.id, for_update=True)
-                now = datetime.now(timezone.utc)
-                if audio is None:
-                    audio = ContentAudio(
-                        id=generate_dated_identifier("audio", now),
-                        poi_content_id=content.id,
-                        **payload.model_dump(), created_at=now, last_updated_at=now,
-                    )
-                    self.audios.add(audio)
-                else:
-                    if audio.audio_url == payload.audio_url and audio.audio_checksum_sha256.lower() != payload.audio_checksum_sha256:
-                        raise PoiConflict("Use a new immutable asset URL when the audio checksum changes")
-                    for name, value in payload.model_dump().items():
-                        setattr(audio, name, value)
-                    audio.last_updated_at = now
-                self.session.flush()
-                self._ensure_active_english(poi)
-                result = AdminContentAudioRead.model_validate(audio)
         except IntegrityError as exc:
             self._translate_integrity_error(exc)
         return result
