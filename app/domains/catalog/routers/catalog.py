@@ -23,8 +23,8 @@ from app.domains.catalog.services import CatalogService
 from app.domains.identity.routers.dependencies import require_permission
 from app.route.dependencies import get_session
 
-router = APIRouter(prefix="/catalog", tags=["catalog"])
-admin_router = APIRouter(prefix="/admin/catalog", tags=["admin-catalog"])
+router = APIRouter(prefix="/catalog")
+admin_router = APIRouter(prefix="/admin/catalog")
 
 require_language_read = require_permission("Language Management", "read")
 require_language_create = require_permission("Language Management", "create")
@@ -38,11 +38,16 @@ def get_catalog_service(
         session=session,
         language_repository=LanguageRepository(session),
         region_repository=RegionRepository(session),
-        poi_category_repository=PoiCategoryRepository(session),
+        category_repository=PoiCategoryRepository(session),
     )
 
 
-@router.get("/regions", response_model=list[RegionRead])
+@router.get(
+    "/regions",
+    response_model=list[RegionRead],
+    summary="List regions",
+    tags=["Region (Public)"],
+)
 def list_regions(
     service: Annotated[CatalogService, Depends(get_catalog_service)],
 ):
@@ -51,7 +56,12 @@ def list_regions(
     return service.list_regions()
 
 
-@router.get("/categories", response_model=list[PoiCategoryRead])
+@router.get(
+    "/categories",
+    response_model=list[PoiCategoryRead],
+    summary="List POI categories",
+    tags=["POI Category (Public)"],
+)
 def list_categories(
     service: Annotated[CatalogService, Depends(get_catalog_service)],
 ):
@@ -60,7 +70,12 @@ def list_categories(
     return service.list_categories()
 
 
-@router.get("/languages", response_model=list[LanguageRead])
+@router.get(
+    "/languages",
+    response_model=list[LanguageRead],
+    summary="List supported languages",
+    tags=["Language (Public)"],
+)
 def list_supported_languages(
     service: Annotated[CatalogService, Depends(get_catalog_service)],
 ):
@@ -70,6 +85,8 @@ def list_supported_languages(
 @admin_router.get(
     "/languages",
     response_model=list[LanguageRead],
+    summary="List languages",
+    tags=["Language"],
     dependencies=[Depends(require_language_read)],
 )
 def list_languages(service: Annotated[CatalogService, Depends(get_catalog_service)]):
@@ -80,6 +97,8 @@ def list_languages(service: Annotated[CatalogService, Depends(get_catalog_servic
     "/languages",
     response_model=LanguageRead,
     status_code=status.HTTP_201_CREATED,
+    summary="Create a language",
+    tags=["Language"],
     dependencies=[Depends(require_language_create)],
 )
 def create_language(
@@ -95,6 +114,8 @@ def create_language(
 @admin_router.patch(
     "/languages/{language_id}",
     response_model=LanguageRead,
+    summary="Update a language",
+    tags=["Language"],
     dependencies=[Depends(require_language_update)],
 )
 def update_language(

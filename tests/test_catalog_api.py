@@ -51,7 +51,7 @@ def catalog_client_factory():
             session=SessionStub(),
             language_repository=CatalogRepositoryStub(languages or []),
             region_repository=CatalogRepositoryStub(regions or []),
-            poi_category_repository=CatalogRepositoryStub(categories or []),
+            category_repository=CatalogRepositoryStub(categories or []),
         )
         application.dependency_overrides[get_catalog_service] = lambda: service
         if auth is not None:
