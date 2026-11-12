@@ -29,6 +29,10 @@ ReferenceId = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=50),
 ]
+QrCode = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
+]
 DurationSeconds = Annotated[int, Field(strict=True, ge=0)]
 
 
@@ -82,6 +86,41 @@ class ListeningEventCreate(BaseModel):
 class ListeningEventAck(BaseModel):
     id: str
     result: ListeningSaveResult
+
+
+class QrScanCreate(BaseModel):
+    """Record the start of a listening session triggered by a scanned QR code."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: ListeningId
+    installation_id: UUID
+    qr_code: QrCode
+    poi_content_id: ReferenceId
+    scanned_at: AwareDatetime
+
+    @field_validator("id")
+    @classmethod
+    def validate_identifier_date(cls, value: str) -> str:
+        try:
+            datetime.strptime(value[7:13], "%d%m%y")
+        except ValueError as exc:
+            raise ValueError("id must contain a valid ddmmyy date") from exc
+        return value
+
+    @field_validator("scanned_at")
+    @classmethod
+    def normalize_timestamp(cls, value: datetime) -> datetime:
+        return value.astimezone(timezone.utc)
+
+
+class QrScanAck(ListeningEventAck):
+    poi_id: str
+    poi_content_id: str
+
+
+class ListeningDashboardSummary(BaseModel):
+    total_listening_sessions: int
 
 
 class ListeningHistoryRead(BaseModel):

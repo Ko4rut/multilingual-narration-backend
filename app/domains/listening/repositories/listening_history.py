@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domains.listening.models.listening_history import ListeningHistory
@@ -26,6 +26,15 @@ class ListeningHistoryRepository:
         )
         return self.session.scalar(statement) is not None
 
+    def get_active_poi_by_qr_code(
+        self, qr_code: str
+    ) -> PointOfInterest | None:
+        statement = select(PointOfInterest).where(
+            PointOfInterest.poi_qr_code == qr_code,
+            PointOfInterest.poi_status == "ACTIVE",
+        )
+        return self.session.scalar(statement)
+
     def get_content(self, content_id: str) -> PoiContent | None:
         return self.session.scalar(
             select(PoiContent).where(PoiContent.id == content_id)
@@ -33,3 +42,7 @@ class ListeningHistoryRepository:
 
     def add(self, event: ListeningHistory) -> None:
         self.session.add(event)
+
+    def count_all(self) -> int:
+        statement = select(func.count()).select_from(ListeningHistory)
+        return int(self.session.scalar(statement) or 0)
