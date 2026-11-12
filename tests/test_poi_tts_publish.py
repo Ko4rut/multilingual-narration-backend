@@ -4,8 +4,11 @@ from types import SimpleNamespace
 
 from app.domains.poi.models.poi_content import PoiContent
 from app.domains.poi.services.poi_content import PoiContentService
-from app.domains.poi.tts import GeneratedTtsAudio, StoredTtsAudio
-from app.domains.poi.tts import FileSystemTtsStorage
+from app.domains.poi.providers.tts import (
+    FileSystemTtsStorage,
+    GeneratedTtsAudio,
+    StoredTtsAudio,
+)
 
 
 class SessionStub:

@@ -5,7 +5,9 @@ from decimal import Decimal
 
 from app.domains.poi.models.point_of_interest import PointOfInterest
 from app.domains.poi.schemas.point_of_interest import PoiCreate, PoiUpdate
-from app.domains.poi.services.poi_management import PoiAdminService
+from app.domains.poi.services.point_of_interest import (
+    PointOfInterestService,
+)
 
 
 class SessionStub:
@@ -71,6 +73,17 @@ class RegionRepositoryStub:
         return object()
 
 
+class ImageChecksumStub:
+    checksum = "a" * 64
+
+    def __init__(self) -> None:
+        self.urls: list[str] = []
+
+    def calculate(self, url: str) -> str:
+        self.urls.append(url)
+        return self.checksum
+
+
 def make_poi() -> PointOfInterest:
     now = datetime.now(timezone.utc)
     return PointOfInterest(
@@ -97,7 +110,8 @@ def build_service(record: PointOfInterest | None = None):
     repository = PoiRepositoryStub(record)
     mappings = MappingRepositoryStub()
     contents = ContentRepositoryStub()
-    service = PoiAdminService(
+    image_checksums = ImageChecksumStub()
+    service = PointOfInterestService(
         session=session,
         repository=repository,
         mappings=mappings,
@@ -105,17 +119,17 @@ def build_service(record: PointOfInterest | None = None):
         audios=AudioRepositoryStub(),
         categories=CategoryRepositoryStub(),
         regions=RegionRepositoryStub(),
+        image_checksums=image_checksums,
     )
-    return service, session, repository, mappings, contents
+    return service, session, repository, mappings, contents, image_checksums
 
 
 def test_create_poi_sets_inactive_status_actor_and_categories() -> None:
-    service, session, repository, mappings, _ = build_service()
+    service, session, repository, mappings, _, image_checksums = build_service()
     payload = PoiCreate(
         region_id="region-1",
         poi_name="Museum",
         poi_location="Museum address",
-        poi_qr_code="museum-qr",
         poi_image_url="https://assets.example/poi.webp",
         latitude=Decimal("10.000000"),
         longitude=Decimal("106.000000"),
@@ -127,16 +141,20 @@ def test_create_poi_sets_inactive_status_actor_and_categories() -> None:
 
     assert repository.added is not None
     assert re.fullmatch(r"poi-\d{6}-[0-9a-f]{8}", repository.added.id)
+    assert repository.added.poi_qr_code == f"mnr://pois/{repository.added.id}"
     assert repository.added.poi_status == "INACTIVE"
     assert repository.added.created_by == "user-1"
+    assert repository.added.image_checksum_sha256 == "a" * 64
+    assert image_checksums.urls == ["https://assets.example/poi.webp"]
     assert result.category_ids == ["cat-1"]
+    assert result.qr_code_url == f"/api/v1/admin/pois/{repository.added.id}/qr-code"
     assert mappings.replacements == [(repository.added.id, ["cat-1"])]
     assert session.flush_count == 2
 
 
 def test_update_poi_changes_fields_and_audit_metadata() -> None:
     poi = make_poi()
-    service, _, _, _, _ = build_service(poi)
+    service, _, _, _, _, image_checksums = build_service(poi)
 
     result = service.update_poi(
         poi.id,
@@ -147,3 +165,18 @@ def test_update_poi_changes_fields_and_audit_metadata() -> None:
     assert poi.poi_name == "Updated museum"
     assert poi.last_updated_by == "user-2"
     assert result.poi_name == "Updated museum"
+    assert image_checksums.urls == []
+
+
+def test_update_poi_recalculates_checksum_when_image_url_is_sent() -> None:
+    poi = make_poi()
+    service, _, _, _, _, image_checksums = build_service(poi)
+
+    service.update_poi(
+        poi.id,
+        PoiUpdate(poi_image_url="https://assets.example/new-poi.webp"),
+        actor_id="user-2",
+    )
+
+    assert image_checksums.urls == ["https://assets.example/new-poi.webp"]
+    assert poi.image_checksum_sha256 == "a" * 64

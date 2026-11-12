@@ -1,13 +1,15 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.domains.identity.services.authentication import AuthenticatedIdentity
 from app.domains.poi.repositories.point_of_interest import PoiRepository
+from app.domains.poi.providers.qr_code import render_qr_png
 from app.domains.poi.routers.dependencies import (
-    get_poi_admin_service, get_tts_storage, require_poi_create,
+    get_content_audio_service, get_point_of_interest_service,
+    get_tts_storage, require_poi_create,
     require_poi_read, require_poi_update,
     get_poi_content_service, require_narration_read, require_narration_create,
     require_narration_update, require_narration_approve,
@@ -25,8 +27,13 @@ from app.domains.poi.schemas.poi_content import (
     AdminPoiContentRead, ContentStatus, PoiContentCreate, PoiContentOptions,
     PoiContentPage, PoiContentReview, PoiContentUpdate, PublishedNarration,
 )
-from app.domains.poi.services import PoiAdminService, PoiContentService, PoiService
-from app.domains.poi.tts import FileSystemTtsStorage
+from app.domains.poi.services import (
+    ContentAudioService,
+    PointOfInterestService,
+    PublicPointOfInterestService,
+    PoiContentService,
+)
+from app.domains.poi.providers.tts import FileSystemTtsStorage
 from app.route.dependencies import get_session
 
 
@@ -45,15 +52,18 @@ def get_tts_audio(
     return FileResponse(path, media_type="audio/mpeg", filename=f"{checksum}.mp3")
 
 
-def get_poi_service(
+def get_public_point_of_interest_service(
     session: Annotated[Session, Depends(get_session)],
-) -> PoiService:
-    return PoiService(PoiRepository(session))
+) -> PublicPointOfInterestService:
+    return PublicPointOfInterestService(PoiRepository(session))
 
 
 @router.get("", response_model=PoiPage)
 def list_pois(
-    service: Annotated[PoiService, Depends(get_poi_service)],
+    service: Annotated[
+        PublicPointOfInterestService,
+        Depends(get_public_point_of_interest_service),
+    ],
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PoiPage:
@@ -63,13 +73,19 @@ def list_pois(
 @router.get("/{poi_id}", response_model=PoiRead)
 def get_poi(
     poi_id: Annotated[str, Path(min_length=1, max_length=50)],
-    service: Annotated[PoiService, Depends(get_poi_service)],
+    service: Annotated[
+        PublicPointOfInterestService,
+        Depends(get_public_point_of_interest_service),
+    ],
 ):
     return service.get_poi(poi_id)
 
 
 admin_router = APIRouter(prefix="/admin/pois", tags=["POI Management"])
-Service = Annotated[PoiAdminService, Depends(get_poi_admin_service)]
+Service = Annotated[
+    PointOfInterestService,
+    Depends(get_point_of_interest_service),
+]
 PoiId = Annotated[str, Path(min_length=1, max_length=50)]
 ReadAccess = Annotated[AuthenticatedIdentity, Depends(require_poi_read)]
 CreateAccess = Annotated[AuthenticatedIdentity, Depends(require_poi_create)]
@@ -111,6 +127,30 @@ def get_admin_poi(poi_id: PoiId, identity: ReadAccess, service: Service) -> Admi
         return service.get_poi(poi_id)
 
 
+@admin_router.get(
+    "/{poi_id}/qr-code",
+    response_class=Response,
+    responses={200: {"content": {"image/png": {}}}},
+)
+def get_poi_qr_code(
+    poi_id: PoiId,
+    identity: ReadAccess,
+    service: Service,
+) -> Response:
+    """Tạo ảnh PNG từ payload QR đã được backend gán cho POI."""
+
+    with poi_http_errors():
+        poi = service.get_poi(poi_id)
+        return Response(
+            content=render_qr_png(poi.poi_qr_code),
+            media_type="image/png",
+            headers={
+                "Content-Disposition": f'inline; filename="{poi.id}-qr.png"',
+                "Cache-Control": "private, max-age=3600",
+            },
+        )
+
+
 @admin_router.post("", response_model=AdminPoiRead, status_code=201)
 def create_poi(payload: PoiCreate, identity: CreateAccess, service: Service) -> AdminPoiRead:
     with poi_http_errors():
@@ -138,6 +178,7 @@ def update_status(
 content_router = APIRouter(prefix="/admin/poi-contents", tags=["Narration Content Management"])
 audio_router = APIRouter(prefix="/admin/audios", tags=["Narration Audio Metadata"])
 ContentService = Annotated[PoiContentService, Depends(get_poi_content_service)]
+AudioService = Annotated[ContentAudioService, Depends(get_content_audio_service)]
 ContentId = Annotated[str, Path(min_length=1, max_length=50)]
 FilterId = Annotated[str | None, Query(min_length=1, max_length=50)]
 ContentReadAccess = Annotated[AuthenticatedIdentity, Depends(require_narration_read)]
@@ -215,7 +256,11 @@ def publish_content(content_id: ContentId, identity: ContentPublishAccess, servi
 
 
 @content_router.get("/{content_id}/audio", response_model=AdminContentAudioRead)
-def get_content_audio(content_id: ContentId, identity: ContentReadAccess, service: ContentService) -> AdminContentAudioRead:
+def get_content_audio(
+    content_id: ContentId,
+    identity: ContentReadAccess,
+    service: AudioService,
+) -> AdminContentAudioRead:
     with poi_http_errors():
         return service.get_content_audio(content_id)
 
@@ -223,7 +268,7 @@ def get_content_audio(content_id: ContentId, identity: ContentReadAccess, servic
 @content_router.put("/{content_id}/audio", response_model=AdminContentAudioRead)
 def save_content_audio(
     content_id: ContentId, payload: AudioMetadataWrite,
-    identity: ContentUpdateAccess, service: ContentService,
+    identity: ContentUpdateAccess, service: AudioService,
 ) -> AdminContentAudioRead:
     """Register/replace metadata of an existing asset; this does not upload bytes."""
     with poi_http_errors():
@@ -232,7 +277,7 @@ def save_content_audio(
 
 @audio_router.get("", response_model=ContentAudioPage)
 def list_audios(
-    identity: ContentReadAccess, service: ContentService,
+    identity: ContentReadAccess, service: AudioService,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     poi_id: FilterId = None, language_id: FilterId = None,
@@ -247,7 +292,11 @@ def list_audios(
 
 
 @audio_router.get("/{audio_id}", response_model=AdminContentAudioRead)
-def get_audio(audio_id: ContentId, identity: ContentReadAccess, service: ContentService) -> AdminContentAudioRead:
+def get_audio(
+    audio_id: ContentId,
+    identity: ContentReadAccess,
+    service: AudioService,
+) -> AdminContentAudioRead:
     with poi_http_errors():
         return service.get_audio(audio_id)
 

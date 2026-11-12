@@ -2,6 +2,7 @@
 
 from app.domains.poi.exceptions.exceptions import (
     InvalidPoiFilter,
+    InvalidPoiImage,
     NarrationNotFound,
     PoiConflict,
     PoiNotFound,
@@ -12,6 +13,7 @@ from app.domains.poi.exceptions.exceptions import (
 
 __all__ = [
     "InvalidPoiFilter",
+    "InvalidPoiImage",
     "NarrationNotFound",
     "PoiConflict",
     "PoiNotFound",

@@ -11,23 +11,29 @@ from app.domains.poi.repositories.content_audio import ContentAudioRepository
 from app.domains.poi.repositories.poi_category_mapping import PoiCategoryMappingRepository
 from app.domains.poi.repositories.poi_content import PoiContentRepository
 from app.domains.poi.repositories.point_of_interest import PoiRepository
-from app.domains.poi.services import PoiAdminService, PoiContentService
-from app.domains.poi.tts import FileSystemTtsStorage, GttsSynthesizer
+from app.domains.poi.providers.image_checksum import RemoteImageChecksumProvider
+from app.domains.poi.services import (
+    ContentAudioService,
+    PointOfInterestService,
+    PoiContentService,
+)
+from app.domains.poi.providers.tts import FileSystemTtsStorage, GttsSynthesizer
 from app.core.config import get_settings
 from app.route.dependencies import get_session
 
 
-def get_poi_admin_service(
+def get_point_of_interest_service(
     session: Annotated[Session, Depends(get_session, use_cache=False)],
-) -> PoiAdminService:
+) -> PointOfInterestService:
     # Auth/RBAC has queried its own Session. A separate business Session lets
     # the service begin a write transaction before its first query.
-    return PoiAdminService(
+    return PointOfInterestService(
         session=session, repository=PoiRepository(session),
         mappings=PoiCategoryMappingRepository(session), contents=PoiContentRepository(session),
         audios=ContentAudioRepository(session),
         categories=PoiCategoryRepository(session),
         regions=RegionRepository(session),
+        image_checksums=RemoteImageChecksumProvider(),
     )
 
 
@@ -60,6 +66,17 @@ def get_poi_content_service(
         tts_storage=FileSystemTtsStorage(
             settings.tts_audio_dir, settings.tts_audio_public_base_url,
         ),
+    )
+
+
+def get_content_audio_service(
+    session: Annotated[Session, Depends(get_session, use_cache=False)],
+) -> ContentAudioService:
+    return ContentAudioService(
+        session=session,
+        pois=PoiRepository(session),
+        contents=PoiContentRepository(session),
+        audios=ContentAudioRepository(session),
     )
 
 

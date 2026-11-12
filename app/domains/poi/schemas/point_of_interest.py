@@ -42,7 +42,6 @@ Identifier = Annotated[str, StringConstraints(strip_whitespace=True, min_length=
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Location = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 ImageUrl = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
-Checksum = Annotated[str, StringConstraints(pattern=r"^[0-9a-fA-F]{64}$")]
 Latitude = Annotated[Decimal, Field(ge=-90, le=90, max_digits=9, decimal_places=6, allow_inf_nan=False)]
 Longitude = Annotated[Decimal, Field(ge=-180, le=180, max_digits=9, decimal_places=6, allow_inf_nan=False)]
 Radius = Annotated[Decimal, Field(gt=0, max_digits=8, decimal_places=2, allow_inf_nan=False)]
@@ -69,19 +68,11 @@ class PoiWrite(BaseModel):
             raise ValueError("category_ids must not contain duplicates")
         return value
 
-    @field_validator("image_checksum_sha256", check_fields=False)
-    @classmethod
-    def normalize_checksum(cls, value: str | None) -> str | None:
-        return value.lower() if value is not None else None
-
-
 class PoiCreate(PoiWrite):
     region_id: Identifier
     poi_name: Name
     poi_location: Location
-    poi_qr_code: Name
     poi_image_url: ImageUrl
-    image_checksum_sha256: Checksum | None = None
     latitude: Latitude
     longitude: Longitude
     trigger_radius_meter: Radius
@@ -93,9 +84,7 @@ class PoiUpdate(PoiWrite):
     region_id: Identifier | None = None
     poi_name: Name | None = None
     poi_location: Location | None = None
-    poi_qr_code: Name | None = None
     poi_image_url: ImageUrl | None = None
-    image_checksum_sha256: Checksum | None = None
     latitude: Latitude | None = None
     longitude: Longitude | None = None
     trigger_radius_meter: Radius | None = None
@@ -106,7 +95,7 @@ class PoiUpdate(PoiWrite):
     def require_changes(self) -> "PoiUpdate":
         if not self.model_fields_set:
             raise ValueError("Provide at least one field to update")
-        for name in self.model_fields_set - {"image_checksum_sha256"}:
+        for name in self.model_fields_set:
             if getattr(self, name) is None:
                 raise ValueError(f"{name} must not be null")
         return self
@@ -123,6 +112,7 @@ class AdminPoiRead(PoiRead):
     last_updated_by: str
     category_ids: list[str] = Field(default_factory=list)
     can_activate: bool = False
+    qr_code_url: str
 
 
 class AdminPoiPage(BaseModel):

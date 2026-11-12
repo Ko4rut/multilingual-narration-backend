@@ -17,13 +17,17 @@ routers/poi.py             Endpoint public và quản trị, request/response sc
 routers/dependencies.py    Inject Session/service, dùng xác thực Identity hiện có
 routers/http.py            Ánh xạ lỗi nghiệp vụ sang HTTP
 schemas/point_of_interest.py DTO đọc public, tạo, sửa, trạng thái và đọc quản trị
-services/poi.py            PoiService: đọc POI public
-services/poi_management.py PoiAdminService: quản trị POI, transaction
-services/poi_content.py    PoiContentService: nội dung và audio đi kèm, transaction
+services/point_of_interest.py PublicPointOfInterestService và
+                            PointOfInterestService: POI public/quản trị
+services/poi_content.py    PoiContentService: vòng đời nội dung thuyết minh
+services/content_audio.py  ContentAudioService: metadata audio của content
 repositories/point_of_interest.py   Truy vấn/lưu POI, dùng chung public và quản trị
 repositories/poi_category_mapping.py Đọc và thay toàn bộ category mapping của POI
 repositories/poi_content.py         Truy vấn nội dung thuyết minh và ngôn ngữ
 repositories/content_audio.py       Kiểm tra metadata audio của content
+providers/tts.py          Sinh TTS và lưu file audio cục bộ
+providers/qr_code.py      Sinh payload và render ảnh QR của POI
+providers/image_checksum.py Tải ảnh an toàn và tính checksum SHA-256
 exceptions/               Lỗi nghiệp vụ và public exports của domain
 utils/utils.py            Sinh ID, escape LIKE và đọc tên database constraint
 models/                   ORM POI hiện có
@@ -42,10 +46,12 @@ Các repository chia theo
 bảng như Identity; service phối hợp repository POI với repository Catalog đọc-only
 bằng cùng Session/transaction. Repository mapping không truy vấn trực tiếp bảng
 `poi_category`.
-Schema và router được bổ sung trong các file có sẵn. Service được tách theo
-trách nhiệm: `services/poi.py` giữ `PoiService` đọc public,
-`services/poi_management.py` chứa `PoiAdminService` quản trị địa điểm,
-`services/poi_content.py` chứa `PoiContentService` quản lý nội dung và audio.
+Schema và router được bổ sung trong các file có sẵn. Tên file service bám theo
+repository tương ứng: `point_of_interest.py`, `poi_content.py` và
+`content_audio.py`. File `point_of_interest.py` có hai class để tách API public
+khỏi nghiệp vụ quản trị nhưng vẫn cùng tài nguyên/repository.
+`poi_category_mapping` không có service riêng vì đây là bảng liên kết được điều
+phối trong `PointOfInterestService`, không phải một use case độc lập.
 Các class được export qua `services/__init__.py`. Trong `routers/poi.py`,
 `router` và `admin_router` giữ hai nhóm endpoint với quyền truy cập riêng.
 Mọi endpoint danh sách có `offset/limit` trả cùng cấu trúc
@@ -61,6 +67,7 @@ Prefix: `/api/v1/admin/pois`.
 | GET | `/api/v1/admin/pois` | read | 200, danh sách phân trang |
 | GET | `/api/v1/admin/pois/options` | read | 200, region/category cho form |
 | GET | `/api/v1/admin/pois/{id}` | read | 200, chi tiết |
+| GET | `/api/v1/admin/pois/{id}/qr-code` | read | 200, ảnh QR PNG |
 | POST | `/api/v1/admin/pois` | create | 201, POI vừa tạo |
 | PATCH | `/api/v1/admin/pois/{id}` | update | 200, POI sau cập nhật |
 | PATCH | `/api/v1/admin/pois/{id}/status` | update | 200, POI sau đổi trạng thái |
@@ -100,7 +107,6 @@ trong Catalog, không tạo hoặc sửa các bản ghi này.
   "region_id": "<ID region thật từ options>",
   "poi_name": "Bảo tàng",
   "poi_location": "Địa chỉ duy nhất của địa điểm",
-  "poi_qr_code": "museum-example",
   "poi_image_url": "https://assets.example/poi/image.webp",
   "latitude": "10.776900",
   "longitude": "106.700900",
@@ -110,19 +116,25 @@ trong Catalog, không tạo hoặc sửa các bản ghi này.
 ```
 
 - Sinh ID `poi-ddmmyy-xxxxxxxx`, timestamp UTC và người thao tác ở backend.
+- Backend tự gán `poi_qr_code = mnr://pois/{poi_id}`; client không gửi hoặc sửa
+  trường này. Response quản trị trả `qr_code_url` để tải ảnh PNG tại
+  `GET /api/v1/admin/pois/{poi_id}/qr-code`. Ảnh được render bằng thư viện
+  Python `qrcode` với Pillow và yêu cầu quyền đọc POI.
 - POI mới luôn INACTIVE. Gửi `poi_status=ACTIVE` khi tạo sẽ nhận 422.
 - Region/category phải tồn tại, category không được trùng, tối đa 100 ID.
-- QR/địa chỉ duy nhất; vĩ độ `[-90,90]`, kinh độ `[-180,180]`, bán kính > 0.
+- Payload QR/địa chỉ duy nhất; vĩ độ `[-90,90]`, kinh độ `[-180,180]`, bán kính > 0.
 - Tọa độ tối đa 6 chữ số thập phân; bán kính tối đa 2, phù hợp cột NUMERIC.
 - Ảnh bắt buộc là URL HTTP(S) không chứa thông tin đăng nhập, tối đa 1000 ký tự.
-  `image_checksum_sha256` tùy chọn, nhận null hoặc 64 ký tự hex.
+  Backend tải tối đa 10 MiB từ địa chỉ mạng công khai, yêu cầu MIME `image/*`
+  và tự tính `image_checksum_sha256`; client không gửi checksum. URL redirect,
+  mạng private/loopback, response rỗng hoặc không phải ảnh đều bị từ chối.
 - Field không khai báo bị từ chối; không nhận `created_by`, timestamp hoặc ID từ web.
 
 ### Sửa và đổi trạng thái
 
-PATCH chỉ cập nhật field được gửi. Không chấp nhận body rỗng; chỉ checksum ảnh
-được nhận null. Không gửi `category_ids` thì giữ mapping; gửi `[]` thì bỏ hết.
-Đổi URL ảnh mà không gửi checksum mới sẽ xóa checksum cũ.
+PATCH chỉ cập nhật field được gửi và không chấp nhận body rỗng. Client không gửi
+checksum ảnh. Không gửi `category_ids` thì giữ mapping; gửi `[]` thì bỏ hết.
+Khi gửi URL ảnh trong PATCH, backend tải lại ảnh và tự cập nhật checksum mới.
 
 Có thể đổi trạng thái trong PATCH chung hoặc endpoint `/status`:
 
@@ -172,7 +184,9 @@ liệu hợp lệ rồi chạy lại; migration không tự tạo URL giả ho�
 
 Checksum audio dùng để kiểm tra toàn vẹn và tái sử dụng asset, không phải khóa định
 danh nên có thể trùng giữa nhiều content. Quan hệ một audio cho mỗi content vẫn
-được bảo đảm bởi UNIQUE `poi_content_id`.
+được bảo đảm bởi UNIQUE `poi_content_id`. URL và checksum của một audio đã lưu là
+bất biến; thay asset cần một quy trình upload/import có xác minh riêng thay vì sửa
+URL trong màn hình metadata.
 
 ## Phần phối hợp sau này
 

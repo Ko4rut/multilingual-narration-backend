@@ -26,8 +26,7 @@ class ManagerUserRepository:
         search: str | None = None,
         user_status: ManagerUserStatus | None = None,
     ) -> list[ManagerUserModel]:
-        """Lấy danh sách tài khoản theo tìm kiếm, trạng thái và phân trang."""
-
+        # Lấy danh sách tài khoản theo tìm kiếm, trạng thái và phân trang.
         filters = self._get_filters(search=search, user_status=user_status)
         statement = select(ManagerUserModel).where(*filters)
         statement = (
@@ -46,7 +45,7 @@ class ManagerUserRepository:
         search: str | None = None,
         user_status: ManagerUserStatus | None = None,
     ) -> int:
-        """Đếm tài khoản theo cùng bộ lọc của ``get_all``."""
+        # Đếm tài khoản theo cùng bộ lọc của ``get_all``.
         filters = self._get_filters(search=search, user_status=user_status)
         return self.session.scalar(
             select(func.count()).select_from(ManagerUserModel).where(*filters)
@@ -58,7 +57,7 @@ class ManagerUserRepository:
         search: str | None,
         user_status: ManagerUserStatus | None,
     ) -> list[ColumnElement[bool]]:
-        """Tạo bộ lọc dùng chung cho danh sách và tổng số tài khoản."""
+        # Tạo bộ lọc dùng chung cho danh sách và tổng số tài khoản.
         filters: list[ColumnElement[bool]] = []
         if search is not None:
             # Escape wildcard để '%' và '_' trong từ khóa được tìm như ký tự
