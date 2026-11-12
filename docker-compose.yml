@@ -20,6 +20,8 @@ x-backend: &backend
     OFFLINE_MANIFEST_DIR: /var/lib/mnr/offline-manifests
     TTS_AUDIO_DIR: /app/assets/audio/tts
     TTS_AUDIO_PUBLIC_BASE_URL: ${TTS_AUDIO_PUBLIC_BASE_URL:-http://localhost:8000/api/v1/assets/audio}
+    POI_IMAGE_DIR: /app/assets/images/pois
+    POI_IMAGE_PUBLIC_BASE_URL: ${POI_IMAGE_PUBLIC_BASE_URL:-http://localhost:8000/api/v1/assets/images/pois}
 
 services:
   postgres:
@@ -71,6 +73,7 @@ services:
     volumes:
       - offline-manifests:/var/lib/mnr/offline-manifests
       - tts-audio:/app/assets/audio/tts
+      - poi-images:/app/assets/images/pois
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
@@ -94,3 +97,4 @@ volumes:
   postgres-data:
   offline-manifests:
   tts-audio:
+  poi-images:

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
@@ -9,7 +9,8 @@ from app.domains.poi.repositories.point_of_interest import PoiRepository
 from app.domains.poi.providers.qr_code import render_qr_png
 from app.domains.poi.routers.dependencies import (
     get_content_audio_service, get_point_of_interest_service,
-    get_tts_storage, require_poi_create,
+    get_tts_storage, get_poi_image_storage, require_poi_create,
+    require_poi_image_upload,
     require_poi_read, require_poi_update,
     get_poi_content_service, require_narration_read, require_narration_create,
     require_narration_update, require_narration_approve,
@@ -18,7 +19,7 @@ from app.domains.poi.routers.dependencies import (
 from app.domains.poi.routers.http import poi_http_errors
 from app.domains.poi.schemas.point_of_interest import (
     AdminPoiPage, AdminPoiRead, PoiCreate, PoiFormOptions, PoiRead,
-    PoiPage, PoiStatus, PoiStatusUpdate, PoiUpdate,
+    PoiImageUploadRead, PoiPage, PoiStatus, PoiStatusUpdate, PoiUpdate,
 )
 from app.domains.poi.schemas.content_audio import (
     AdminContentAudioRead, AudioMetadataWrite, AudioSource, ContentAudioPage,
@@ -35,11 +36,15 @@ from app.domains.poi.services import (
     PoiContentService,
 )
 from app.domains.poi.providers.tts import FileSystemTtsStorage
+from app.domains.poi.providers.poi_image import FileSystemPoiImageStorage
 from app.route.dependencies import get_session
 
 
 router = APIRouter(prefix="/pois")
 asset_router = APIRouter(prefix="/assets/audio", tags=["Content Audio (Public)"])
+image_asset_router = APIRouter(
+    prefix="/assets/images/pois", tags=["Point Of Interest (Public)"]
+)
 
 
 @asset_router.get(
@@ -55,6 +60,17 @@ def get_tts_audio(
     if path is None:
         raise HTTPException(status_code=404, detail="Audio asset not found")
     return FileResponse(path, media_type="audio/mpeg", filename=f"{checksum}.mp3")
+
+
+@image_asset_router.get("/{filename}", response_class=FileResponse)
+def get_poi_image(
+    filename: str,
+    storage: Annotated[FileSystemPoiImageStorage, Depends(get_poi_image_storage)],
+) -> FileResponse:
+    path = storage.get_path(filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail="POI image not found")
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 def get_public_point_of_interest_service(
@@ -116,6 +132,9 @@ PoiId = Annotated[str, Path(min_length=1, max_length=50)]
 ReadAccess = Annotated[AuthenticatedIdentity, Depends(require_poi_read)]
 CreateAccess = Annotated[AuthenticatedIdentity, Depends(require_poi_create)]
 UpdateAccess = Annotated[AuthenticatedIdentity, Depends(require_poi_update)]
+ImageUploadAccess = Annotated[
+    AuthenticatedIdentity, Depends(require_poi_image_upload)
+]
 
 
 @admin_router.get(
@@ -146,6 +165,31 @@ def list_admin_pois(
 def get_options(identity: ReadAccess, service: Service) -> PoiFormOptions:
     """Read region/category data for the existing POI form."""
     return service.get_options()
+
+
+@admin_router.post(
+    "/images",
+    response_model=PoiImageUploadRead,
+    status_code=201,
+    summary="Upload a POI image",
+)
+def upload_poi_image(
+    identity: ImageUploadAccess,
+    image: Annotated[UploadFile, File(description="JPEG, PNG or WebP; maximum 10 MiB")],
+    storage: Annotated[FileSystemPoiImageStorage, Depends(get_poi_image_storage)],
+) -> PoiImageUploadRead:
+    """Kiểm tra và lưu ảnh trước khi tạo hoặc cập nhật POI."""
+    try:
+        with poi_http_errors():
+            stored = storage.save(image.file, image.content_type)
+            return PoiImageUploadRead(
+                url=stored.url,
+                checksum_sha256=stored.checksum_sha256,
+                size=stored.size,
+                mime_type=stored.mime_type,
+            )
+    finally:
+        image.file.close()
 
 
 @admin_router.get(

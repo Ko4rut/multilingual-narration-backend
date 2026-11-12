@@ -211,6 +211,17 @@ trong Catalog, không tạo hoặc sửa các bản ghi này.
 
 ### Tạo POI
 
+Giao diện quản trị tải ảnh lên trước bằng multipart:
+
+```http
+POST /api/v1/admin/pois/images
+Content-Type: multipart/form-data
+```
+
+Field `image` chấp nhận JPEG, PNG hoặc WebP tối đa 10 MiB. Backend kiểm tra MIME
+và chữ ký file, lưu theo checksum rồi trả `url`, `checksum_sha256`, `size` và
+`mime_type`. URL trả về được dùng làm `poi_image_url` trong request tạo/sửa POI.
+
 ```json
 {
   "region_id": "<ID region thật từ options>",
@@ -234,6 +245,7 @@ trong Catalog, không tạo hoặc sửa các bản ghi này.
 - Payload QR/địa chỉ duy nhất; vĩ độ `[-90,90]`, kinh độ `[-180,180]`, bán kính > 0.
 - Tọa độ tối đa 6 chữ số thập phân; bán kính tối đa 2, phù hợp cột NUMERIC.
 - Ảnh bắt buộc là URL HTTP(S) không chứa thông tin đăng nhập, tối đa 1000 ký tự.
+  URL ảnh do endpoint upload phát hành được xác minh trực tiếp từ storage nội bộ.
   Backend tải tối đa 10 MiB từ địa chỉ mạng công khai, yêu cầu MIME `image/*`
   và tự tính `image_checksum_sha256`; client không gửi checksum. URL redirect,
   mạng private/loopback, response rỗng hoặc không phải ảnh đều bị từ chối.

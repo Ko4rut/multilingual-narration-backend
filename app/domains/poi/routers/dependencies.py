@@ -11,7 +11,8 @@ from app.domains.poi.repositories.content_audio import ContentAudioRepository
 from app.domains.poi.repositories.poi_category_mapping import PoiCategoryMappingRepository
 from app.domains.poi.repositories.poi_content import PoiContentRepository
 from app.domains.poi.repositories.point_of_interest import PoiRepository
-from app.domains.poi.providers.image_checksum import RemoteImageChecksumProvider
+from app.domains.poi.providers.image_checksum import PoiImageChecksumProvider
+from app.domains.poi.providers.poi_image import FileSystemPoiImageStorage
 from app.domains.poi.providers.audio_asset import RemoteAudioAssetProvider
 from app.domains.poi.services import (
     ContentAudioService,
@@ -34,7 +35,7 @@ def get_point_of_interest_service(
         audios=ContentAudioRepository(session),
         category_repository=PoiCategoryRepository(session),
         region_repository=RegionRepository(session),
-        image_checksums=RemoteImageChecksumProvider(),
+        image_checksums=PoiImageChecksumProvider(get_poi_image_storage()),
     )
 
 
@@ -54,6 +55,33 @@ def require_poi_management(action_name: str):
 require_poi_read = require_poi_management("read")
 require_poi_create = require_poi_management("create")
 require_poi_update = require_poi_management("update")
+
+
+def require_poi_image_upload(
+    identity: Annotated[AuthenticatedIdentity, Depends(get_current_identity)],
+    authentication: Annotated[AuthenticationService, Depends(get_authentication_service)],
+) -> AuthenticatedIdentity:
+    """Cho phép người có quyền tạo hoặc cập nhật POI tải ảnh lên."""
+    can_create = authentication.has_permission(
+        identity.manager_user.id,
+        function_name="POI Management",
+        action_name="create",
+    )
+    can_update = authentication.has_permission(
+        identity.manager_user.id,
+        function_name="POI Management",
+        action_name="update",
+    )
+    if not can_create and not can_update:
+        raise HTTPException(status_code=403, detail="Insufficient permission")
+    return identity
+
+
+def get_poi_image_storage() -> FileSystemPoiImageStorage:
+    settings = get_settings()
+    return FileSystemPoiImageStorage(
+        settings.poi_image_dir, settings.poi_image_public_base_url,
+    )
 
 
 def get_poi_content_service(

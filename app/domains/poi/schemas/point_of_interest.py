@@ -125,3 +125,10 @@ class AdminPoiPage(BaseModel):
 class PoiFormOptions(BaseModel):
     regions: list[RegionRead]
     categories: list[PoiCategoryRead]
+
+
+class PoiImageUploadRead(BaseModel):
+    url: str
+    checksum_sha256: str
+    size: int
+    mime_type: str

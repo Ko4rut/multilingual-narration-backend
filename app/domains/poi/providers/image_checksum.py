@@ -11,10 +11,29 @@ from urllib.parse import urlsplit
 import httpx
 
 from app.domains.poi.exceptions import InvalidPoiImage
+from app.domains.poi.providers.poi_image import FileSystemPoiImageStorage
 
 
 # Giới hạn dung lượng giúp tránh tải ảnh quá lớn vào hạ tầng backend.
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+class PoiImageChecksumProvider:
+    """Đọc checksum ảnh nội bộ hoặc xác minh ảnh URL bên ngoài."""
+
+    def __init__(
+        self,
+        storage: FileSystemPoiImageStorage,
+        remote: "RemoteImageChecksumProvider | None" = None,
+    ) -> None:
+        self.storage = storage
+        self.remote = remote or RemoteImageChecksumProvider()
+
+    def calculate(self, url: str) -> str:
+        managed_checksum = self.storage.get_checksum(url)
+        if managed_checksum is not None:
+            return managed_checksum
+        return self.remote.calculate(url)
 
 
 class RemoteImageChecksumProvider:
