@@ -317,8 +317,8 @@ Mỗi POI bao gồm thông tin vị trí địa lý, hình ảnh, mã QR và bá
 | id                    | varchar   | No       | Mã định danh duy nhất của POI trong hệ thống, định dạng: `poi-ddmmyy-xxxxxxxx`.                  |
 | region_id             | varchar   | No       | Khu vực mà POI thuộc về.                                                                         |
 | poi_image_url         | varchar   | No       | Đường dẫn đến hình ảnh đại diện của POI.                                                         |
-| image_checksum_sha256 | varchar   | Yes      | Checksum SHA-256 của hình ảnh, giúp ứng dụng xác định file ảnh hiện có có cần tải lại hay không. |
-| poi_qr_code           | varchar   | No       | Giá trị hoặc đường dẫn mã QR được sử dụng để nhận diện POI.                                      |
+| image_checksum_sha256 | varchar   | Yes      | Checksum SHA-256 do backend tính từ bytes ảnh, giúp ứng dụng xác định file hiện có có cần tải lại hay không. |
+| poi_qr_code           | varchar   | No       | Deep-link `mnr://pois/{poi_id}` do backend tự sinh để mã hóa thành QR và nhận diện POI.           |
 | poi_name              | varchar   | No       | Tên của địa điểm hoặc điểm tham quan.                                                            |
 | poi_location          | varchar   | No       | Thông tin mô tả vị trí hoặc địa chỉ của POI                                                      |
 | poi_status            | enum      | No       | Xác định POI hiện có được kích hoạt và sử dụng trong hệ thống hay không.                         |
@@ -383,6 +383,10 @@ Mục đích được dùng để:
     - phát hiện file tải xuống bị lỗi hoặc thiếu bytes;
     - kiểm tra tệp image đã có trên thiết bị có đúng với phiên bản server hay không;
     - tránh tải lại cùng một file khi nhiều package cùng tham chiếu đến cùng poi.
+
+Client không nhập trường này. Khi tạo POI hoặc thay đổi `poi_image_url`, backend
+tải nội dung ảnh sau khi chặn địa chỉ private/loopback, kiểm tra MIME và giới hạn
+dung lượng, rồi tính SHA-256 từ bytes thực tế trước khi lưu POI.
 ```
 
 [4.4] Quy tắc đồng bộ metadata POI
