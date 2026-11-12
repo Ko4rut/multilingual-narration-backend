@@ -5,6 +5,7 @@ description = "Database foundation for the Multilingual Automatic Narration Syst
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1.0",
+  "python-multipart>=0.0.20,<1.0",
   "uvicorn>=0.30,<1.0",
   "pydantic-settings>=2.0,<3.0",
 

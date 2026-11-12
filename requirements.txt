@@ -6,6 +6,7 @@ iso639-lang>=2.6,<3.0
 pytest>=8.0,<9.0
 
 fastapi>=0.115,<1.0
+python-multipart>=0.0.20,<1.0
 uvicorn>=0.30,<1.0
 pydantic-settings>=2.0,<3.0
 httpx>=0.27,<1.0

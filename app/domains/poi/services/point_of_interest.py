@@ -11,7 +11,7 @@ from app.domains.poi.exceptions import (
     PoiNotFound,
     PoiReferenceNotFound,
 )
-from app.domains.poi.providers.image_checksum import RemoteImageChecksumProvider
+from app.domains.poi.providers.image_checksum import PoiImageChecksumProvider
 from app.domains.poi.models.point_of_interest import PointOfInterest
 from app.domains.poi.repositories.content_audio import ContentAudioRepository
 from app.domains.poi.repositories.poi_category_mapping import PoiCategoryMappingRepository
@@ -60,7 +60,7 @@ class PointOfInterestService:
         audios: ContentAudioRepository,
         category_repository: PoiCategoryRepository,
         region_repository: RegionRepository,
-        image_checksums: RemoteImageChecksumProvider,
+        image_checksums: PoiImageChecksumProvider,
     ):
         self.session = session
         self.repository = repository
