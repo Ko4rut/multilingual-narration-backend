@@ -72,8 +72,7 @@ package-item uniqueness by content. Migration preserves package/item IDs and
 existing URLs, normalizes legacy keys and status values, and fails if
 duplicate filters or content memberships require manual reconciliation.
 **Previously published manifests using legacy keys/ZIP URLs must be rebuilt
-and verified before being offered to mobile.** Seed URLs under
-`cdn.example.local` remain placeholders, not downloadable assets.
+and verified before being offered to mobile.**
 
 Revision `0007_poi_schema_alignment` adds missing POI/Content/Audio constraints and
 indexes required by the merged POI management models: coordinate/radius and
@@ -173,22 +172,24 @@ Schema changes are applied explicitly with Alembic and are never run at API star
 
 ## Sample data
 
-On a **fresh empty database**, the seed creates 99 records in 12 tables:
+On a **fresh empty database**, the seed creates the following baseline:
 
 - 6 actions (no `generate_audio`), 6 management functions, 22 permissions.
 - 1 `Super Administrator` role initially assigned all 22 permissions.
 - 1 manager account: `admin@mnr.com`. Its bootstrap password is hashed
   with `Argon2PasswordHasher` only on account creation and is never reset
   by a later seed.
-- 5 languages (vi/en/ja/fr/ko), 6 regions and 6 POI categories.
-- 3 INACTIVE POIs: Văn Miếu – Quốc Tử Giám, Tràng An, and Bảo tàng Chứng
-  tích Chiến tranh, each mapped to two appropriate categories.
-- 15 DRAFT narration records (one per POI and language, version 1).
+- 5 languages (vi/en/ja/fr/ko), 16 Ho Chi Minh City urban districts and
+  6 English POI categories.
+- 3 English INACTIVE POIs: Ben Thanh Market, Saigon Central Post Office and
+  War Remnants Museum, each mapped to two appropriate categories.
+- 15 DRAFT narration records in English, Vietnamese, Japanese, French, and
+  Korean (one per language for each POI, version 1).
 - No content audio, login sessions, listening history, offline packages,
   offline package items or audit logs. These records arise from actual use.
 
-POI image URLs at `cdn.example.local` remain placeholders; no image assets
-are included. Audio is created by the existing TTS flow after content approval
+Each POI references a checksum-named JPEG included under `assets/images/pois`;
+its QR payload is `mnr://pois/{poi_id}`. Audio is created by the existing TTS flow after content approval
 and publication, not by the seed. The existing self-review restriction is
 unchanged: an author cannot approve their own narration, including the
 sole admin account. Permission changes made later through the UI are
@@ -196,8 +197,8 @@ preserved on re-seeding because initial grants occur only when creating
 the role.
 
 Re-running seed inserts missing baseline records but does **not** remove
-obsolete demo rows from a pre-existing database. To get the exact 99-record
-baseline, start with a new/empty disposable database.
+obsolete demo rows from a pre-existing database. To get the exact baseline,
+start with a new/empty disposable database.
 
 Run the seed again to verify idempotency:
 
@@ -290,7 +291,7 @@ The backend additionally validates that submitted codes really belong to ISO
 
 POI management endpoints are available under `/api/v1/admin/pois` with
 `POI Management` permissions. They support list/detail, create/update/status,
-vô hiệu hóa bằng trạng thái, và region/category form options. Apply migration
+upload ảnh JPEG/PNG/WebP, vô hiệu hóa bằng trạng thái, và region/category form options. Apply migration
 `0005_poi_management` before administrative writes. Contracts, architecture,
 GROUP 2 compatibility decisions and integration limits are documented in
 [the POI domain guide](app/domains/poi/README.md). Narration version/workflow APIs
@@ -302,6 +303,11 @@ persistent local volume và phục vụ qua `/api/v1/assets/audio`; production o
 storage, offline rebuild và audit integration vẫn còn chờ. Frontend callers phải
 đọc danh sách phân trang từ trường `items` và dùng
 `total` để tính tổng số trang.
+
+Ảnh POI do trang quản trị tải lên qua `POST /api/v1/admin/pois/images`, được đặt
+tên theo SHA-256, lưu trong `POI_IMAGE_DIR` và phục vụ tại
+`/api/v1/assets/images/pois/{filename}`. Docker dùng volume `poi-images`; môi
+trường production nên thay storage cục bộ bằng object storage/CDN.
 
 POI reads return only records with `poi_status = 'active'`. Identity models,
 repositories and management services exist. Passwords are hashed and verified
@@ -343,7 +349,8 @@ to immutable accessible storage, verify their SHA-256, and atomically
 commit URL/checksum/version/membership. Currently the schema does not store
 image sizes, so `total_size` stays NULL rather than claiming an incorrect
 byte count. Rebuilds must stage separately and keep previously published
-packages intact. The seed's `cdn.example.local` URLs are placeholders.
+packages intact. Seed POI images are checksum-named local assets served by
+the public POI image endpoint.
 
 The mobile flow after release will be:
 fetch published package metadata → GET immutable manifest URL → verify
@@ -458,10 +465,9 @@ and rebuilding the API image, open `http://localhost:8000/docs` and expand
 All administrative endpoints require a valid Bearer JWT and matching RBAC
 permission, seeded under `Offline Package Management`. The public endpoints
 never expose BUILDING or FAILED packages. No `publish` API is exposed yet:
-real asset/manifest storage and integrity-verification adapters must be added
-first; client-provided flags must not bypass publication checks. Current
-`cdn.example.local` seed URLs are placeholders and not real downloadable
-assets. The preview endpoint receives exact JSON text rather than a parsed
+real manifest/object storage and integrity-verification adapters must be added
+first; client-provided flags must not bypass publication checks. The preview
+endpoint receives exact JSON text rather than a parsed
 object so its published SHA-256 can be validated against stored bytes.
 
 Run the route tests without touching PostgreSQL:

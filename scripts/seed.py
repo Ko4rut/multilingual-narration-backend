@@ -7,17 +7,20 @@ from decimal import Decimal
 from hashlib import sha256
 from typing import Any
 
-from sqlalchemy import Enum as SqlEnum, inspect, select, text
+from sqlalchemy import Enum as SqlEnum, delete, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.db import session_scope
+from app.core.config import get_settings
 from app.domains.catalog.models.language import LanguageStatus
 from app.domains.identity.security.argon2_password_hasher import Argon2PasswordHasher
+from app.domains.poi.providers.qr_code import create_poi_qr_payload
 from app.models import (
     Action,
     Language,
     ManagementFunction,
     ManagerUser,
+    OfflinePackage,
     Permission,
     PoiCategory,
     PoiCategoryMapping,
@@ -278,93 +281,115 @@ def seed_catalog(session: Session):
     }
 
     region_specs = [
-        ("HAN", "Hà Nội"),
-        ("NBI", "Ninh Bình"),
-        ("HUE", "Thừa Thiên Huế"),
-        ("DAD", "Đà Nẵng"),
-        ("HCM", "Thành phố Hồ Chí Minh"),
-        ("CTO", "Cần Thơ"),
+        ("district-1", "District 1"),
+        ("district-3", "District 3"),
+        ("district-4", "District 4"),
+        ("district-5", "District 5"),
+        ("district-6", "District 6"),
+        ("district-7", "District 7"),
+        ("district-8", "District 8"),
+        ("district-10", "District 10"),
+        ("district-11", "District 11"),
+        ("district-12", "District 12"),
+        ("binh-tan-district", "Binh Tan District"),
+        ("binh-thanh-district", "Binh Thanh District"),
+        ("go-vap-district", "Go Vap District"),
+        ("phu-nhuan-district", "Phu Nhuan District"),
+        ("tan-binh-district", "Tan Binh District"),
+        ("tan-phu-district", "Tan Phu District"),
     ]
-    regions = {
-        code: get_or_create(
+    regions = {}
+    for code, name in region_specs:
+        region = get_or_create(
             session,
             Region,
             {"region_code": code},
             {"region_name": name},
         )
-        for code, name in region_specs
-    }
+        # Catalog seed labels are canonical English demo data.
+        region.region_name = name
+        regions[code] = region
 
     category_specs = [
-        ("HISTORICAL", "Di tích lịch sử"),
-        ("MUSEUM", "Bảo tàng"),
-        ("LANDMARK", "Danh thắng"),
-        ("CULTURAL", "Văn hóa"),
-        ("NATURE", "Thiên nhiên"),
-        ("RELIGIOUS", "Tôn giáo"),
+        ("HISTORICAL", "Historical Site"),
+        ("MUSEUM", "Museum"),
+        ("MARKET", "Market"),
+        ("ARCHITECTURE", "Architecture"),
+        ("CULTURAL", "Cultural Site"),
+        ("RELIGIOUS", "Religious Site"),
     ]
-    categories = {
-        code: get_or_create(
+    categories = {}
+    for code, name in category_specs:
+        category = get_or_create(
             session,
             PoiCategory,
             {"category_code": code},
             {"category_name": name},
         )
-        for code, name in category_specs
-    }
+        category.category_name = name
+        categories[code] = category
     return languages, regions, categories
 
 
 def seed_pois(session: Session, users, regions, categories):
     admin = users["admin@mnr.com"]
-    # Three distinct regions and category combinations for development.
+    image_base_url = get_settings().poi_image_public_base_url.rstrip("/")
     poi_specs = [
         (
-            "HAN-VAN-MIEU",
-            "Văn Miếu - Quốc Tử Giám",
-            "HAN",
-            "58 Quốc Tử Giám, Đống Đa, Hà Nội",
-            "21.029369",
-            "105.835432",
-            "80.00",
-            ["HISTORICAL", "CULTURAL"],
+            "ben-thanh-market",
+            "Ben Thanh Market",
+            "district-1",
+            "Le Loi Street, Ben Thanh Ward, District 1, Ho Chi Minh City",
+            "10.772461",
+            "106.698055",
+            "60.00",
+            ["MARKET", "CULTURAL"],
+            "8b44c8c70e5656f16af3f293b5c9c3e6818261958cc697ec25e21cceebcd3121.jpg",
         ),
         (
-            "NBI-TRANG-AN",
-            "Quần thể danh thắng Tràng An",
-            "NBI",
-            "Tràng An, Hoa Lư, Ninh Bình",
-            "20.250864",
-            "105.911184",
-            "150.00",
-            ["NATURE", "CULTURAL"],
+            "saigon-central-post-office",
+            "Saigon Central Post Office",
+            "district-1",
+            "2 Cong Xa Paris Square, Ben Nghe Ward, District 1, Ho Chi Minh City",
+            "10.779725",
+            "106.699939",
+            "50.00",
+            ["ARCHITECTURE", "HISTORICAL"],
+            "fdd96e601f5817e677df800b3057219dc1b8639d08a138bb966413ced1e92c3b.jpg",
         ),
         (
-            "HCM-WAR-MUSEUM",
-            "Bảo tàng Chứng tích Chiến tranh",
-            "HCM",
-            "28 Võ Văn Tần, Quận 3, Thành phố Hồ Chí Minh",
+            "war-remnants-museum",
+            "War Remnants Museum",
+            "district-3",
+            "28 Vo Van Tan Street, Vo Thi Sau Ward, District 3, Ho Chi Minh City",
             "10.779796",
             "106.692243",
             "75.00",
             ["MUSEUM", "HISTORICAL"],
+            "c3f5f7632a5412accbbe0c1a220d710d1731712bc35021d6caaedcdecea6257c.jpg",
         ),
     ]
 
     pois = {}
     for (
-        code, name, region_code, location, latitude, longitude, radius, category_codes,
+        code, name, region_code, location, latitude, longitude, radius,
+        category_codes, image_filename,
     ) in poi_specs:
-        # Images are placeholders; no image file or checksum is seeded.
-        image_url = f"https://cdn.example.local/pois/{code.lower()}.webp"
+        poi_id = seed_id(
+            PointOfInterest,
+            {"seed_key": code},
+            {"created_at": SEED_TIME},
+        )
+        image_checksum = image_filename.split(".", 1)[0]
         poi = get_or_create(
             session,
             PointOfInterest,
-            {"poi_qr_code": code},
+            {"id": poi_id},
             {
                 "region_id": regions[region_code].id,
-                "poi_image_url": image_url,
-                "image_checksum_sha256": None,
+                "poi_image_url": f"{image_base_url}/{image_filename}",
+                "image_checksum_sha256": image_checksum,
+                "poi_qr_code": create_poi_qr_payload(poi_id),
                 "poi_name": name,
                 "poi_location": location,
                 "poi_status": "INACTIVE",
@@ -377,6 +402,22 @@ def seed_pois(session: Session, users, regions, categories):
                 "last_updated_at": SEED_TIME,
             },
         )
+        poi.region_id = regions[region_code].id
+        poi.poi_image_url = f"{image_base_url}/{image_filename}"
+        poi.image_checksum_sha256 = image_checksum
+        poi.poi_qr_code = create_poi_qr_payload(poi.id)
+        poi.poi_name = name
+        poi.poi_location = location
+        poi.poi_status = "INACTIVE"
+        poi.latitude = Decimal(latitude)
+        poi.longitude = Decimal(longitude)
+        poi.trigger_radius_meter = Decimal(radius)
+        poi.last_updated_by = admin.id
+        poi.last_updated_at = SEED_TIME
+        session.execute(
+            delete(PoiCategoryMapping).where(PoiCategoryMapping.poi_id == poi.id)
+        )
+        session.flush()
         pois[code] = poi
         for category_code in category_codes:
             get_or_create(
@@ -392,40 +433,106 @@ def seed_pois(session: Session, users, regions, categories):
 
 def seed_content(session: Session, users, languages, pois):
     admin = users["admin@mnr.com"]
-    templates = {
-        "vi": (
-            "Khám phá {name}",
-            "{name} là một điểm đến tiêu biểu tại {location}. "
-            "Bản thuyết minh mẫu này cung cấp thông tin khái quát để kiểm thử "
-            "trải nghiệm nghe tại điểm.",
-        ),
-        "en": (
-            "Discover {name}",
-            "{name} is a representative destination at {location}. "
-            "This sample narration provides an overview for testing the "
-            "on-site listening experience.",
-        ),
-        "ja": (
-            "{name}を巡る",
-            "{name}は{location}にある代表的な観光地です。このサンプル音声は現地での再生体験を確認するための概要です。",
-        ),
-        "fr": (
-            "Découvrir {name}",
-            "{name} est un site représentatif situé à {location}. "
-            "Cette narration fournit un aperçu destiné aux tests de "
-            "l'expérience audio sur place.",
-        ),
-        "ko": (
-            "{name} 둘러보기",
-            "{name}은(는) {location}에 있는 대표적인 명소입니다. 이 샘플 해설은 현장 오디오 경험을 테스트하기 위한 개요입니다.",
-        ),
+    content_specs = {
+        "ben-thanh-market": {
+            "en": (
+                "Welcome to Ben Thanh Market",
+                "Ben Thanh Market is one of Ho Chi Minh City's best-known landmarks. "
+                "Opened in 1914, it remains a lively destination for local food, "
+                "handicrafts, textiles, and everyday commerce.",
+            ),
+            "vi": (
+                "Chào mừng đến Chợ Bến Thành",
+                "Chợ Bến Thành là một trong những biểu tượng nổi tiếng của Thành phố "
+                "Hồ Chí Minh. Hoạt động từ năm 1914, chợ là điểm đến sôi động với ẩm "
+                "thực địa phương, hàng thủ công, vải vóc và nhiều mặt hàng thiết yếu.",
+            ),
+            "ja": (
+                "ベンタイン市場へようこそ",
+                "ベンタイン市場はホーチミン市を代表する名所の一つです。1914年に開業し、"
+                "地元の料理や工芸品、織物、日用品が並ぶ活気ある市場として親しまれています。",
+            ),
+            "fr": (
+                "Bienvenue au marché Ben Thanh",
+                "Le marché Ben Thanh est l'un des monuments les plus connus de Hô Chi "
+                "Minh-Ville. Ouvert en 1914, il reste un lieu animé pour la cuisine "
+                "locale, l'artisanat, les textiles et le commerce quotidien.",
+            ),
+            "ko": (
+                "벤탄 시장에 오신 것을 환영합니다",
+                "벤탄 시장은 호찌민시를 대표하는 명소 중 하나입니다. 1914년에 문을 연 뒤 "
+                "현지 음식과 수공예품, 직물, 생활용품을 만날 수 있는 활기찬 시장으로 사랑받고 있습니다.",
+            ),
+        },
+        "saigon-central-post-office": {
+            "en": (
+                "Discover Saigon Central Post Office",
+                "Saigon Central Post Office was built between 1886 and 1891. Its "
+                "arched hall, iron structure, historic maps, and yellow facade make "
+                "it a distinctive landmark that still operates as a post office.",
+            ),
+            "vi": (
+                "Khám phá Bưu điện Trung tâm Sài Gòn",
+                "Bưu điện Trung tâm Sài Gòn được xây dựng từ năm 1886 đến 1891. Mái "
+                "vòm, kết cấu sắt, các bản đồ cổ và mặt tiền màu vàng tạo nên một công "
+                "trình đặc trưng vẫn đang phục vụ người dân đến ngày nay.",
+            ),
+            "ja": (
+                "サイゴン中央郵便局を訪ねて",
+                "サイゴン中央郵便局は1886年から1891年にかけて建設されました。アーチ状の"
+                "ホール、鉄骨構造、歴史的な地図、黄色い外壁が特徴で、現在も郵便局として営業しています。",
+            ),
+            "fr": (
+                "Découvrez la Poste centrale de Saïgon",
+                "La Poste centrale de Saïgon a été construite entre 1886 et 1891. Sa "
+                "halle voûtée, sa structure métallique, ses cartes anciennes et sa "
+                "façade jaune en font un monument qui fonctionne toujours comme poste.",
+            ),
+            "ko": (
+                "사이공 중앙우체국 둘러보기",
+                "사이공 중앙우체국은 1886년부터 1891년 사이에 건축되었습니다. 아치형 홀과 "
+                "철골 구조, 옛 지도, 노란 외관이 특징이며 지금도 우체국으로 운영되고 있습니다.",
+            ),
+        },
+        "war-remnants-museum": {
+            "en": (
+                "Visit the War Remnants Museum",
+                "The War Remnants Museum presents photographs, documents, military "
+                "equipment, and personal accounts related to the wars in Vietnam. It "
+                "invites visitors to reflect on the human impact of war and peace.",
+            ),
+            "vi": (
+                "Tham quan Bảo tàng Chứng tích Chiến tranh",
+                "Bảo tàng Chứng tích Chiến tranh trưng bày hình ảnh, tài liệu, phương "
+                "tiện quân sự và những câu chuyện cá nhân liên quan đến các cuộc chiến "
+                "tại Việt Nam, giúp khách tham quan suy ngẫm về chiến tranh và hòa bình.",
+            ),
+            "ja": (
+                "戦争証跡博物館を訪ねて",
+                "戦争証跡博物館では、ベトナムでの戦争に関する写真、資料、軍用装備、"
+                "個人の証言を展示し、戦争が人々に与えた影響と平和について考える機会を提供しています。",
+            ),
+            "fr": (
+                "Visitez le musée des Vestiges de la guerre",
+                "Le musée présente des photographies, des documents, du matériel "
+                "militaire et des témoignages liés aux guerres au Vietnam. Il invite "
+                "les visiteurs à réfléchir aux conséquences humaines de la guerre.",
+            ),
+            "ko": (
+                "전쟁박물관 방문",
+                "전쟁박물관은 베트남 전쟁과 관련된 사진, 문서, 군사 장비와 개인의 증언을 "
+                "전시하며 전쟁이 사람들에게 남긴 영향과 평화의 의미를 생각하게 합니다.",
+            ),
+        },
     }
 
-    # Exactly one DRAFT content per POI/language; no audio or fake publish data.
-    for index, poi in enumerate(pois.values()):
-        for language_code, language in languages.items():
-            title_template, script_template = templates[language_code]
-            get_or_create(
+    # Mỗi POI có một bản nháp version 1 cho mọi ngôn ngữ được hỗ trợ.
+    for poi_index, (seed_key, poi) in enumerate(pois.items()):
+        for language_index, (language_code, (title, script)) in enumerate(
+            content_specs[seed_key].items()
+        ):
+            language = languages[language_code]
+            content = get_or_create(
                 session,
                 PoiContent,
                 {
@@ -434,19 +541,57 @@ def seed_content(session: Session, users, languages, pois):
                     "content_version": 1,
                 },
                 {
-                    "narration_title": title_template.format(name=poi.poi_name),
-                    "narration_script": script_template.format(
-                        name=poi.poi_name, location=poi.poi_location
-                    ),
+                    "narration_title": title,
+                    "narration_script": script,
                     "content_status": "DRAFT",
                     "created_by": admin.id,
                     "approved_by": None,
                     "published_by": None,
-                    "created_at": SEED_TIME + timedelta(days=index),
+                    "created_at": SEED_TIME + timedelta(
+                        days=poi_index, minutes=language_index
+                    ),
                     "approved_at": None,
                     "published_at": None,
                 },
             )
+            # Không ghi đè nội dung đã đi vào workflow hoặc đã được xuất bản.
+            if content.content_status == "DRAFT":
+                content.narration_title = title
+                content.narration_script = script
+
+
+def remove_unreferenced_legacy_catalog(session: Session) -> None:
+    """Xóa catalog demo cũ chỉ khi không còn bản ghi nghiệp vụ tham chiếu."""
+    for code in ("HAN", "NBI", "HUE", "DAD", "HCM", "CTO"):
+        region = session.scalar(select(Region).where(Region.region_code == code))
+        if region is None:
+            continue
+        has_poi = session.scalar(
+            select(PointOfInterest.id).where(PointOfInterest.region_id == region.id).limit(1)
+        )
+        has_package = session.scalar(
+            select(OfflinePackage.id).where(OfflinePackage.region_id == region.id).limit(1)
+        )
+        if has_poi is None and has_package is None:
+            session.delete(region)
+    for code in ("LANDMARK", "NATURE"):
+        category = session.scalar(
+            select(PoiCategory).where(PoiCategory.category_code == code)
+        )
+        if category is None:
+            continue
+        has_mapping = session.scalar(
+            select(PoiCategoryMapping.poi_id)
+            .where(PoiCategoryMapping.poi_category_id == category.id)
+            .limit(1)
+        )
+        has_package = session.scalar(
+            select(OfflinePackage.id)
+            .where(OfflinePackage.category_id == category.id)
+            .limit(1)
+        )
+        if has_mapping is None and has_package is None:
+            session.delete(category)
 
 
 def run_seed() -> None:
@@ -455,6 +600,7 @@ def run_seed() -> None:
         languages, regions, categories = seed_catalog(session)
         pois = seed_pois(session, users, regions, categories)
         seed_content(session, users, languages, pois)
+        remove_unreferenced_legacy_catalog(session)
 
 
 if __name__ == "__main__":
