@@ -15,6 +15,8 @@ from app import models  # noqa: F401 - register ORM models
 from app.core.config import get_settings
 from app.core.database import get_engine
 from app.domains.offline.models.build_request import OfflineBuildRequest
+from app.domains.offline.services.events import enqueue_offline_build
+from app.domains.poi.models.point_of_interest import PointOfInterest
 from app.domains.offline.services.build import OfflinePackageBuildService
 from app.domains.offline.storage.manifest import FileSystemManifestStorage
 
@@ -72,6 +74,31 @@ def process_next(session_factory, builder: OfflinePackageBuildService) -> bool:
     return True
 
 
+def enqueue_bootstrap_regions(session_factory) -> None:
+    """Reconcile ACTIVE POIs that predate deployment of the event hooks.
+
+    Re-enqueueing an unchanged published region is harmless: manifest diff
+    prevents a version bump. This also recovers a missing package for an
+    already populated region after a worker restart.
+    """
+    with session_factory() as session:
+        with session.begin():
+            regions = session.scalars(
+                select(PointOfInterest.region_id)
+                .where(PointOfInterest.poi_status == "ACTIVE").distinct()
+            ).all()
+            for region_id in regions:
+                pending = session.scalar(
+                    select(OfflineBuildRequest.id).where(
+                        OfflineBuildRequest.region_id == region_id,
+                        OfflineBuildRequest.language_id.is_(None),
+                        OfflineBuildRequest.status.in_(("PENDING", "RUNNING")),
+                    ).limit(1)
+                )
+                if pending is None:
+                    enqueue_offline_build(session, region_id=region_id)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     settings = get_settings()
@@ -81,6 +108,7 @@ def main() -> None:
         manifest_storage=FileSystemManifestStorage(settings.offline_manifest_dir),
         settings=settings,
     )
+    enqueue_bootstrap_regions(factory)
     logger.info("Offline auto-build worker started")
     while True:
         try:

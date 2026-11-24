@@ -56,7 +56,7 @@ Admin read-only lists and optional rebuild preview remain.
 Remote asset URLs must stay reachable; byte-level checks can require network
 traffic. Configure public HTTPS URLs and shared persistent storage for the API
 and worker. If source data changes during a build, the service refuses to
-publish a stale snapshot and the queued follow-up request can retry. Existing
-catalog data created before this feature needs a one-time event/backfill or a
-POI update before a package is built. Database migrations and runtime tests
+publish a stale snapshot and the queued follow-up request can retry. On startup the worker queues each region with ACTIVE POIs, allowing existing
+catalog data to be reconciled automatically; unchanged releases do not gain a
+version. Database migrations and runtime tests
 must be exercised against PostgreSQL and real storage before production use.

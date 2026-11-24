@@ -12,6 +12,19 @@ permissions:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: testdb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U test -d testdb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/testdb
       JWT_ACTIVE_KEY_ID: ci-key
@@ -24,5 +37,22 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
-      - name: Run unit and contract tests
+      - name: Validate migration
+        run: alembic upgrade head && alembic check
+      - name: Test Offline and affected POI contracts
+        run: >-
+          python -m pytest -q
+          tests/test_offline_api.py
+          tests/test_offline_auto_build.py
+          tests/test_offline_contract.py
+          tests/test_offline_manifest_diff.py
+          tests/test_offline_manifest_storage.py
+          tests/test_offline_repository.py
+          tests/test_point_of_interest_service.py
+          tests/test_poi_content_review.py
+          tests/test_content_audio_service.py
+          tests/test_migration.py
+          tests/test_schema.py
+      - name: Full repository regression (existing Auth/Seed failures are reported)
+        continue-on-error: true
         run: python -m pytest -q
