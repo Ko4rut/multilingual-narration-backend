@@ -127,6 +127,14 @@ EXPECTED_COLUMNS = {
         "last_updated_at",
         "published_at",
     },
+    "offline_build_request": {
+        "id", "region_id", "language_id", "status", "attempts",
+        "next_attempt_at", "claimed_at", "last_error", "created_at",
+    },
+    "offline_package_release": {
+        "package_id", "package_version", "manifest_url",
+        "manifest_sha256", "published_at",
+    },
     "offline_package_item": {
         "id",
         "package_id",

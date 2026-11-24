@@ -137,7 +137,7 @@ def test_no_manual_prepare_endpoint(setup):
     assert client.post(
         "/api/v1/admin/offline/packages/prepare",
         json={"region_id": "region-1", "language_id": "lang-vi"},
-    ).status_code == 404
+    ).status_code == 405  # GET /{package_id} exists, but POST is not permitted.
 
 
 def test_download_published_manifest_is_guarded_by_release_index(setup, tmp_path):
