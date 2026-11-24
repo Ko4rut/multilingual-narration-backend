@@ -67,6 +67,19 @@ services:
         condition: service_healthy
     restart: "no"
 
+  offline-worker:
+    <<: *backend
+    profiles: ["api"]
+    command: ["python", "-m", "scripts.offline_worker"]
+    volumes:
+      - offline-manifests:/var/lib/mnr/offline-manifests
+      - tts-audio:/app/assets/audio/tts
+      - poi-images:/app/assets/images/pois
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   api:
     <<: *backend
     # Optional: use --profile api only when running the API inside Docker.
