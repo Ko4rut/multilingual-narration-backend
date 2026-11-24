@@ -5,7 +5,6 @@ queries and publications use fresh Sessions, never the originating POI Session.
 """
 
 from datetime import datetime, timezone
-from hashlib import sha256
 from typing import Callable
 
 from sqlalchemy import select

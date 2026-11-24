@@ -94,6 +94,13 @@ def test_migration_chain_tables_and_columns_match_orm(monkeypatch):
     )
     constraint_migration.upgrade()
 
+    offline_migration = load_migration("0011_offline_automatic_build.py")
+    monkeypatch.setattr(offline_migration.op, "create_table", capture_table)
+    monkeypatch.setattr(
+        offline_migration.op, "create_index", lambda *_args, **_kwargs: None,
+    )
+    offline_migration.upgrade()
+
     orm_columns = {
         table_name: set(table.columns.keys())
         for table_name, table in Base.metadata.tables.items()

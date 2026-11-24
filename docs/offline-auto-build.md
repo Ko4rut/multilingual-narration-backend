@@ -25,27 +25,27 @@ are not accessible through the public endpoint.
 
 ## Operation
 
-Run migration \`alembic upgrade head\`, then start API and worker:
+Run migration `alembic upgrade head`, then start API and worker:
 
-\`\`\`bash
+```bash
 docker compose --profile api up --build -d
-\`\`\`
+```
 
-For a locally run API, separately run \`python -m scripts.offline_worker\` with
+For a locally run API, separately run `python -m scripts.offline_worker` with
 the same DATABASE_URL and shared manifest/audio/image directories. The worker
 polls the durable queue every 5 seconds, retries with bounded exponential
 backoff, and reclaims abandoned jobs after 15 minutes.
 
 Set **OFFLINE_MANIFEST_PUBLIC_BASE_URL** to the externally reachable API prefix
-\`https://YOUR_HOST/api/v1/offline/manifests\`. Likewise configure
+`https://YOUR_HOST/api/v1/offline/manifests`. Likewise configure
 TTS_AUDIO_PUBLIC_BASE_URL and POI_IMAGE_PUBLIC_BASE_URL so real mobile devices
 can download assets; localhost only works for same-device development.
 
-Mobile discovery: \`GET /api/v1/offline/packages\`, details:
-\`GET /api/v1/offline/packages/{id}\`.
+Mobile discovery: `GET /api/v1/offline/packages`, details:
+`GET /api/v1/offline/packages/{id}`.
 The package URL points to
-\`GET /api/v1/offline/manifests/{id}/v{version}/{sha256}.json\`.
-Only releases committed in \`offline_package_release\` are served; previous
+`GET /api/v1/offline/manifests/{id}/v{version}/{sha256}.json`.
+Only releases committed in `offline_package_release` are served; previous
 verified versions remain addressable after rebuild.
 
 There is no Admin POST /prepare or POST /publish: package creation is internal.
