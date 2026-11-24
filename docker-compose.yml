@@ -18,6 +18,7 @@ x-backend: &backend
     AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
     AUTH_COOKIE_SAMESITE: ${AUTH_COOKIE_SAMESITE:-strict}
     OFFLINE_MANIFEST_DIR: /var/lib/mnr/offline-manifests
+    OFFLINE_MANIFEST_PUBLIC_BASE_URL: ${OFFLINE_MANIFEST_PUBLIC_BASE_URL:-http://localhost:8000/api/v1/offline/manifests}
     TTS_AUDIO_DIR: /app/assets/audio/tts
     TTS_AUDIO_PUBLIC_BASE_URL: ${TTS_AUDIO_PUBLIC_BASE_URL:-http://localhost:8000/api/v1/assets/audio}
     POI_IMAGE_DIR: /app/assets/images/pois

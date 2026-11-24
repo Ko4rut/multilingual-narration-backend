@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy.exc import IntegrityError
 
 from app.domains.identity.services.authentication import AuthenticatedIdentity
@@ -22,6 +23,9 @@ from app.domains.offline.schemas.offline_api import (
 )
 from app.domains.offline.schemas.offline_package import OfflinePackagePage, OfflinePackageRead
 from app.domains.offline.schemas.offline_package_item import OfflinePackageItemRead
+from app.domains.offline.models.offline_package import OfflinePackageStatus
+from app.domains.offline.models.package_release import OfflinePackageRelease
+from app.domains.offline.storage.manifest import ManifestStorageNotFound, ManifestStorageCorrupt
 from app.domains.offline.services.offline import (
     OfflinePackageNotFound, OfflinePackagePreparationError, OfflinePackageService,
 )
@@ -78,6 +82,39 @@ def list_published_packages(
 def get_published_package(package_id: PackageId, service: OfflineService):
     with offline_http_errors():
         return service.get_published_package(package_id)
+
+
+@router.get(
+    "/manifests/{package_id}/v{version}/{checksum}.json",
+    response_class=FileResponse,
+    summary="Download an immutable published package manifest",
+)
+def download_published_manifest(
+    package_id: PackageId,
+    version: Annotated[int, Path(ge=1)],
+    checksum: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$")],
+    service: OfflineService,
+) -> FileResponse:
+    """The release index gates access; staging and failed attempts are private."""
+    with service.session.begin():
+        package = service.packages.get_by_id(package_id)
+        release = service.session.get(OfflinePackageRelease, (package_id, version))
+        if (
+            package is None or package.package_status is not OfflinePackageStatus.PUBLISHED
+            or version > package.package_version or release is None
+            or release.manifest_sha256 != checksum
+        ):
+            raise HTTPException(404, "Published manifest not found")
+    if service.manifest_storage is None:
+        raise HTTPException(503, "Manifest storage unavailable")
+    try:
+        service.manifest_storage.read_published(package_id, version, checksum)
+    except (ManifestStorageNotFound, ManifestStorageCorrupt) as exc:
+        raise HTTPException(503, "Published manifest unavailable") from exc
+    return FileResponse(
+        service.manifest_storage.published_path(package_id, version, checksum),
+        media_type="application/json",
+    )
 
 
 @admin_router.get("", response_model=OfflinePackagePage,

@@ -14,6 +14,7 @@ from app.domains.catalog.models.poi_category import PoiCategory
 from app.domains.catalog.models.region import Region
 from app.domains.offline.models.offline_package import OfflinePackage, OfflinePackageStatus
 from app.domains.offline.models.offline_package_item import OfflinePackageItem
+from app.domains.offline.models.package_release import OfflinePackageRelease
 from app.domains.offline.repositories.offline_package import OfflinePackageRepository
 from app.domains.offline.repositories.offline_package_item import OfflinePackageItemRepository
 from app.domains.offline.schemas.offline_package import OfflinePackagePage
@@ -140,6 +141,83 @@ class OfflinePackageService:
             if self.manifest_storage is not None:
                 self.manifest_storage.save_staged(package.id, package.package_version, manifest)
         return package, manifest
+
+    def publish_initial_package(
+        self, *, package_id: str, manifest: bytes, manifest_url: str,
+        verify_manifest: Callable[[str, bytes], bool],
+        verify_asset: Callable[[AssetDownload], bool],
+    ) -> OfflinePackage:
+        """Publish a first verified snapshot, including retries of FAILED builds.
+
+        Actual bytes are checked before acquiring the package lock. The complete
+        source snapshot is regenerated under lock to reject stale build results.
+        """
+        parsed = load_manifest(manifest)
+        url = urlsplit(manifest_url)
+        if url.scheme not in {"https", "http"} or not url.hostname or url.username or url.password:
+            raise OfflinePackagePreparationError("Manifest URL must be HTTP(S) without credentials")
+        if parsed["package_version"] != 1:
+            raise OfflinePackagePreparationError("Initial package must have version 1")
+        for asset in manifest_assets(parsed):
+            if asset.sha256 is None or len(asset.sha256) != 64 or not verify_asset(asset):
+                raise OfflinePackagePreparationError(f"Asset verification failed: {asset.kind}")
+        if not verify_manifest(manifest_url, manifest):
+            raise OfflinePackagePreparationError("Published manifest verification failed")
+
+        with self.session.begin():
+            package = self.packages.get_by_id(package_id, for_update=True)
+            if package is None or package.package_status not in (
+                OfflinePackageStatus.BUILDING, OfflinePackageStatus.FAILED,
+            ) or package.package_version != 1:
+                raise OfflinePackagePreparationError("Package is not awaiting initial publication")
+            if parsed["package_key"] != package.package_key or parsed["schema_version"] != package.schema_version:
+                raise OfflinePackagePreparationError("Manifest does not belong to package")
+            region = self.session.get(Region, package.region_id)
+            language = self.session.get(Language, package.language_id)
+            category = self.session.get(PoiCategory, package.category_id) if package.category_id else None
+            if region is None or language is None or (package.category_id and category is None):
+                raise OfflinePackagePreparationError("Invalid package filters")
+            if language.language_status is not LanguageStatus.SUPPORTED:
+                raise OfflinePackagePreparationError("Language must be SUPPORTED")
+            candidates = self.items.select_candidates(
+                region_id=package.region_id, language_id=package.language_id,
+                category_id=package.category_id,
+            )
+            if not candidates:
+                raise OfflinePackagePreparationError("No eligible content for initial package")
+            timestamp = datetime.fromisoformat(parsed["generated_at"].replace("Z", "+00:00"))
+            current = manifest_bytes(
+                package_key=package.package_key, package_version=1,
+                region_code=region.region_code, language_code=language.language_code,
+                category_code=category.category_code if category else None,
+                candidates=candidates, generated_at=timestamp,
+            )
+            if current != manifest:
+                raise OfflinePackagePreparationError("Source changed; retry initial build")
+            now = datetime.now(timezone.utc)
+            self.items.sync_membership(package_id=package.id, candidates=candidates, updated_at=now)
+            package.package_url = manifest_url
+            package.package_checksum_sha256 = sha256(manifest).hexdigest()
+            package.package_status = OfflinePackageStatus.PUBLISHED
+            package.total_size = None  # Image sizes are not recorded.
+            package.last_updated_at = now
+            package.published_at = now
+            self.session.add(OfflinePackageRelease(
+                package_id=package.id, package_version=1,
+                manifest_url=manifest_url,
+                manifest_sha256=package.package_checksum_sha256,
+                published_at=now,
+            ))
+            self.session.flush()
+        return package
+
+    def mark_initial_failed(self, package_id: str) -> None:
+        """Track unavailable first builds; never demote an already published package."""
+        with self.session.begin():
+            package = self.packages.get_by_id(package_id, for_update=True)
+            if package is not None and package.package_status is OfflinePackageStatus.BUILDING:
+                package.package_status = OfflinePackageStatus.FAILED
+                package.last_updated_at = datetime.now(timezone.utc)
 
     def plan_rebuild(
         self, *, package_id: str, published_manifest: bytes,
@@ -286,6 +364,11 @@ class OfflinePackageService:
             package.published_at = now
             # Source schema has no image byte size, so exact total is unknown.
             package.total_size = None
+            self.session.add(OfflinePackageRelease(
+                package_id=package.id, package_version=package.package_version,
+                manifest_url=manifest_url, manifest_sha256=package.package_checksum_sha256,
+                published_at=now,
+            ))
             self.session.flush()
         return package
 

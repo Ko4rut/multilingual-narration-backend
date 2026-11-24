@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     database_url: SecretStr
     # Local development storage. Docker overrides this to a named-volume mount.
     offline_manifest_dir: Path = Path(__file__).resolve().parents[2] / "var" / "offline" / "manifests"
+    offline_manifest_public_base_url: str = "http://localhost:8000/api/v1/offline/manifests"
     tts_audio_dir: Path = Path(__file__).resolve().parents[2] / "assets" / "audio" / "tts"
     tts_audio_public_base_url: str = "http://localhost:8000/api/v1/assets/audio"
     poi_image_dir: Path = Path(__file__).resolve().parents[2] / "assets" / "images" / "pois"

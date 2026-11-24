@@ -100,6 +100,63 @@ class FileSystemManifestStorage:
             os.unlink(temp_name)
         return result
 
+    def published_path(self, package_id: str, version: int, checksum: str) -> Path:
+        """Versioned content-addressed path; never reuse a URL for different bytes."""
+        self._path(package_id, version)  # Validate path components.
+        if not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-f]{64}", checksum):
+            raise ValueError("Invalid published manifest checksum")
+        return self.root / "published" / package_id / f"v{version}" / f"{checksum}.json"
+
+    def save_published(self, package_id: str, version: int, payload: bytes) -> StagedManifest:
+        """Store verified bytes immutably BEFORE publishing the database pointer.
+
+        An orphan from a failed DB commit cannot be served: the public router
+        also requires an immutable OfflinePackageRelease row.
+        """
+        document = load_manifest(payload)
+        if document["package_version"] != version:
+            raise InvalidOfflineManifest("Manifest version mismatch")
+        digest = sha256(payload).hexdigest()
+        destination = self.published_path(package_id, version, digest)
+        result = StagedManifest(path=destination, sha256=digest, size=len(payload))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            if destination.read_bytes() != payload:
+                raise ManifestStorageConflict("Published manifest path contains different bytes")
+            return result
+        descriptor, temp_name = tempfile.mkstemp(
+            prefix=".release-", suffix=".tmp", dir=destination.parent,
+        )
+        try:
+            with os.fdopen(descriptor, "wb") as temporary:
+                temporary.write(payload)
+                temporary.flush()
+                os.fsync(temporary.fileno())
+            try:
+                os.link(temp_name, destination)
+            except FileExistsError:
+                if destination.read_bytes() != payload:
+                    raise ManifestStorageConflict("Published manifest path contains different bytes")
+        finally:
+            os.unlink(temp_name)
+        return result
+
+    def read_published(self, package_id: str, version: int, checksum: str) -> bytes:
+        path = self.published_path(package_id, version, checksum)
+        try:
+            payload = path.read_bytes()
+        except FileNotFoundError as exc:
+            raise ManifestStorageNotFound("Published manifest is missing") from exc
+        if sha256(payload).hexdigest() != checksum:
+            raise ManifestStorageCorrupt("Published manifest SHA-256 mismatch")
+        try:
+            document = load_manifest(payload)
+        except InvalidOfflineManifest as exc:
+            raise ManifestStorageCorrupt("Published manifest is invalid") from exc
+        if document["package_version"] != version:
+            raise ManifestStorageCorrupt("Published manifest version mismatch")
+        return payload
+
     def read_staged(
         self, package_id: str, version: int, *, expected_sha256: str | None = None,
     ) -> bytes:
