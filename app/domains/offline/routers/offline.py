@@ -1,24 +1,21 @@
-"""HTTP boundary for public published packages and RBAC-protected admin staging.
+"""Public manifest distribution and read-only package administration.
 
-No publish route is exposed until a real storage uploader/asset verifier exists.
-Preparing a package persists BUILDING metadata and returns a preview only.
+Offline package preparation and publication are internal worker operations;
+no Admin or Mobile POST endpoint creates or publishes packages.
 """
 
-import json
 from contextlib import contextmanager
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import IntegrityError
 
 from app.domains.identity.services.authentication import AuthenticatedIdentity
 from app.domains.offline.routers.dependencies import (
-    get_offline_service, require_offline_create,
-    require_offline_read, require_offline_update,
+    get_offline_service, require_offline_read, require_offline_update,
 )
 from app.domains.offline.schemas.offline_api import (
-    OfflinePackagePreparationRead, OfflinePackagePrepareRequest,
     OfflineRebuildPreviewRead, OfflineRebuildPreviewRequest,
 )
 from app.domains.offline.schemas.offline_package import OfflinePackagePage, OfflinePackageRead
@@ -38,7 +35,6 @@ admin_router = APIRouter(prefix="/admin/offline/packages")
 OfflineService = Annotated[OfflinePackageService, Depends(get_offline_service)]
 PackageId = Annotated[str, Path(min_length=1, max_length=50)]
 ReadAccess = Annotated[AuthenticatedIdentity, Depends(require_offline_read)]
-CreateAccess = Annotated[AuthenticatedIdentity, Depends(require_offline_create)]
 UpdateAccess = Annotated[AuthenticatedIdentity, Depends(require_offline_update)]
 
 
@@ -144,25 +140,6 @@ def get_admin_package_items(
 ):
     with offline_http_errors():
         return service.get_admin_package_items(package_id)
-
-
-@admin_router.post("/prepare", response_model=OfflinePackagePreparationRead,
-                   status_code=status.HTTP_201_CREATED,
-                   summary="Admin: prepare a new BUILDING offline package",
-                   tags=["Offline Package"])
-def prepare_offline_package(
-    payload: OfflinePackagePrepareRequest, identity: CreateAccess, service: OfflineService,
-):
-    """Persist initial package/items; preview JSON is NOT published or uploaded."""
-    with offline_http_errors():
-        package, manifest = service.prepare_initial_package(
-            region_id=payload.region_id, language_id=payload.language_id,
-            category_id=payload.category_id,
-        )
-    return OfflinePackagePreparationRead(
-        package=OfflinePackageRead.model_validate(package),
-        manifest=json.loads(manifest),
-    )
 
 
 @admin_router.post("/{package_id}/rebuild/preview",

@@ -83,7 +83,8 @@ def test_swagger_openapi_exposes_offline_paths(setup):
     assert "/api/v1/admin/offline/packages" in spec["paths"]
     assert "/api/v1/admin/offline/packages/{package_id}" in spec["paths"]
     assert "/api/v1/admin/offline/packages/{package_id}/items" in spec["paths"]
-    assert "/api/v1/admin/offline/packages/prepare" in spec["paths"]
+    assert "/api/v1/admin/offline/packages/prepare" not in spec["paths"]
+    assert "/api/v1/offline/manifests/{package_id}/v{version}/{checksum}.json" in spec["paths"]
     preview = "/api/v1/admin/offline/packages/{package_id}/rebuild/preview"
     assert "post" in spec["paths"][preview]
     assert "/api/v1/admin/offline/packages/{package_id}/publish" not in spec
@@ -131,35 +132,38 @@ def test_admin_package_list_and_items(setup):
     assert client.get("/api/v1/admin/offline/packages/pack-1/items").json() == []
 
 
-def test_prepare_returns_building_metadata_and_preview(setup):
-    client, _, service, _ = setup
-    response = client.post(
-        "/api/v1/admin/offline/packages/prepare",
-        json={"region_id": "region-1", "language_id": "lang-vi"},
-    )
-    assert response.status_code == 201, response.text
-    assert response.json()["package"]["package_status"] == "BUILDING"
-    assert response.json()["package"]["package_url"] is None
-    assert response.json()["manifest"]["items"] == []
-    service.prepare_initial_package.assert_called_once_with(
-        region_id="region-1", language_id="lang-vi", category_id=None,
-    )
-
-
-def test_prepare_duplicate_or_invalid_filters(setup):
-    client, _, service, _ = setup
-    service.prepare_initial_package.side_effect = OfflinePackagePreparationError(
-        "Package already exists"
-    )
-    response = client.post(
-        "/api/v1/admin/offline/packages/prepare",
-        json={"region_id": "region-1", "language_id": "lang-vi"},
-    )
-    assert response.status_code == 409
+def test_no_manual_prepare_endpoint(setup):
+    client, _, _, _ = setup
     assert client.post(
         "/api/v1/admin/offline/packages/prepare",
-        json={"region_id": "", "language_id": "lang-vi"},
-    ).status_code == 422
+        json={"region_id": "region-1", "language_id": "lang-vi"},
+    ).status_code == 404
+
+
+def test_download_published_manifest_is_guarded_by_release_index(setup, tmp_path):
+    import json
+
+    from app.domains.offline.storage.manifest import FileSystemManifestStorage
+
+    client, _, service, _ = setup
+    data = (
+        json.dumps({
+            "schema_version": 1, "package_key": "region:HAN|lang:vi",
+            "package_version": 1, "region_code": "HAN", "language_code": "vi",
+            "category_code": None, "items": [], "generated_at": "2026-11-06T12:00:00Z",
+        }) + "\n"
+    ).encode()
+    storage = FileSystemManifestStorage(tmp_path)
+    released = storage.save_published("pack-1", 1, data)
+    service.manifest_storage = storage
+    service.packages.get_by_id.return_value = package()
+    service.session.get.return_value = SimpleNamespace(manifest_sha256=released.sha256)
+    url = f"/api/v1/offline/manifests/pack-1/v1/{released.sha256}.json"
+    response = client.get(url)
+    assert response.status_code == 200
+    assert response.content == data
+    service.session.get.return_value = None
+    assert client.get(url).status_code == 404
 
 
 def test_rebuild_preview_does_not_publish(setup):
@@ -184,9 +188,5 @@ def test_admin_permission_denied(setup):
     )
     denied = client.get("/api/v1/admin/offline/packages")
     assert denied.status_code == 403
-    assert client.post(
-        "/api/v1/admin/offline/packages/prepare",
-        json={"region_id": "region-1", "language_id": "lang-vi"},
-    ).status_code == 403
     # Public endpoints remain accessible regardless of admin permission.
     assert client.get("/api/v1/offline/packages").status_code == 200
