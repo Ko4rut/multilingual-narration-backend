@@ -13,7 +13,9 @@ from app.domains.identity.models import (
     UserSession,
 )
 from app.domains.listening.models import ListeningHistory
-from app.domains.offline.models import OfflinePackage, OfflinePackageItem
+from app.domains.offline.models import (
+    OfflineBuildRequest, OfflinePackage, OfflinePackageItem, OfflinePackageRelease,
+)
 from app.domains.poi.models import (
     ContentAudio,
     PoiCategoryMapping,
@@ -40,5 +42,7 @@ __all__ = [
     "ListeningHistory",
     "OfflinePackage",
     "OfflinePackageItem",
+    "OfflineBuildRequest",
+    "OfflinePackageRelease",
     "AuditLog",
 ]

@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ResourceNotFound
+from app.domains.offline.services.events import enqueue_offline_build
 from app.domains.catalog.repositories.poi_category import PoiCategoryRepository
 from app.domains.catalog.repositories.region import RegionRepository
 from app.domains.poi.exceptions import (
@@ -153,6 +154,7 @@ class PointOfInterestService:
             with self.session.begin():
                 # Bước 2: Khóa POI để tuần tự hóa các request cập nhật đồng thời.
                 poi = self._require_poi(poi_id, for_update=True)
+                old_region_id, old_status = poi.region_id, poi.poi_status
                 # Bước 3: Tách dữ liệu POI, category và trạng thái từ PATCH.
                 values = payload.model_dump(exclude_unset=True)
                 if image_checksum is not None:
@@ -183,6 +185,14 @@ class PointOfInterestService:
                     # Bước 7: Chỉ cập nhật audit metadata khi dữ liệu thực sự đổi.
                     poi.last_updated_by = actor_id
                     poi.last_updated_at = datetime.now(timezone.utc)
+                if changed and (old_status == "ACTIVE" or poi.poi_status == "ACTIVE"):
+                    affected = set()
+                    if old_status == "ACTIVE":
+                        affected.add(old_region_id)
+                    if poi.poi_status == "ACTIVE":
+                        affected.add(poi.region_id)
+                    for affected_region in sorted(affected):
+                        enqueue_offline_build(self.session, region_id=affected_region)
                 self.session.flush()
                 # Bước 8: Chuẩn bị response; transaction commit khi thoát context.
                 result = self._responses([poi])[0]

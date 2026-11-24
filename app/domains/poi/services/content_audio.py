@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.domains.offline.services.events import enqueue_offline_build
 from app.domains.poi.exceptions import (
     InvalidPoiFilter,
     NarrationNotFound,
@@ -139,6 +140,11 @@ class ContentAudioService:
                 # Bước 6: Flush và bảo vệ điều kiện audio tiếng Anh của POI ACTIVE.
                 self.session.flush()
                 self._ensure_active_english(poi)
+                if poi.poi_status == "ACTIVE" and content.content_status == "PUBLISHED":
+                    enqueue_offline_build(
+                        self.session, region_id=poi.region_id,
+                        language_id=content.language_id,
+                    )
                 # Bước 7: Trả metadata đã xác minh sau khi transaction thành công.
                 result = AdminContentAudioRead.model_validate(audio)
         except IntegrityError as exc:

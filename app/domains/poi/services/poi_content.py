@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.domains.offline.services.events import enqueue_offline_build
 from app.domains.poi.exceptions import (
     InvalidPoiFilter,
     InvalidPoiQrCode,
@@ -119,6 +120,11 @@ class PoiContentService:
                 # Bước 5: Flush và bảo vệ điều kiện của POI đang ACTIVE.
                 self.session.flush()
                 self._ensure_active_english(poi)
+                if poi.poi_status == "ACTIVE":
+                    enqueue_offline_build(
+                        self.session, region_id=poi.region_id,
+                        language_id=content.language_id,
+                    )
                 result = self._content_responses([content])[0]
         except IntegrityError as exc:
             self._translate_integrity_error(exc)
