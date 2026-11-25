@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app app ./app
 COPY --chown=app:app assets ./assets
+# Giữ một bản chỉ đọc bên ngoài mount point. Named volume có sẵn không tự nhận
+# file mới từ image sau khi rebuild, nên API dùng bản này để bổ sung seed assets.
+COPY --chown=app:app assets/images/pois ./seed-assets/poi-images
 COPY --chown=app:app scripts ./scripts
 COPY --chown=app:app alembic.ini ./
 

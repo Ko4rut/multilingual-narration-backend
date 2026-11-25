@@ -70,6 +70,14 @@ services:
     <<: *backend
     # Optional: use --profile api only when running the API inside Docker.
     profiles: ["api"]
+    # Bổ sung ảnh seed còn thiếu vào named volume sau mỗi lần rebuild. Không ghi
+    # đè hoặc xóa ảnh đã được tải lên trong quá trình sử dụng ứng dụng.
+    command:
+      - sh
+      - -ec
+      - |
+        cp --no-clobber /app/seed-assets/poi-images/* /app/assets/images/pois/
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
     volumes:
       - offline-manifests:/var/lib/mnr/offline-manifests
       - tts-audio:/app/assets/audio/tts

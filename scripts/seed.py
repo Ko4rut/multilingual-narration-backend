@@ -368,6 +368,105 @@ def seed_pois(session: Session, users, regions, categories):
             ["MUSEUM", "HISTORICAL"],
             "c3f5f7632a5412accbbe0c1a220d710d1731712bc35021d6caaedcdecea6257c.jpg",
         ),
+        (
+            "reunification-palace",
+            "Reunification Palace",
+            "district-1",
+            "135 Nam Ky Khoi Nghia Street, Ben Thanh Ward, District 1, Ho Chi Minh City",
+            "10.777028",
+            "106.695400",
+            "70.00",
+            ["HISTORICAL", "ARCHITECTURE", "CULTURAL"],
+            "7bb4a76742d6d4445ce9c7cfb456ea4c020f5ca80d57537569f2e27c5fb68e3a.jpg",
+        ),
+        (
+            "notre-dame-cathedral-saigon",
+            "Notre-Dame Cathedral Basilica of Saigon",
+            "district-1",
+            "1 Cong Xa Paris Square, Ben Nghe Ward, District 1, Ho Chi Minh City",
+            "10.779783",
+            "106.699018",
+            "50.00",
+            ["RELIGIOUS", "ARCHITECTURE", "HISTORICAL"],
+            "bf3ad61b5f9c697e6f605a65c660ab69162b2fcdd8c83e0c5eceb62611fd8a25.jpg",
+        ),
+        (
+            "ho-chi-minh-city-museum",
+            "Ho Chi Minh City Museum",
+            "district-1",
+            "65 Ly Tu Trong Street, Ben Nghe Ward, District 1, Ho Chi Minh City",
+            "10.775987",
+            "106.699615",
+            "50.00",
+            ["MUSEUM", "HISTORICAL", "ARCHITECTURE"],
+            "9f321cf6e6e90e6de99441f5c5f741af5ce3ce28475b5a1ace9a2bd7fa39f9bb.jpg",
+        ),
+        (
+            "jade-emperor-pagoda",
+            "Jade Emperor Pagoda",
+            "district-1",
+            "73 Mai Thi Luu Street, Da Kao Ward, District 1, Ho Chi Minh City",
+            "10.791737",
+            "106.697968",
+            "45.00",
+            ["RELIGIOUS", "CULTURAL", "HISTORICAL"],
+            "5bb667c59ba7ed034cf52f5850fe80f0538ca5aff1589512e935e0734810cf5a.jpg",
+        ),
+        (
+            "saigon-opera-house",
+            "Saigon Opera House",
+            "district-1",
+            "7 Lam Son Square, Ben Nghe Ward, District 1, Ho Chi Minh City",
+            "10.776229",
+            "106.703011",
+            "45.00",
+            ["ARCHITECTURE", "CULTURAL", "HISTORICAL"],
+            "62a5b5a5b0bca7e4e77cf4e6e67cba42531be9be8e8e524058e44f5af7ed9c0c.jpg",
+        ),
+        (
+            "nha-rong-wharf",
+            "Nha Rong Wharf",
+            "district-4",
+            "1 Nguyen Tat Thanh Street, Ward 12, District 4, Ho Chi Minh City",
+            "10.768154",
+            "106.706514",
+            "60.00",
+            ["MUSEUM", "HISTORICAL"],
+            "4561d3cf3625edd76ff2f75b377017a2d1b2be2fa182778be061b76e2e09de0f.jpg",
+        ),
+        (
+            "landmark-81",
+            "Landmark 81",
+            "binh-thanh-district",
+            "720A Dien Bien Phu Street, Ward 22, Binh Thanh District, Ho Chi Minh City",
+            "10.794790",
+            "106.721148",
+            "80.00",
+            ["ARCHITECTURE", "CULTURAL"],
+            "81a94ee490c7ee443277bb637da5960a76027df10ad8dcd49953a35490ddd0c4.png",
+        ),
+        (
+            "giac-lam-pagoda",
+            "Giac Lam Pagoda",
+            "tan-binh-district",
+            "565 Lac Long Quan Street, Ward 10, Tan Binh District, Ho Chi Minh City",
+            "10.779444",
+            "106.649167",
+            "55.00",
+            ["RELIGIOUS", "HISTORICAL", "CULTURAL"],
+            "347c54d424e5a8e5c2ca5970044e66949851111982f1e753e0bf432ac3b157f6.jpg",
+        ),
+        (
+            "binh-tay-market",
+            "Binh Tay Market",
+            "district-6",
+            "57A Thap Muoi Street, Ward 2, District 6, Ho Chi Minh City",
+            "10.749444",
+            "106.651497",
+            "65.00",
+            ["MARKET", "CULTURAL", "ARCHITECTURE"],
+            "95883ce621f6a69b92b9ceb00c99e0e38d63e1c94c3495e23ad4b71758ef2014.jpg",
+        ),
     ]
 
     pois = {}
@@ -524,9 +623,83 @@ def seed_content(session: Session, users, languages, pois):
                 "전시하며 전쟁이 사람들에게 남긴 영향과 평화의 의미를 생각하게 합니다.",
             ),
         },
+        "reunification-palace": {
+            "en": (
+                "Explore Reunification Palace",
+                "Reunification Palace is a landmark of modern Vietnamese history. "
+                "Designed by architect Ngo Viet Thu, the building preserves formal "
+                "reception rooms, command facilities, and spaces connected with the "
+                "events of April 30, 1975.",
+            ),
+        },
+        "notre-dame-cathedral-saigon": {
+            "en": (
+                "Discover Notre-Dame Cathedral Basilica of Saigon",
+                "The cathedral was constructed in the late nineteenth century with "
+                "materials imported from France. Its red-brick facade and twin bell "
+                "towers form one of the best-known architectural landmarks in central "
+                "Ho Chi Minh City.",
+            ),
+        },
+        "ho-chi-minh-city-museum": {
+            "en": (
+                "Visit Ho Chi Minh City Museum",
+                "Housed in the former Gia Long Palace, Ho Chi Minh City Museum "
+                "introduces the city's geography, culture, trade, and history. The "
+                "neoclassical building is itself an important part of the visit.",
+            ),
+        },
+        "jade-emperor-pagoda": {
+            "en": (
+                "Visit the Jade Emperor Pagoda",
+                "The Jade Emperor Pagoda is known for its richly carved wooden "
+                "interiors, statues, incense-filled halls, and blend of Taoist and "
+                "Buddhist traditions. It remains an active place of worship.",
+            ),
+        },
+        "saigon-opera-house": {
+            "en": (
+                "Discover Saigon Opera House",
+                "Opened in 1897, Saigon Opera House is a prominent example of French "
+                "colonial architecture. Its ornate facade and restored auditorium "
+                "continue to host theatre, music, and cultural performances.",
+            ),
+        },
+        "nha-rong-wharf": {
+            "en": (
+                "Visit Nha Rong Wharf",
+                "Nha Rong Wharf stands beside the Saigon River and now houses a "
+                "branch of the Ho Chi Minh Museum. The site is associated with Nguyen "
+                "Tat Thanh's departure from Vietnam in 1911.",
+            ),
+        },
+        "landmark-81": {
+            "en": (
+                "Discover Landmark 81",
+                "Landmark 81 is a defining feature of Ho Chi Minh City's contemporary "
+                "skyline. The mixed-use tower rises above the Saigon River waterfront "
+                "and represents the city's rapid urban development.",
+            ),
+        },
+        "giac-lam-pagoda": {
+            "en": (
+                "Visit Giac Lam Pagoda",
+                "Founded in 1744, Giac Lam Pagoda is among the oldest Buddhist temples "
+                "in Ho Chi Minh City. Its historic halls, statues, gardens, and stupas "
+                "reflect generations of religious and cultural life.",
+            ),
+        },
+        "binh-tay-market": {
+            "en": (
+                "Explore Binh Tay Market",
+                "Binh Tay Market is a major commercial center in Cho Lon. Its central "
+                "courtyard, clock tower, and busy wholesale stalls show the enduring "
+                "role of trade in the city's Chinese-Vietnamese community.",
+            ),
+        },
     }
 
-    # Mỗi POI có một bản nháp version 1 cho mọi ngôn ngữ được hỗ trợ.
+    # Tạo bản nháp version 1 cho từng ngôn ngữ được khai báo của mỗi POI.
     for poi_index, (seed_key, poi) in enumerate(pois.items()):
         for language_index, (language_code, (title, script)) in enumerate(
             content_specs[seed_key].items()
