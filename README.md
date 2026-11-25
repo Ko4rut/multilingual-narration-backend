@@ -181,14 +181,14 @@ On a **fresh empty database**, the seed creates the following baseline:
   by a later seed.
 - 5 languages (vi/en/ja/fr/ko), 16 Ho Chi Minh City urban districts and
   6 English POI categories.
-- 3 English INACTIVE POIs: Ben Thanh Market, Saigon Central Post Office and
-  War Remnants Museum, each mapped to two appropriate categories.
-- 15 DRAFT narration records in English, Vietnamese, Japanese, French, and
-  Korean (one per language for each POI, version 1).
+- 12 English INACTIVE POIs in Ho Chi Minh City, mapped to their appropriate
+  regions and categories.
+- 24 DRAFT narration records (version 1): five supported-language records for
+  each of the original three POIs and one English record for each added POI.
 - No content audio, login sessions, listening history, offline packages,
   offline package items or audit logs. These records arise from actual use.
 
-Each POI references a checksum-named JPEG included under `assets/images/pois`;
+Each POI references a checksum-named image included under `assets/images/pois`;
 its QR payload is `mnr://pois/{poi_id}`. Audio is created by the existing TTS flow after content approval
 and publication, not by the seed. The existing self-review restriction is
 unchanged: an author cannot approve their own narration, including the
@@ -306,8 +306,10 @@ storage, offline rebuild và audit integration vẫn còn chờ. Frontend caller
 
 Ảnh POI do trang quản trị tải lên qua `POST /api/v1/admin/pois/images`, được đặt
 tên theo SHA-256, lưu trong `POI_IMAGE_DIR` và phục vụ tại
-`/api/v1/assets/images/pois/{filename}`. Docker dùng volume `poi-images`; môi
-trường production nên thay storage cục bộ bằng object storage/CDN.
+`/api/v1/assets/images/pois/{filename}`. Docker dùng volume `poi-images`; khi API
+khởi động, các ảnh seed còn thiếu được sao chép vào volume mà không ghi đè hay
+xóa ảnh do người dùng tải lên. Môi trường production nên thay storage cục bộ
+bằng object storage/CDN.
 
 POI reads return only records with `poi_status = 'active'`. Identity models,
 repositories and management services exist. Passwords are hashed and verified
