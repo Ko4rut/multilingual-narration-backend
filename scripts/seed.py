@@ -326,7 +326,7 @@ def seed_catalog(session: Session):
             {"category_code": code},
             {"category_name": name},
         )
-        category.category_name = name
+        # Existing records may have been renamed through Admin. Do not undo it.
         categories[code] = category
     return languages, regions, categories
 
