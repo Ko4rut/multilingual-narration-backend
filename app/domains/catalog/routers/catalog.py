@@ -1,11 +1,14 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlalchemy.orm import Session
 
 from app.domains.catalog.exceptions import (
     LanguageAlreadyExists,
     LanguageNotFound,
+    PoiCategoryAlreadyExists,
+    PoiCategoryInUse,
+    PoiCategoryNotFound,
 )
 from app.domains.catalog.repositories import (
     LanguageRepository,
@@ -16,7 +19,9 @@ from app.domains.catalog.schemas import (
     LanguageCreate,
     LanguageRead,
     LanguageUpdate,
+    PoiCategoryCreate,
     PoiCategoryRead,
+    PoiCategoryUpdate,
     RegionRead,
 )
 from app.domains.catalog.services import CatalogService
@@ -29,6 +34,14 @@ admin_router = APIRouter(prefix="/admin/catalog")
 require_language_read = require_permission("Language Management", "read")
 require_language_create = require_permission("Language Management", "create")
 require_language_update = require_permission("Language Management", "update")
+
+# Categories classify POIs, so reuse the existing POI Management RBAC actions.
+require_category_read = require_permission("POI Management", "read")
+require_category_create = require_permission("POI Management", "create")
+require_category_update = require_permission("POI Management", "update")
+require_category_delete = require_permission("POI Management", "delete")
+
+CategoryId = Annotated[str, Path(min_length=1, max_length=50)]
 
 
 def get_catalog_service(
@@ -128,4 +141,76 @@ def update_language(
     except LanguageNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except LanguageAlreadyExists as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@admin_router.get(
+    "/categories",
+    response_model=list[PoiCategoryRead],
+    summary="Admin: list POI categories",
+    tags=["POI Category"],
+    dependencies=[Depends(require_category_read)],
+)
+def list_admin_categories(
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    return service.list_categories()
+
+
+@admin_router.post(
+    "/categories",
+    response_model=PoiCategoryRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Admin: create POI category",
+    tags=["POI Category"],
+    dependencies=[Depends(require_category_create)],
+)
+def create_category(
+    payload: PoiCategoryCreate,
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    try:
+        return service.create_category(**payload.model_dump())
+    except PoiCategoryAlreadyExists as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@admin_router.patch(
+    "/categories/{category_id}",
+    response_model=PoiCategoryRead,
+    summary="Admin: rename POI category",
+    tags=["POI Category"],
+    dependencies=[Depends(require_category_update)],
+)
+def update_category(
+    category_id: CategoryId,
+    payload: PoiCategoryUpdate,
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    try:
+        return service.update_category(
+            category_id, **payload.model_dump(),
+        )
+    except PoiCategoryNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PoiCategoryAlreadyExists as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@admin_router.delete(
+    "/categories/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Admin: delete unreferenced POI category",
+    tags=["POI Category"],
+    dependencies=[Depends(require_category_delete)],
+)
+def delete_category(
+    category_id: CategoryId,
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+) -> None:
+    try:
+        service.delete_category(category_id)
+    except PoiCategoryNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PoiCategoryInUse as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
