@@ -54,8 +54,8 @@ def catalog_client_factory():
             category_repository=CatalogRepositoryStub(categories or []),
         )
         application.dependency_overrides[get_catalog_service] = lambda: service
-        if auth is not None:
-            application.dependency_overrides[get_authentication_service] = lambda: auth
+        authentication = auth if auth is not None else AuthenticationServiceStub()
+        application.dependency_overrides[get_authentication_service] = lambda: authentication
         return TestClient(application)
 
     return build

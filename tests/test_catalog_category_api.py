@@ -63,8 +63,8 @@ def client_factory():
     def create(*, auth=None, service=None):
         app = create_app()
         app.dependency_overrides[get_catalog_service] = lambda: service or CategoryServiceStub()
-        if auth is not None:
-            app.dependency_overrides[get_authentication_service] = lambda: auth
+        authentication = auth if auth is not None else AuthStub()
+        app.dependency_overrides[get_authentication_service] = lambda: authentication
         return TestClient(app)
     return create
 
