@@ -59,5 +59,6 @@ categories, preserving Administrator edits.
 
 Verification should include: focused tests, `alembic check` and an
 isolated PostgreSQL upgrade/downgrade and authenticated CRUD integration.
-CI in this PR runs code-level tests; it does not claim a live PostgreSQL
-migration or authenticated browser session has passed.
+CI provisions a disposable PostgreSQL 16 service, runs Alembic upgrade/check,
+and verifies Category CRUD persistence. Browser E2E with a real JWT/Admin session
+remains a separate deployment check.
