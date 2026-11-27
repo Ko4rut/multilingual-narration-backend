@@ -276,6 +276,13 @@ Implemented HTTP endpoints:
 - `GET /api/v1/identity/permissions`
 - `GET /api/v1/catalog/regions` returns all regions ordered by ID
 - `GET /api/v1/catalog/categories` returns all POI categories ordered by ID
+- `GET|POST /api/v1/admin/catalog/categories` and
+  `PATCH|DELETE /api/v1/admin/catalog/categories/{category_id}`
+  implement POI Category administration. Writes require the respective
+  `POI Management` permission; codes are immutable after creation and
+  referenced categories cannot be deleted. See
+  [Category Management API](docs/category-management-api.md).
+
 - `GET /api/v1/catalog/languages` returns supported languages ordered by ID
 - `/api/v1/admin/catalog/languages` provides permission-protected language
   list/create/update operations. Languages are retired with `UNSUPPORTED` rather
